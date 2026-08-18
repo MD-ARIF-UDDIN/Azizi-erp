@@ -10,7 +10,6 @@ import {
   MapPin,
   Phone,
   Mail,
-  Plus,
   Edit2,
   Trash2,
   X

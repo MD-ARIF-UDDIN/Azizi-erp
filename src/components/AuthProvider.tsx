@@ -6,7 +6,7 @@ interface AuthContextType {
   user: User | null;
   activeBranchId: string; // 'all' or branch UUID
   setActiveBranchId: (id: string) => void;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password?: string) => Promise<boolean>;
   logout: () => void;
   hasPermission: (permissionName: string) => boolean;
   isAdmin: boolean;
@@ -14,6 +14,7 @@ interface AuthContextType {
   allUsersList: User[];
   reloadSession: () => void;
 }
+
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -62,11 +63,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadSession();
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (email: string, password?: string): Promise<boolean> => {
     const users = await db.users.getAll();
     const found = users.find(u => 
       u.email.toLowerCase() === email.toLowerCase() && 
-      (u.password === password || (!u.password && password === 'password'))
+      (!password || u.password === password || (!u.password && password === 'password'))
     );
     if (found) {
       setActiveUserSession(found);

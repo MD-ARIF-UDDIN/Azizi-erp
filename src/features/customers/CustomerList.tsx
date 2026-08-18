@@ -78,7 +78,7 @@ interface QsCartItem {
 }
 
 export const CustomerList: React.FC = () => {
-  const { hasPermission, user, availableBranches } = useAuth();
+  const { hasPermission, user } = useAuth();
   const navigate = useNavigate();
   
   // Data States

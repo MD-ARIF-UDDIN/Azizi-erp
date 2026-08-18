@@ -533,7 +533,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-6 bg-background">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-background">
           <div className="mx-auto w-full">
             {children}
           </div>

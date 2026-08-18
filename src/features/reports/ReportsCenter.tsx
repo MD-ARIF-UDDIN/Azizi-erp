@@ -18,7 +18,7 @@ export const ReportsCenter: React.FC = () => {
   const { activeBranchId } = useAuth();
   
   // Tab control
-  const [activeTab, setActiveTab] = useState<'sales' | 'expenses' | 'services' | 'balance'>('sales');
+  const [activeTab, setActiveTab] = useState<'sales' | 'expenses' | 'services' | 'balance'>('balance');
 
 
   // Date Filters
@@ -289,7 +289,7 @@ export const ReportsCenter: React.FC = () => {
     window.print();
   };
 
-  const applyQuickFilter = (filterType: 'today' | 'yesterday' | 'week' | 'month' | 'last_month' | 'year') => {
+  const applyQuickFilter = (filterType: 'today' | 'yesterday' | 'week' | 'month' | 'last_month' | 'year' | 'last_30' | 'last_90' | 'last_year') => {
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
 
@@ -320,6 +320,21 @@ export const ReportsCenter: React.FC = () => {
       const firstDayYear = new Date(today.getFullYear(), 0, 1);
       setStartDate(firstDayYear.toISOString().split('T')[0]);
       setEndDate(todayStr);
+    } else if (filterType === 'last_30') {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(today.getDate() - 30);
+      setStartDate(thirtyDaysAgo.toISOString().split('T')[0]);
+      setEndDate(todayStr);
+    } else if (filterType === 'last_90') {
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(today.getDate() - 90);
+      setStartDate(ninetyDaysAgo.toISOString().split('T')[0]);
+      setEndDate(todayStr);
+    } else if (filterType === 'last_year') {
+      const firstDayLastYear = new Date(today.getFullYear() - 1, 0, 1);
+      const lastDayLastYear = new Date(today.getFullYear() - 1, 11, 31);
+      setStartDate(firstDayLastYear.toISOString().split('T')[0]);
+      setEndDate(lastDayLastYear.toISOString().split('T')[0]);
     }
   };
 
@@ -345,6 +360,28 @@ export const ReportsCenter: React.FC = () => {
     setDateSales(daySales);
     setDatePayments(dayPayments);
     setDateExpenses(dayExpenses);
+  };
+
+  const getRecentMonths = () => {
+    const months = [];
+    const today = new Date();
+    for (let i = 0; i < 24; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+      const value = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+      months.push({ label, value });
+    }
+    return months;
+  };
+
+  const handleMonthChange = (monthVal: string) => {
+    if (!monthVal) return;
+    const [year, month] = monthVal.split('-').map(Number);
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+    
+    setStartDate(firstDay.toISOString().split('T')[0]);
+    setEndDate(lastDay.toISOString().split('T')[0]);
   };
 
 
@@ -384,7 +421,7 @@ export const ReportsCenter: React.FC = () => {
             <span className="text-xs text-muted-foreground font-semibold flex items-center gap-1">
               <Calendar size={13} /> Select Date Range
             </span>
-            <div className="grid grid-cols-2 gap-2 mt-1">
+            <div className="grid grid-cols-3 gap-2 mt-1">
               <input
                 type="date"
                 value={startDate}
@@ -397,6 +434,16 @@ export const ReportsCenter: React.FC = () => {
                 onChange={(e) => setEndDate(e.target.value)}
                 className="w-full px-3 py-1.5 rounded-lg border border-border bg-background text-xs text-foreground"
               />
+              <select
+                onChange={(e) => handleMonthChange(e.target.value)}
+                className="w-full px-3 py-1.5 rounded-lg border border-border bg-background text-xs text-foreground font-semibold cursor-pointer"
+                defaultValue=""
+              >
+                <option value="" disabled>Select Month</option>
+                {getRecentMonths().map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
             </div>
             <div className="flex flex-wrap gap-1 mt-2">
               <button
@@ -422,6 +469,20 @@ export const ReportsCenter: React.FC = () => {
               </button>
               <button
                 type="button"
+                onClick={() => applyQuickFilter('last_30')}
+                className="px-2 py-1 bg-background hover:bg-secondary border border-border rounded text-[10px] font-semibold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+              >
+                Last 30 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => applyQuickFilter('last_90')}
+                className="px-2 py-1 bg-background hover:bg-secondary border border-border rounded text-[10px] font-semibold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+              >
+                Last 90 Days
+              </button>
+              <button
+                type="button"
                 onClick={() => applyQuickFilter('month')}
                 className="px-2 py-1 bg-background hover:bg-secondary border border-border rounded text-[10px] font-semibold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
               >
@@ -440,6 +501,13 @@ export const ReportsCenter: React.FC = () => {
                 className="px-2 py-1 bg-background hover:bg-secondary border border-border rounded text-[10px] font-semibold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
               >
                 This Year
+              </button>
+              <button
+                type="button"
+                onClick={() => applyQuickFilter('last_year')}
+                className="px-2 py-1 bg-background hover:bg-secondary border border-border rounded text-[10px] font-semibold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+              >
+                Last Year
               </button>
             </div>
           </div>

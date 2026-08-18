@@ -2,7 +2,7 @@ import { isSupabaseConfigured, supabase } from './supabase';
 import type {
   Branch, Role, Permission, RolePermission, User, Customer,
   ServiceCategory, Service, OrderStatus, Sale, SaleItem, Payment,
-  ExpenseCategory, Expense, OrderStatusHistory, AuditLog
+  ExpenseCategory, Expense, OrderStatusHistory, AuditLog, ClientDocument
 } from '../types/database';
 
 // A mock helper to generate UUIDs locally
@@ -397,7 +397,7 @@ const SEED_CLIENT_DOCUMENTS = (customers: Customer[]) => {
   ];
 };
 
-let _clientDocuments = getOrSeed(KEYS.CLIENT_DOCUMENTS, () => SEED_CLIENT_DOCUMENTS(_customers));
+let _clientDocuments: ClientDocument[] = getOrSeed(KEYS.CLIENT_DOCUMENTS, () => SEED_CLIENT_DOCUMENTS(_customers));
 
 const saveAll = () => {
   saveToLocalStorage(KEYS.BRANCHES, _branches);
@@ -1050,7 +1050,7 @@ export const db = {
   sales: {
     getAll: async (branchId?: string) => {
       if (isSupabaseConfigured && supabase) {
-        let query = supabase.from('sales').select('*, customer:customers(*), branch:branches(*), employee:users(*), order_status:order_statuses(*)').eq('is_deleted', false);
+        let query = supabase.from('sales').select('*, customer:customers(*), branch:branches(*), employee:users!employee_id(*), order_status:order_statuses(*)').eq('is_deleted', false);
         if (branchId) {
           query = query.eq('branch_id', branchId);
         }
@@ -1090,7 +1090,7 @@ export const db = {
     },
     getById: async (id: string) => {
       if (isSupabaseConfigured && supabase) {
-        const { data: s, error: sErr } = await supabase.from('sales').select('*, customer:customers(*), branch:branches(*), employee:users(*), order_status:order_statuses(*)').eq('id', id).eq('is_deleted', false).single();
+        const { data: s, error: sErr } = await supabase.from('sales').select('*, customer:customers(*), branch:branches(*), employee:users!employee_id(*), order_status:order_statuses(*)').eq('id', id).eq('is_deleted', false).single();
         if (sErr) throw sErr;
 
         const { data: items } = await supabase.from('sale_items').select('*, service:services(*)').eq('sale_id', id);

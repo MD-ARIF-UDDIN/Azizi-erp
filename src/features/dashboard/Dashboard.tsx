@@ -9,8 +9,7 @@ import {
   ShoppingCart,
   Clock,
   ArrowUpRight,
-  Bell,
-  Calendar
+  Bell
 } from 'lucide-react';
 import {
   AreaChart,

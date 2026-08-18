@@ -12,10 +12,8 @@ import {
   Edit2,
   Trash2,
   X,
-  FileText,
   User,
-  Clock,
-  ExternalLink
+  Clock
 } from 'lucide-react';
 
 export const ExpiryTracker: React.FC = () => {
@@ -32,13 +30,21 @@ export const ExpiryTracker: React.FC = () => {
   // CRUD Form State
   const [showModal, setShowModal] = useState(false);
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    customer_id: string;
+    document_type: ClientDocument['document_type'];
+    document_number: string;
+    expiry_date: string;
+    notes: string;
+    status: ClientDocument['status'];
+    notified: boolean;
+  }>({
     customer_id: '',
-    document_type: 'Visa' as const,
+    document_type: 'Visa',
     document_number: '',
     expiry_date: '',
     notes: '',
-    status: 'Active' as const,
+    status: 'Active',
     notified: false
   });
 
