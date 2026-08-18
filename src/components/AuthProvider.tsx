@@ -20,42 +20,54 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const [activeBranchId, setActiveBranchIdState] = useState<string>('all');
   const [availableBranches, setAvailableBranches] = useState<Branch[]>([]);
   const [rolePermissions, setRolePermissions] = useState<string[]>([]);
   const [allUsersList, setAllUsersList] = useState<User[]>([]);
 
   const loadSession = async () => {
-    const sessionUser = getActiveUserSession();
-    setUser(sessionUser);
-
-    // Fetch branches for selection
-    const branches = await db.branches.getAll();
-    setAvailableBranches(branches);
-
-    // Fetch all users list for login switcher simulation
-    const users = await db.users.getAll();
-    setAllUsersList(users);
-
-    if (sessionUser) {
-      // Set default active branch to user's branch
-      // Super Admins can select 'all' branches, other roles are pinned to their branch
-      const role = await db.roles.getById(sessionUser.role_id);
-      if (role?.name === 'Super Admin') {
-        setActiveBranchIdState('all');
-      } else {
-        setActiveBranchIdState(sessionUser.branch_id);
+    setLoading(true);
+    try {
+      const saved = localStorage.getItem('azizi_active_session');
+      let sessionUser = null;
+      if (saved) {
+        sessionUser = getActiveUserSession();
       }
+      setUser(sessionUser);
 
-      // Load permissions
-      const rps = await db.rolePermissions.getByRoleId(sessionUser.role_id);
-      const allPerms = await db.permissions.getAll();
-      const perms = rps.map(rp => {
-        const p = allPerms.find(perm => perm.id === rp.permission_id);
-        return p ? p.name : '';
-      }).filter(Boolean);
-      
-      setRolePermissions(perms);
+      // Fetch branches for selection
+      const branches = await db.branches.getAll();
+      setAvailableBranches(branches);
+
+      // Fetch all users list for login switcher simulation
+      const users = await db.users.getAll();
+      setAllUsersList(users);
+
+      if (sessionUser) {
+        // Set default active branch to user's branch
+        // Super Admins can select 'all' branches, other roles are pinned to their branch
+        const role = await db.roles.getById(sessionUser.role_id);
+        if (role?.name === 'Super Admin') {
+          setActiveBranchIdState('all');
+        } else {
+          setActiveBranchIdState(sessionUser.branch_id);
+        }
+
+        // Load permissions
+        const rps = await db.rolePermissions.getByRoleId(sessionUser.role_id);
+        const allPerms = await db.permissions.getAll();
+        const perms = rps.map(rp => {
+          const p = allPerms.find(perm => perm.id === rp.permission_id);
+          return p ? p.name : '';
+        }).filter(Boolean);
+        
+        setRolePermissions(perms);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -127,6 +139,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setActiveBranchIdState(id);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-background text-foreground gap-4">
+        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <div className="text-xs font-semibold text-muted-foreground animate-pulse">Initializing Azizi ERP...</div>
+      </div>
+    );
+  }
 
   return (
     <AuthContext.Provider
