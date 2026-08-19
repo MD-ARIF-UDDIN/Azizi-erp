@@ -22,7 +22,9 @@ import {
   Zap,
   Percent,
   CreditCard,
-  MessageSquare
+  MessageSquare,
+  User,
+  Building2
 } from 'lucide-react';
 
 const handleWhatsAppShare = (sale: any) => {
@@ -464,13 +466,41 @@ export const CustomerList: React.FC = () => {
                           </td>
                           <td className="px-6 py-4">
                             <div className="font-semibold text-foreground">{c.name}</div>
+                            {c.customer_type === 'company' ? (
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded border border-primary/20">
+                                  Company Account
+                                </span>
+                                {c.members && c.members.length > 0 && (
+                                  <span className="text-muted-foreground text-[10px] bg-blue-500/5 text-blue-400 border border-blue-500/10 px-1.5 py-0.5 rounded">
+                                    {c.members.length} member{c.members.length !== 1 ? 's' : ''}
+                                  </span>
+                                )}
+                              </div>
+                            ) : c.customer_type === 'individual' && c.company_id ? (
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                <span className="bg-blue-500/10 text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-500/20">
+                                  Member of {c.company?.name || 'Company'}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                <span className="bg-zinc-500/10 text-zinc-400 text-[10px] font-bold px-2 py-0.5 rounded border border-zinc-500/20">
+                                  Individual Person
+                                </span>
+                              </div>
+                            )}
                             <div className="text-xs text-muted-foreground flex items-center gap-3 mt-1.5">
                               {c.phone && <span className="flex items-center gap-1"><Phone size={12} /> {c.phone}</span>}
                               {c.email && <span className="flex items-center gap-1"><Mail size={12} /> {c.email}</span>}
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            {c.due > 0 ? (
+                            {c.customer_type === 'individual' && c.company_id ? (
+                              <span className="inline-flex items-center gap-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-0.5 rounded-full text-xs font-semibold" title={`Billed to parent account: ${c.company?.name}`}>
+                                Billed to Company
+                              </span>
+                            ) : c.due > 0 ? (
                               <span className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-0.5 rounded-full text-xs font-semibold">
                                 {c.due.toFixed(2)} AED
                               </span>
@@ -484,7 +514,7 @@ export const CustomerList: React.FC = () => {
                             {(() => {
                               const docs = c.documents || [];
                               if (docs.length === 0) {
-                                return <span className="text-muted-foreground text-xs italic">No documents</span>;
+                                  return <span className="text-muted-foreground text-xs italic">No documents</span>;
                               }
                               
                               const displayDocs = docs.slice(0, 3);
@@ -526,6 +556,11 @@ export const CustomerList: React.FC = () => {
                           </td>
                           <td className="px-6 py-4 text-muted-foreground font-semibold">
                             {c.sales_count} Invoice{c.sales_count !== 1 ? 's' : ''}
+                            {c.customer_type === 'company' && c.sales_count > 0 && (
+                              <span className="block text-[10px] text-primary/80 font-semibold mt-0.5">
+                                (Consolidated)
+                              </span>
+                            )}
                           </td>
                           <td className="px-6 py-4 text-center" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-center gap-1.5">
@@ -574,9 +609,7 @@ export const CustomerList: React.FC = () => {
               </div>
             </div>
           )}
-        </div>
-
-        {/* CUSTOMER PROFILE DETAIL PANEL (Pops up in a modal overlay) */}
+        </div>        {/* CUSTOMER PROFILE DETAIL PANEL (Pops up in a modal overlay) */}
         {selectedCustomer && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
             <div className="glass border border-border rounded-2xl p-6 space-y-6 shadow-2xl relative bg-background w-full max-w-2xl max-h-[90vh] overflow-y-auto my-8">
@@ -592,25 +625,73 @@ export const CustomerList: React.FC = () => {
               {/* Detail Header */}
               <div className="flex items-start justify-between border-b border-border pb-4">
                 <div>
-                  <h2 className="font-bold text-foreground text-lg m-0">{selectedCustomer.name}</h2>
-                  <span className="text-xs text-muted-foreground">Customer ID: #{selectedCustomer.id.slice(0, 8)}</span>
+                  <h2 className="font-bold text-foreground text-lg m-0">
+                    {selectedCustomer.customer_type === 'company' && selectedCustomer.company_name
+                      ? selectedCustomer.company_name
+                      : selectedCustomer.name}
+                  </h2>
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    <span className="text-[10px] text-muted-foreground font-mono bg-muted px-2 py-0.5 rounded border border-border">
+                      ID: #{selectedCustomer.id.slice(0, 8)}
+                    </span>
+                    {selectedCustomer.customer_type === 'company' ? (
+                      <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded border border-primary/20">
+                        Company Account
+                      </span>
+                    ) : selectedCustomer.customer_type === 'individual' && selectedCustomer.company_id ? (
+                      <span className="bg-blue-500/10 text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-500/20">
+                        Company Member
+                      </span>
+                    ) : (
+                      <span className="bg-zinc-500/10 text-zinc-400 text-[10px] font-bold px-2 py-0.5 rounded border border-zinc-500/20">
+                        Individual Client
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
               {/* Due Alert Panel */}
-              {selectedCustomer.due > 0 && (
+              {selectedCustomer.due > 0 ? (
                 <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs p-4 rounded-xl flex items-start gap-2.5">
                   <AlertTriangle className="flex-shrink-0 mt-0.5" size={16} />
                   <div>
                     <div className="font-bold">Outstanding Due Alert</div>
-                    <div className="mt-0.5">This customer has an unpaid balance of <strong className="text-foreground font-extrabold">{selectedCustomer.due.toFixed(2)} AED</strong>.</div>
+                    <div className="mt-0.5">
+                      This customer has an unpaid balance of{' '}
+                      <strong className="text-foreground font-extrabold">{selectedCustomer.due.toFixed(2)} AED</strong>.
+                      {selectedCustomer.customer_type === 'company' && (
+                        <span className="block text-[10px] text-muted-foreground mt-0.5 font-normal">
+                          (Consolidated across all company member accounts)
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              )}
+              ) : selectedCustomer.customer_type === 'individual' && selectedCustomer.company ? (
+                <div className="bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs p-4 rounded-xl flex items-start gap-2.5">
+                  <Building2 className="flex-shrink-0 mt-0.5 text-blue-400" size={16} />
+                  <div>
+                    <div className="font-bold">Billed to Company Account</div>
+                    <div className="mt-0.5">
+                       All billing is routed to company:{' '}
+                       <strong className="text-foreground font-extrabold">
+                         {selectedCustomer.company.name}
+                       </strong>.
+                    </div>
+                    <div className="mt-1 text-muted-foreground text-[10px]">
+                      The company's total outstanding balance is{' '}
+                      <strong className="text-foreground font-semibold">
+                        {selectedCustomer.company.due.toFixed(2)} AED
+                      </strong>.
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               {/* Information Cards */}
-              <div className="space-y-3.5 text-xs">
-                <div className="flex items-start gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div className="flex items-start gap-2.5 p-3 rounded-xl border border-border/60 bg-muted/15">
                   <MapPin className="text-primary flex-shrink-0 mt-0.5" size={14} />
                   <div>
                     <div className="text-muted-foreground font-semibold">Billing Address</div>
@@ -618,14 +699,36 @@ export const CustomerList: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-start gap-2.5">
+                <div className="flex items-start gap-2.5 p-3 rounded-xl border border-border/60 bg-muted/15">
                   <FileText className="text-primary flex-shrink-0 mt-0.5" size={14} />
                   <div>
                     <div className="text-muted-foreground font-semibold">Staff Notes</div>
                     <div className="text-foreground mt-0.5 italic">{selectedCustomer.notes || 'No administrative notes.'}</div>
                   </div>
                 </div>
+
               </div>
+
+              {/* Company Employees List */}
+              {selectedCustomer.customer_type === 'company' && selectedCustomer.members && selectedCustomer.members.length > 0 && (
+                <div className="space-y-2.5 pt-4 border-t border-border/60 text-xs">
+                  <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                    <User size={14} className="text-primary" />
+                    Company Members / Employees ({selectedCustomer.members.length})
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedCustomer.members.map((emp: any, index: number) => (
+                      <div
+                        key={emp.id || index}
+                        className="px-2.5 py-1 rounded-lg border border-border/60 bg-muted/20 text-foreground text-[11px] font-semibold flex items-center gap-1.5"
+                      >
+                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                        {emp.name} {emp.phone ? `(${emp.phone})` : ''} {emp.email ? `• ${emp.email}` : ''}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex gap-2 pt-2 border-t border-border/60">
@@ -704,7 +807,7 @@ export const CustomerList: React.FC = () => {
               <div className="space-y-3 pt-4 border-t border-border/60">
                 <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
                   <History size={14} className="text-primary" />
-                  Invoice History Ledger
+                  {selectedCustomer.customer_type === 'company' ? 'Consolidated Invoice History Ledger' : 'Invoice History Ledger'}
                 </h3>
                 
                 <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
@@ -719,9 +822,17 @@ export const CustomerList: React.FC = () => {
                         className="bg-muted/25 border border-border/80 p-3 rounded-xl flex items-center justify-between gap-3 text-xs"
                       >
                         <div>
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 border border-primary/20 text-primary font-mono font-bold text-[10px] tracking-wide">
-                            # {s.invoice_no}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 border border-primary/20 text-primary font-mono font-bold text-[10px] tracking-wide">
+                              # {s.invoice_no}
+                            </span>
+                            {/* Employee attribution for company sales */}
+                            {selectedCustomer.customer_type === 'company' && s.customer_id !== selectedCustomer.id && s.customer && (
+                              <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded font-semibold">
+                                Member: {s.customer.name}
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[10px] text-muted-foreground mt-1">
                             {new Date(s.created_at).toLocaleDateString()} • {s.branch?.name}
                           </div>
@@ -756,8 +867,8 @@ export const CustomerList: React.FC = () => {
                             <button
                               title="Share Invoice Details on WhatsApp"
                               onClick={async () => {
-                                const detail = await db.sales.getById(s.id);
-                                handleWhatsAppShare(detail);
+                                  const detail = await db.sales.getById(s.id);
+                                  handleWhatsAppShare(detail);
                               }}
                               className="p-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white transition-all flex-shrink-0"
                             >

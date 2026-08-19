@@ -106,10 +106,15 @@ export const SalesList: React.FC = () => {
     if (printId) {
       const triggerAutoPrint = async () => {
         try {
-          const detail = await db.sales.getById(printId);
-          if (detail) {
-            setSelectedSaleId(printId);
-            setSelectedSaleDetails(detail);
+          const ids = printId.split(',');
+          const details = [];
+          for (const sId of ids) {
+            const detail = await db.sales.getById(sId);
+            if (detail) details.push(detail);
+          }
+          if (details.length > 0) {
+            setSelectedSaleDetails(details.length === 1 ? details[0] : details);
+            setSelectedSaleId(ids[0]);
             setSearchParams({}, { replace: true });
             setTimeout(() => {
               window.print();
@@ -309,8 +314,32 @@ export const SalesList: React.FC = () => {
                                 </div>
                               </td>
                               <td className="px-5 py-4">
-                                <div className="text-foreground font-medium">{s.customer?.name || 'Walk-in'}</div>
-                                {s.customer?.phone && <div className="text-[10px] text-muted-foreground mt-0.5">{s.customer.phone}</div>}
+                                {s.customer ? (
+                                  <>
+                                    <div className="text-foreground font-medium flex flex-wrap items-center gap-1.5">
+                                      {s.person_name ? (
+                                        <>
+                                          <span>{s.person_name}</span>
+                                          <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded font-semibold">
+                                            Company: {s.customer.name}
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <span>{s.customer.name}</span>
+                                          {s.customer.company && (
+                                            <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded font-semibold">
+                                              Billed to: {s.customer.company.name}
+                                            </span>
+                                          )}
+                                        </>
+                                      )}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mt-0.5">{s.person_phone || s.customer.phone || 'No phone'}</div>
+                                  </>
+                                ) : (
+                                  <div className="text-foreground font-medium">Walk-in Customer</div>
+                                )}
                               </td>
                               <td className="px-5 py-4">
                                 <span
@@ -380,321 +409,364 @@ export const SalesList: React.FC = () => {
           </div>
 
           {/* RIGHT DETAIL INVOICE SHEET (Pops up in a modal overlay) */}
-          {selectedSaleDetails && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm print:p-0 print:bg-white overflow-y-auto">
-              <div className="glass border border-border rounded-2xl p-6 shadow-2xl relative bg-white print:border-none print:shadow-none print:p-0 print:static print-invoice-sheet w-full max-w-4xl max-h-[90vh] overflow-y-auto my-8">
-                
-                {/* Close Button */}
-                <button
-                  onClick={() => { setSelectedSaleDetails(null); setSelectedSaleId(null); }}
-                  className="absolute right-4 top-4 p-2 text-muted-foreground hover:text-foreground print:hidden bg-muted/40 rounded-full transition-colors"
-                >
-                  <X size={16} />
-                </button>
+          {selectedSaleDetails && (() => {
+            const mainSale = Array.isArray(selectedSaleDetails)
+              ? selectedSaleDetails[0]
+              : selectedSaleDetails;
+            
+            const salesListForPrint = Array.isArray(selectedSaleDetails)
+              ? selectedSaleDetails
+              : [selectedSaleDetails];
 
-                {/* Print Invoice branding header */}
-                <div className="text-center space-y-1 pb-4 border-b border-gray-300">
-                  <div className="text-xl font-bold text-[#000ba0] font-serif tracking-wide italic">
-                    مكتب عزيزي للكتابة وعمل الأختام ذ.م.م - فرع ١
-                  </div>
-                  <div className="text-lg font-black text-[#f28f00] tracking-wide italic uppercase">
-                    AZIZI TYPING & STAMP MAKING Br. 1
-                  </div>
-                  <div className="text-xs text-black font-bold">
-                    Mobile: 0542797933 • Email: azizitypingbr@gmail.com
-                  </div>
-                  <div className="text-[11px] text-gray-700 font-semibold">
-                    Abu Dhabi, Musaffah M37, Near Irani Masjid
-                  </div>
-                </div>
-
-                {/* Blue Banner Header */}
-                <div className="bg-[#000ba0] text-white flex items-center justify-between px-4 py-1.5 font-bold uppercase tracking-wider text-xs my-3 rounded-sm shadow-sm">
-                  <span>Customer Invoice</span>
-                  <span className="bg-[#f28f00] text-white px-3 py-0.5 rounded font-mono text-[11px] tracking-widest">
-                    # {selectedSaleDetails.invoice_no}
-                  </span>
-                </div>
-
-                {/* Customer & Date Metadata Grid Table */}
-                <table className="w-full border-collapse border border-gray-300 text-xs my-3 bg-white">
-                  <tbody>
-                    <tr>
-                      <td className="bg-[#f28f00] text-white font-bold px-3 py-2 border border-gray-300 w-1/4 uppercase tracking-wider">
-                        Invoice To
-                      </td>
-                      <td className="px-3 py-2 border border-gray-300 text-black font-bold text-sm w-3/4" colSpan={3}>
-                        {selectedSaleDetails.customer?.name || 'Walk-in Customer'}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4">
-                        Mr. / M/s:
-                      </td>
-                      <td className="px-3 py-2 border border-gray-300 text-black font-semibold w-1/4">
-                        {selectedSaleDetails.customer?.email || 'N/A'}
-                      </td>
-                      <td className="bg-[#f28f00] text-white font-bold px-3 py-2 border border-gray-300 w-1/4 uppercase tracking-wider text-center">
-                        Date
-                      </td>
-                      <td className="px-3 py-2 border border-gray-300 text-black font-bold text-center w-1/4">
-                        {new Date(selectedSaleDetails.created_at).toLocaleDateString()}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4">
-                        Invoice No:
-                      </td>
-                      <td className="px-3 py-2 border border-gray-300 text-primary font-bold w-1/4">
-                        {selectedSaleDetails.invoice_no}
-                      </td>
-                      <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4 text-center">
-                        Cashier
-                      </td>
-                      <td className="px-3 py-2 border border-gray-300 text-black font-semibold text-center w-1/4">
-                        {selectedSaleDetails.employee?.name || 'Staff'}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                {/* Items List Table */}
-                <div className="border border-gray-300 rounded-sm overflow-hidden my-3 text-xs bg-white">
-                  <table className="w-full text-left border-collapse">
-                    <thead className="bg-[#000ba0] text-white font-bold">
-                      <tr>
-                        <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[8%]">No</th>
-                        <th className="px-3 py-2.5 border-r border-gray-300 w-[57%]">Description of Service</th>
-                        <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[10%]">Qty</th>
-                        <th className="px-3 py-2.5 text-right border-r border-gray-300 w-[10%]">Rate</th>
-                        <th className="px-3 py-2.5 text-right w-[15%]">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-300">
-                      {(() => {
-                        const items = selectedSaleDetails.items || [];
-                        const totalRows = 11;
-                        const rows: React.ReactNode[] = [];
-                        
-                        // Render actual items
-                        items.forEach((item: any, index: number) => {
-                          rows.push(
-                            <tr key={item.id} className="h-8 hover:bg-gray-50/50">
-                              <td className="px-3 py-1.5 text-center border-r border-gray-300 text-black font-semibold">{index + 1}</td>
-                              <td className="px-3 py-1.5 border-r border-gray-300 text-black font-bold text-left">{item.service?.name}</td>
-                              <td className="px-3 py-1.5 text-center border-r border-gray-300 text-black">{item.quantity}</td>
-                              <td className="px-3 py-1.5 text-right border-r border-gray-300 text-black">{item.unit_price.toFixed(2)}</td>
-                              <td className="px-3 py-1.5 text-right text-black font-bold">{item.subtotal.toFixed(2)}</td>
-                            </tr>
-                          );
-                        });
-
-                        // Render remaining empty rows up to 11
-                        const emptyCount = Math.max(0, totalRows - items.length);
-                        for (let i = 0; i < emptyCount; i++) {
-                          const rowNum = items.length + i + 1;
-                          rows.push(
-                            <tr key={`empty-${i}`} className="h-8">
-                              <td className="px-3 py-1.5 text-center border-r border-gray-300 text-black font-semibold">{rowNum}</td>
-                              <td className="px-3 py-1.5 border-r border-gray-300"></td>
-                              <td className="px-3 py-1.5 border-r border-gray-300"></td>
-                              <td className="px-3 py-1.5 border-r border-gray-300"></td>
-                              <td className="px-3 py-1.5 text-right"></td>
-                            </tr>
-                          );
-                        }
-
-                        return rows;
-                      })()}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-[#f28f00] text-white font-bold border-t border-gray-300">
-                        <td className="px-3 py-2 text-center border-r border-gray-300" colSpan={4}>
-                          Sub Total
-                        </td>
-                        <td className="px-3 py-2 text-right text-white font-bold">
-                          {selectedSaleDetails.subtotal.toFixed(2)}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-
-                {/* Bottom Section: Remarks & Payment Record Side-by-Side */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-3 items-stretch">
+            return (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm print:p-0 print:bg-white overflow-y-auto">
+                <div className="glass border border-border rounded-2xl p-6 shadow-2xl relative bg-white print:border-none print:shadow-none print:p-0 print:static print-invoice-sheet w-full max-w-4xl max-h-[90vh] overflow-y-auto my-8">
                   
-                  {/* Left Column: Remarks/Comments */}
-                  <div className="border border-gray-300 rounded-sm flex flex-col bg-white">
-                    <div className="bg-gray-100 border-b border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700">
-                      Remarks & Internal Notes
-                    </div>
-                    <div className="p-3 text-xs text-black font-semibold whitespace-pre-wrap flex-1 italic">
-                      {selectedSaleDetails.notes || 'Document completed successfully. Thank you for choosing AZIZI!'}
-                    </div>
-                  </div>
+                  {/* Close Button */}
+                  <button
+                    onClick={() => { setSelectedSaleDetails(null); setSelectedSaleId(null); }}
+                    className="absolute right-4 top-4 p-2 text-muted-foreground hover:text-foreground print:hidden bg-muted/40 rounded-full transition-colors cursor-pointer"
+                  >
+                    <X size={16} />
+                  </button>
 
-                  {/* Right Column: Payments Log */}
-                  <div className="border border-gray-300 rounded-sm flex flex-col bg-white text-xs">
-                    <div className="bg-[#000ba0] text-white text-center py-1.5 font-bold uppercase tracking-wider text-xs">
-                      Payment Entry Record
-                    </div>
-                    <table className="w-full text-left border-collapse flex-1">
-                      <thead className="bg-[#f28f00] text-white font-bold border-b border-gray-300">
-                        <tr>
-                          <th className="px-3 py-1.5 border-r border-gray-300">Deposit Date</th>
-                          <th className="px-3 py-1.5 border-r border-gray-300">Type</th>
-                          <th className="px-3 py-1.5 text-right">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-300">
-                        {(() => {
-                          const payments = selectedSaleDetails.payments || [];
-                          const maxPayRows = 4;
-                          const rows: React.ReactNode[] = [];
-
-                          payments.forEach((p: any, idx: number) => {
-                            rows.push(
-                              <tr key={p.id || idx} className="h-7">
-                                <td className="px-3 py-1 border-r border-gray-300 text-black">
-                                  {new Date(p.payment_date).toLocaleDateString()}
-                                </td>
-                                <td className="px-3 py-1 border-r border-gray-300 text-black font-semibold capitalize">
-                                  {p.payment_method}
-                                </td>
-                                <td className="px-3 py-1 text-right text-black font-semibold">
-                                  {p.amount.toFixed(2)}
-                                </td>
-                              </tr>
-                            );
-                          });
-
-                          const emptyPayCount = Math.max(0, maxPayRows - payments.length);
-                          for (let i = 0; i < emptyPayCount; i++) {
-                            rows.push(
-                              <tr key={`empty-pay-${i}`} className="h-7">
-                                <td className="px-3 py-1 border-r border-gray-300"></td>
-                                <td className="px-3 py-1 border-r border-gray-300"></td>
-                                <td className="px-3 py-1 text-right"></td>
-                              </tr>
-                            );
-                          }
-
-                          return rows;
-                        })()}
-                      </tbody>
-                    </table>
-
-                    {/* Totals Summary */}
-                    <div className="border-t border-gray-300">
-                      {(() => {
-                        const totalPaid = selectedSaleDetails.payments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0;
-                        const due = Math.max(0, selectedSaleDetails.grand_total - totalPaid);
-                        return (
-                          <div className="divide-y divide-gray-300">
-                            {/* Total Amount in Blue */}
-                            <div className="flex justify-between bg-[#000ba0] text-white font-bold px-3 py-2 text-xs">
-                              <span>Total Amount</span>
-                              <span>{selectedSaleDetails.grand_total.toFixed(2)} AED</span>
-                            </div>
-                            {/* Paid Amount in White */}
-                            <div className="flex justify-between bg-white text-black font-bold px-3 py-2 text-xs">
-                              <span>Paid Amount</span>
-                              <span>{totalPaid.toFixed(2)} AED</span>
-                            </div>
-                            {/* Due Amount in Pink */}
-                            <div className={`flex justify-between font-extrabold px-3 py-2 text-xs ${
-                              due > 0 ? 'bg-[#fadbd8] text-[#78281f]' : 'bg-green-50 text-green-700'
-                            }`}>
-                              <span>Due Amount</span>
-                              <span>{due.toFixed(2)} AED</span>
-                            </div>
+                  <div className="space-y-8 print:space-y-0">
+                    {salesListForPrint.map((saleItem, idx) => (
+                      <div 
+                        key={saleItem.id}
+                        className={`w-full ${idx > 0 ? 'print:page-break-before-always mt-8 print:mt-0 pt-8 print:pt-0 border-t border-dashed border-gray-300 print:border-none' : ''}`}
+                      >
+                        {/* Print Invoice branding header */}
+                        <div className="text-center space-y-1 pb-4 border-b border-gray-300">
+                          <div className="text-xl font-bold text-[#000ba0] font-serif tracking-wide italic">
+                            مكتب عزيزي للكتابة وعمل الأختام ذ.م.م - فرع ١
                           </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
+                          <div className="text-lg font-black text-[#f28f00] tracking-wide italic uppercase">
+                            AZIZI TYPING & STAMP MAKING Br. 1
+                          </div>
+                          <div className="text-xs text-black font-bold">
+                            Mobile: 0542797933 • Email: azizitypingbr@gmail.com
+                          </div>
+                          <div className="text-[11px] text-gray-700 font-semibold">
+                            Abu Dhabi, Musaffah M37, Near Irani Masjid
+                          </div>
+                        </div>
 
-                </div>
-
-                {/* Action Buttons (Hidden on print) */}
-                <div className="flex flex-col gap-2 pt-3 border-t border-gray-300 print:hidden text-xs">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handlePrint}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg border border-border font-semibold text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-all"
-                    >
-                      <Printer size={14} />
-                      Print Receipt
-                    </button>
-                    <button
-                      onClick={() => handleWhatsAppShare(selectedSaleDetails)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-md transition-colors"
-                    >
-                      <MessageSquare size={14} />
-                      WhatsApp Share
-                    </button>
-                    {hasPermission('Sales.Update') && (
-                      <button
-                        onClick={() => {
-                          setNewStatusId(selectedSaleDetails.order_status_id);
-                          setStatusModalOpen(true);
-                        }}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold shadow-md transition-colors"
-                      >
-                        <Activity size={14} />
-                        Update Job Status
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Due collection button */}
-                  {(() => {
-                    const totalPaid = selectedSaleDetails.payments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0;
-                    const due = selectedSaleDetails.grand_total - totalPaid;
-                    return due > 0 && hasPermission('Payments.Create') ? (
-                      <button
-                        onClick={() => navigate(`/payments/create?sale_id=${selectedSaleDetails.id}`)}
-                        className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-black font-bold transition-colors"
-                      >
-                        <CreditCard size={14} />
-                        Collect Remaining due ({due.toFixed(2)} AED)
-                      </button>
-                    ) : null;
-                  })()}
-                </div>
-
-                {/* Job Status Workflow history timeline */}
-                <div className="space-y-3 pt-3 border-t border-border/40 print:hidden">
-                  <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                    <Clock size={14} className="text-primary" />
-                    Job Status Workflow Timeline
-                  </h4>
-                  
-                  <div className="relative pl-4 border-l border-border/80 space-y-4">
-                    {selectedSaleDetails.history?.map((h: any) => (
-                      <div key={h.id} className="relative text-[11px] text-muted-foreground">
-                        {/* Bullet */}
-                        <div
-                          className="absolute -left-[21px] top-1 h-2 w-2 rounded-full border bg-background"
-                          style={{ borderColor: h.new_status?.color || '#a78bfa' }}
-                        />
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-foreground">
-                            {h.new_status?.name}
-                          </span>
-                          <span className="text-[9px] text-muted-foreground/80">
-                            {new Date(h.created_at).toLocaleDateString()} {new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {/* Blue Banner Header */}
+                        <div className="bg-[#000ba0] text-white flex items-center justify-between px-4 py-1.5 font-bold uppercase tracking-wider text-xs my-3 rounded-sm shadow-sm">
+                          <span>Customer Invoice</span>
+                          <span className="bg-[#f28f00] text-white px-3 py-0.5 rounded font-mono text-[11px] tracking-widest">
+                            # {saleItem.invoice_no}
                           </span>
                         </div>
-                        <p className="mt-0.5">{h.remarks || 'No remarks recorded.'}</p>
-                        <div className="text-[9px] text-primary/70 mt-0.5">By: {h.user?.name || 'Staff'}</div>
+
+                        {/* Customer & Date Metadata Grid Table */}
+                        <table className="w-full border-collapse border border-gray-300 text-xs my-3 bg-white">
+                          <tbody>
+                            <tr>
+                              <td className="bg-[#f28f00] text-white font-bold px-3 py-2 border border-gray-300 w-1/4 uppercase tracking-wider">
+                                Invoice To
+                              </td>
+                              <td className="px-3 py-2 border border-gray-300 text-black font-bold text-sm w-3/4" colSpan={3}>
+                                {(() => {
+                                  if (!saleItem.customer) return 'Walk-in Customer';
+                                  if (saleItem.person_name) {
+                                    return (
+                                      <div className="flex flex-col">
+                                        <span className="font-extrabold text-foreground">{saleItem.person_name}</span>
+                                        <span className="text-xs text-[#000ba0] font-semibold mt-0.5">
+                                          Company Account: {saleItem.customer.name} (Consolidated Billing)
+                                        </span>
+                                      </div>
+                                    );
+                                  }
+                                  const parentName = saleItem.customer.company?.name;
+                                  if (parentName) {
+                                    return (
+                                      <div className="flex flex-col">
+                                        <span className="font-extrabold text-foreground">{saleItem.customer.name}</span>
+                                        <span className="text-xs text-[#000ba0] font-semibold mt-0.5">
+                                          Company Account: {parentName} (Consolidated Billing)
+                                        </span>
+                                      </div>
+                                    );
+                                  }
+                                  return saleItem.customer.name;
+                                })()}
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4">
+                                Mr. / M/s:
+                              </td>
+                              <td className="px-3 py-2 border border-gray-300 text-black font-semibold w-1/4">
+                                {saleItem.customer?.email || 'N/A'}
+                              </td>
+                              <td className="bg-[#f28f00] text-white font-bold px-3 py-2 border border-gray-300 w-1/4 uppercase tracking-wider text-center">
+                                Date
+                              </td>
+                              <td className="px-3 py-2 border border-gray-300 text-black font-bold text-center w-1/4">
+                                {new Date(saleItem.created_at).toLocaleDateString()}
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4">
+                                Invoice No:
+                              </td>
+                              <td className="px-3 py-2 border border-gray-300 text-primary font-bold w-1/4">
+                                {saleItem.invoice_no}
+                              </td>
+                              <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4 text-center">
+                                Cashier
+                              </td>
+                              <td className="px-3 py-2 border border-gray-300 text-black font-semibold text-center w-1/4">
+                                {saleItem.employee?.name || 'Staff'}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+
+                        {/* Items List Table */}
+                        <div className="border border-gray-300 rounded-sm overflow-hidden my-3 text-xs bg-white">
+                          <table className="w-full text-left border-collapse">
+                            <thead className="bg-[#000ba0] text-white font-bold">
+                              <tr>
+                                <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[8%]">No</th>
+                                <th className="px-3 py-2.5 border-r border-gray-300 w-[57%]">Description of Service</th>
+                                <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[10%]">Qty</th>
+                                <th className="px-3 py-2.5 text-right border-r border-gray-300 w-[10%]">Rate</th>
+                                <th className="px-3 py-2.5 text-right w-[15%]">Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-300">
+                              {(() => {
+                                const items = saleItem.items || [];
+                                const totalRows = 11;
+                                const rows: React.ReactNode[] = [];
+                                
+                                // Render actual items
+                                items.forEach((item: any, index: number) => {
+                                  rows.push(
+                                    <tr key={item.id} className="h-8 hover:bg-gray-50/50">
+                                      <td className="px-3 py-1.5 text-center border-r border-gray-300 text-black font-semibold">{index + 1}</td>
+                                      <td className="px-3 py-1.5 border-r border-gray-300 text-black font-bold text-left">{item.service?.name}</td>
+                                      <td className="px-3 py-1.5 text-center border-r border-gray-300 text-black">{item.quantity}</td>
+                                      <td className="px-3 py-1.5 text-right border-r border-gray-300 text-black">{item.unit_price.toFixed(2)}</td>
+                                      <td className="px-3 py-1.5 text-right text-black font-bold">{item.subtotal.toFixed(2)}</td>
+                                    </tr>
+                                  );
+                                });
+
+                                // Render remaining empty rows up to 11
+                                const emptyCount = Math.max(0, totalRows - items.length);
+                                for (let i = 0; i < emptyCount; i++) {
+                                  const rowNum = items.length + i + 1;
+                                  rows.push(
+                                    <tr key={`empty-${i}`} className="h-8">
+                                      <td className="px-3 py-1.5 text-center border-r border-gray-300 text-black font-semibold">{rowNum}</td>
+                                      <td className="px-3 py-1.5 border-r border-gray-300"></td>
+                                      <td className="px-3 py-1.5 border-r border-gray-300"></td>
+                                      <td className="px-3 py-1.5 border-r border-gray-300"></td>
+                                      <td className="px-3 py-1.5 text-right"></td>
+                                    </tr>
+                                  );
+                                }
+
+                                return rows;
+                              })()}
+                            </tbody>
+                            <tfoot>
+                              <tr className="bg-[#f28f00] text-white font-bold border-t border-gray-300">
+                                <td className="px-3 py-2 text-center border-r border-gray-300" colSpan={4}>
+                                  Sub Total
+                                </td>
+                                <td className="px-3 py-2 text-right text-white font-bold">
+                                  {saleItem.subtotal.toFixed(2)}
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+
+                        {/* Bottom Section: Remarks & Payment Record Side-by-Side */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-3 items-stretch">
+                          
+                          {/* Left Column: Remarks/Comments */}
+                          <div className="border border-gray-300 rounded-sm flex flex-col bg-white">
+                            <div className="bg-gray-100 border-b border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700">
+                              Remarks & Internal Notes
+                            </div>
+                            <div className="p-3 text-xs text-black font-semibold whitespace-pre-wrap flex-1 italic">
+                              {saleItem.notes || 'Document completed successfully. Thank you for choosing AZIZI!'}
+                            </div>
+                          </div>
+
+                          {/* Right Column: Payments Log */}
+                          <div className="border border-gray-300 rounded-sm flex flex-col bg-white text-xs">
+                            <div className="bg-[#000ba0] text-white text-center py-1.5 font-bold uppercase tracking-wider text-xs">
+                              Payment Entry Record
+                            </div>
+                            <table className="w-full text-left border-collapse flex-1">
+                              <thead className="bg-[#f28f00] text-white font-bold border-b border-gray-300">
+                                <tr>
+                                  <th className="px-3 py-1.5 border-r border-gray-300">Deposit Date</th>
+                                  <th className="px-3 py-1.5 border-r border-gray-300">Type</th>
+                                  <th className="px-3 py-1.5 text-right">Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-300">
+                                {(() => {
+                                  const payments = saleItem.payments || [];
+                                  const maxPayRows = 4;
+                                  const rows: React.ReactNode[] = [];
+
+                                  payments.forEach((p: any, idx: number) => {
+                                    rows.push(
+                                      <tr key={p.id || idx} className="h-7">
+                                        <td className="px-3 py-1 border-r border-gray-300 text-black">
+                                          {new Date(p.payment_date).toLocaleDateString()}
+                                        </td>
+                                        <td className="px-3 py-1 border-r border-gray-300 text-black font-semibold capitalize">
+                                          {p.payment_method}
+                                        </td>
+                                        <td className="px-3 py-1 text-right text-black font-semibold">
+                                          {p.amount.toFixed(2)}
+                                        </td>
+                                      </tr>
+                                    );
+                                  });
+
+                                  const emptyPayCount = Math.max(0, maxPayRows - payments.length);
+                                  for (let i = 0; i < emptyPayCount; i++) {
+                                    rows.push(
+                                      <tr key={`empty-pay-${i}`} className="h-7">
+                                        <td className="px-3 py-1 border-r border-gray-300"></td>
+                                        <td className="px-3 py-1 border-r border-gray-300"></td>
+                                        <td className="px-3 py-1 text-right"></td>
+                                      </tr>
+                                    );
+                                  }
+
+                                  return rows;
+                                })()}
+                              </tbody>
+                            </table>
+
+                            {/* Totals Summary */}
+                            <div className="border-t border-gray-300">
+                              {(() => {
+                                const totalPaid = saleItem.payments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0;
+                                const due = Math.max(0, saleItem.grand_total - totalPaid);
+                                return (
+                                  <div className="divide-y divide-gray-300">
+                                    {/* Total Amount in Blue */}
+                                    <div className="flex justify-between bg-[#000ba0] text-white font-bold px-3 py-2 text-xs">
+                                      <span>Total Amount</span>
+                                      <span>{saleItem.grand_total.toFixed(2)} AED</span>
+                                    </div>
+                                    {/* Paid Amount in White */}
+                                    <div className="flex justify-between bg-white text-black font-bold px-3 py-2 text-xs">
+                                      <span>Paid Amount</span>
+                                      <span>{totalPaid.toFixed(2)} AED</span>
+                                    </div>
+                                    {/* Due Amount in Pink */}
+                                    <div className={`flex justify-between font-extrabold px-3 py-2 text-xs ${
+                                      due > 0 ? 'bg-[#fadbd8] text-[#78281f]' : 'bg-green-50 text-green-700'
+                                    }`}>
+                                      <span>Due Amount</span>
+                                      <span>{due.toFixed(2)} AED</span>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          </div>
+
+                        </div>
                       </div>
                     ))}
                   </div>
+
+                  {/* Action Buttons (Hidden on print) */}
+                  <div className="flex flex-col gap-2 pt-3 border-t border-gray-300 print:hidden text-xs">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handlePrint}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg border border-border font-semibold text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-all cursor-pointer"
+                      >
+                        <Printer size={14} />
+                        Print Receipts
+                      </button>
+                      <button
+                        onClick={() => handleWhatsAppShare(mainSale)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-md transition-colors cursor-pointer"
+                      >
+                        <MessageSquare size={14} />
+                        WhatsApp Share
+                      </button>
+                      {hasPermission('Sales.Update') && (
+                        <button
+                          onClick={() => {
+                            setNewStatusId(mainSale.order_status_id);
+                            setStatusModalOpen(true);
+                          }}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold shadow-md transition-colors cursor-pointer"
+                        >
+                          <Activity size={14} />
+                          Update Job Status
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Due collection button */}
+                    {(() => {
+                      const totalPaid = mainSale.payments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0;
+                      const due = mainSale.grand_total - totalPaid;
+                      return due > 0 && hasPermission('Payments.Create') ? (
+                        <button
+                          onClick={() => navigate(`/payments/create?sale_id=${mainSale.id}`)}
+                          className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-black font-bold transition-colors cursor-pointer"
+                        >
+                          <CreditCard size={14} />
+                          Collect Remaining due ({due.toFixed(2)} AED)
+                        </button>
+                      ) : null;
+                    })()}
+                  </div>
+
+                  {/* Job Status Workflow history timeline */}
+                  <div className="space-y-3 pt-3 border-t border-border/40 print:hidden">
+                    <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <Clock size={14} className="text-primary" />
+                      Job Status Workflow Timeline (Invoice #{mainSale.invoice_no})
+                    </h4>
+                    
+                    <div className="relative pl-4 border-l border-border/80 space-y-4">
+                      {mainSale.history?.map((h: any) => (
+                        <div key={h.id} className="relative text-[11px] text-muted-foreground">
+                          {/* Bullet */}
+                          <div
+                            className="absolute -left-[21px] top-1 h-2 w-2 rounded-full border bg-background"
+                            style={{ borderColor: h.new_status?.color || '#a78bfa' }}
+                          />
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-foreground">
+                              {h.new_status?.name}
+                            </span>
+                            <span className="text-[9px] text-muted-foreground/80">
+                              {new Date(h.created_at).toLocaleDateString()} {new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <p className="mt-0.5">{h.remarks || 'No remarks recorded.'}</p>
+                          <div className="text-[9px] text-primary/70 mt-0.5">By: {h.user?.name || 'Staff'}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
 
 

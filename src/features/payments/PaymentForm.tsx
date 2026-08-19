@@ -158,11 +158,20 @@ export const PaymentForm: React.FC = () => {
               disabled={loading || !!saleIdParam}
             >
               <option value="">-- Choose Invoice Reference --</option>
-              {unpaidSales.map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.invoice_no} - {s.customer?.name || 'Walk-in'} (Total: {s.grand_total.toFixed(2)} AED)
-                </option>
-              ))}
+              {unpaidSales.map(s => {
+                const customerLabel = s.customer 
+                  ? s.person_name 
+                    ? `${s.person_name} (Company: ${s.customer.name})`
+                    : s.customer.company?.name
+                    ? `${s.customer.name} (Company: ${s.customer.company.name})`
+                    : s.customer.name
+                  : 'Walk-in Customer';
+                return (
+                  <option key={s.id} value={s.id}>
+                    {s.invoice_no} - {customerLabel} (Total: {s.grand_total.toFixed(2)} AED)
+                  </option>
+                );
+              })}
             </select>
             {saleIdParam && (
               <p className="text-[10px] text-muted-foreground mt-1">Invoice locked to redirect parameter.</p>

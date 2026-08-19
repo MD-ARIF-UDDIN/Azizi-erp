@@ -631,7 +631,15 @@ export const ReportsCenter: React.FC = () => {
                               <td className="px-5 py-3 font-semibold text-foreground print:text-black">{s.invoice_no}</td>
                               <td className="px-5 py-3">{new Date(s.created_at).toLocaleDateString()}</td>
                               <td className="px-5 py-3">{s.branch?.name}</td>
-                              <td className="px-5 py-3 text-foreground print:text-black">{s.customer?.name || 'Walk-in'}</td>
+                              <td className="px-5 py-3 text-foreground print:text-black">
+                                 {s.customer 
+                                   ? s.person_name
+                                     ? `${s.person_name} (${s.customer.name})`
+                                     : s.customer.company?.name
+                                     ? `${s.customer.name} (${s.customer.company.name})`
+                                     : s.customer.name
+                                   : 'Walk-in'}
+                               </td>
                               <td className="px-5 py-3 text-right">{s.subtotal.toFixed(2)}</td>
                               <td className="px-5 py-3 text-right text-rose-400">-{s.discount.toFixed(2)}</td>
                               <td className="px-5 py-3 text-right text-foreground print:text-black font-semibold">{s.grand_total.toFixed(2)}</td>

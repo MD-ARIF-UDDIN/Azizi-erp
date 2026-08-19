@@ -726,8 +726,8 @@ export const db = {
 
       return customersList.map(c => {
         const customerSales = salesList.filter(s => s.customer_id === c.id);
-        const totalPurchased = customerSales.reduce((sum: number, s: Sale) => sum + s.grand_total, 0);
         const saleIds = customerSales.map(s => s.id);
+        const totalPurchased = customerSales.reduce((sum: number, s: Sale) => sum + s.grand_total, 0);
         const totalPaid = paymentsList
           .filter((p: Payment) => saleIds.includes(p.sale_id))
           .reduce((sum: number, p: Payment) => sum + p.amount, 0);
@@ -752,22 +752,26 @@ export const db = {
         if (cErr) throw cErr;
         customerRecord = c;
 
-        const { data: s, error: sErr } = await supabase.from('sales').select('*').eq('customer_id', id).eq('is_deleted', false);
-        const { data: p, error: pErr } = await supabase.from('payments').select('*').eq('is_deleted', false);
-        const { data: b, error: bErr } = await supabase.from('branches').select('*');
-        const { data: st, error: stErr } = await supabase.from('order_statuses').select('*');
-        if (sErr || pErr || bErr || stErr) throw sErr || pErr || bErr || stErr;
+        if (customerRecord) {
+          const { data: s, error: sErr } = await supabase.from('sales').select('*').eq('customer_id', id).eq('is_deleted', false);
+          const { data: p, error: pErr } = await supabase.from('payments').select('*').eq('is_deleted', false);
+          const { data: b, error: bErr } = await supabase.from('branches').select('*');
+          const { data: st, error: stErr } = await supabase.from('order_statuses').select('*');
+          if (sErr || pErr || bErr || stErr) throw sErr || pErr || bErr || stErr;
 
-        salesList = s || [];
-        paymentsList = p || [];
-        branchesList = b || [];
-        statusesList = st || [];
+          salesList = s || [];
+          paymentsList = p || [];
+          branchesList = b || [];
+          statusesList = st || [];
+        }
       } else {
         customerRecord = _customers.find(x => x.id === id && !x.is_deleted);
-        salesList = _sales.filter(s => s.customer_id === id && !s.is_deleted);
-        paymentsList = _payments.filter(p => !p.is_deleted);
-        branchesList = _branches;
-        statusesList = _statuses;
+        if (customerRecord) {
+          salesList = _sales.filter(s => s.customer_id === id && !s.is_deleted);
+          paymentsList = _payments.filter(p => !p.is_deleted);
+          branchesList = _branches;
+          statusesList = _statuses;
+        }
       }
 
       if (!customerRecord) return undefined;
@@ -781,6 +785,7 @@ export const db = {
 
       const historySales = salesList.map(s => ({
         ...s,
+        customer: _customers.find(c => c.id === s.customer_id),
         branch: branchesList.find(b => b.id === s.branch_id),
         status: statusesList.find(st => st.id === s.order_status_id)
       }));
@@ -1140,6 +1145,9 @@ export const db = {
       notes?: string;
       items: Array<{ service_id: string; quantity: number; unit_price: number }>;
       initialPayment?: { amount: number; payment_method: Payment['payment_method'] };
+      person_name?: string;
+      person_phone?: string;
+      person_email?: string;
     }) => {
       const subtotal = data.items.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
       const grand_total = Math.max(0, subtotal - data.discount);
@@ -1154,7 +1162,6 @@ export const db = {
         const { count } = await supabase.from('sales').select('*', { count: 'exact', head: true });
         const invoiceSeq = (count || 0) + 1;
         const invoice_no = `INV-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}-${invoiceSeq.toString().padStart(4, '0')}`;
-
 
         const paidAmount = data.initialPayment ? data.initialPayment.amount : 0;
         let payment_status: Sale['payment_status'] = 'Unpaid';
@@ -1175,7 +1182,10 @@ export const db = {
           order_status_id: pendingStatusId,
           notes: data.notes,
           created_by: activeUser.id,
-          updated_by: activeUser.id
+          updated_by: activeUser.id,
+          person_name: data.person_name,
+          person_phone: data.person_phone,
+          person_email: data.person_email
         }]).select().single();
 
         if (saleErr) throw saleErr;
@@ -1251,7 +1261,10 @@ export const db = {
         created_at: now.toISOString(),
         updated_at: now.toISOString(),
         created_by: activeUser.id,
-        updated_by: activeUser.id
+        updated_by: activeUser.id,
+        person_name: data.person_name,
+        person_phone: data.person_phone,
+        person_email: data.person_email
       };
 
       _sales.push(newSale);

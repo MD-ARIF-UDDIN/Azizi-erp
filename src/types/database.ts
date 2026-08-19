@@ -62,7 +62,13 @@ export interface Customer {
   is_deleted: boolean;
   created_at: string;
   updated_at: string;
+  customer_type?: 'individual' | 'company';
+  company_id?: string;
+  company?: Customer;
+  due?: number;
+  members?: { id?: string; name: string; phone?: string; email?: string }[];
 }
+
 
 export interface ServiceCategory {
   id: string;
@@ -113,6 +119,9 @@ export interface Sale {
   updated_at: string;
   created_by?: string;
   updated_by?: string;
+  person_name?: string;
+  person_phone?: string;
+  person_email?: string;
 }
 
 export interface SaleItem {

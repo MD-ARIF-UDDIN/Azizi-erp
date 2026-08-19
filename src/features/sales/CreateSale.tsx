@@ -20,6 +20,7 @@ interface CartItem {
   service: Service;
   quantity: number;
   unit_price: number;
+  assigned_customer_id?: string;
 }
 
 export const CreateSale: React.FC = () => {
@@ -52,6 +53,16 @@ export const CreateSale: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const selectedCustomerRecord = customers.find(c => c.id === customerId);
+  const isCompanySelected = selectedCustomerRecord?.customer_type === 'company';
+  const companyEmployees = isCompanySelected && selectedCustomerRecord?.members
+    ? selectedCustomerRecord.members
+    : [];
+
+  useEffect(() => {
+    setCart([]);
+  }, [customerId, customerType]);
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -81,13 +92,20 @@ export const CreateSale: React.FC = () => {
 
   // Add a service directly from card click
   const addServiceToCart = (service: Service) => {
-    const existingIndex = cart.findIndex(item => item.service.id === service.id);
-    if (existingIndex !== -1) {
+    const defaultAssignedId = customerId;
+    const existingIndex = cart.findIndex(item => item.service.id === service.id && item.assigned_customer_id === defaultAssignedId);
+    
+    if (!isCompanySelected && existingIndex !== -1) {
       const updated = [...cart];
       updated[existingIndex].quantity += 1;
       setCart(updated);
     } else {
-      setCart([...cart, { service, quantity: 1, unit_price: service.price }]);
+      setCart([...cart, { 
+        service, 
+        quantity: 1, 
+        unit_price: service.price, 
+        assigned_customer_id: defaultAssignedId || undefined 
+      }]);
     }
   };
 
@@ -160,22 +178,83 @@ export const CreateSale: React.FC = () => {
         finalCustomerId = createdCust.id;
       }
 
-      const createdSale = await db.sales.create({
-        customer_id: finalCustomerId || undefined,
-        branch_id: branchId,
-        discount,
-        notes: notes || undefined,
-        items: cart.map(item => ({
-          service_id: item.service.id,
-          quantity: item.quantity,
-          unit_price: item.unit_price
-        })),
-        initialPayment: hasInitialPayment ? {
-          amount: paymentAmount,
-          payment_method: paymentMethod
-        } : undefined
+      // Group cart items by assigned member
+      const groups: Record<string, CartItem[]> = {};
+      cart.forEach(item => {
+        const assignedId = item.assigned_customer_id || finalCustomerId;
+        if (!groups[assignedId]) groups[assignedId] = [];
+        groups[assignedId].push(item);
       });
-      navigate(`/sales?print=${createdSale.id}`);
+
+      const groupKeys = Object.keys(groups);
+      const total_subtotal = cart.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
+
+      // Distribute discount proportionally
+      let remainingDiscount = discount;
+      let remainingSubtotal = total_subtotal;
+      const groupDiscounts: Record<string, number> = {};
+
+      groupKeys.forEach((key, idx) => {
+        if (idx === groupKeys.length - 1) {
+          groupDiscounts[key] = remainingDiscount;
+        } else {
+          const groupSub = groups[key].reduce((s, i) => s + i.unit_price * i.quantity, 0);
+          const groupDisc = remainingSubtotal > 0 
+            ? Math.round((discount * (groupSub / total_subtotal)) * 100) / 100 
+            : 0;
+          groupDiscounts[key] = Math.min(remainingDiscount, groupDisc);
+          remainingDiscount -= groupDiscounts[key];
+          remainingSubtotal -= groupSub;
+        }
+      });
+
+      // Distribute initial payment sequentially
+      let remainingPayment = hasInitialPayment ? paymentAmount : 0;
+      const groupPayments: Record<string, number> = {};
+
+      groupKeys.forEach((key) => {
+        const groupSub = groups[key].reduce((s, i) => s + i.unit_price * i.quantity, 0);
+        const groupDisc = groupDiscounts[key];
+        const groupTotal = Math.max(0, groupSub - groupDisc);
+
+        const payForGroup = Math.min(remainingPayment, groupTotal);
+        groupPayments[key] = payForGroup;
+        remainingPayment -= payForGroup;
+      });
+
+      // Save sales
+      const createdSaleIds: string[] = [];
+      for (const key of groupKeys) {
+        const groupItems = groups[key];
+        const groupDisc = groupDiscounts[key];
+        const payAmount = groupPayments[key] || 0;
+        
+        const memberObj = key !== finalCustomerId 
+          ? companyEmployees.find(emp => emp.id === key) 
+          : undefined;
+
+        const createdSale = await db.sales.create({
+          customer_id: finalCustomerId || undefined,
+          branch_id: branchId,
+          discount: groupDisc,
+          notes: notes ? `${notes}` : undefined,
+          items: groupItems.map(item => ({
+            service_id: item.service.id,
+            quantity: item.quantity,
+            unit_price: item.unit_price
+          })),
+          initialPayment: payAmount > 0 ? {
+            amount: payAmount,
+            payment_method: paymentMethod
+          } : undefined,
+          person_name: memberObj?.name,
+          person_phone: memberObj?.phone,
+          person_email: memberObj?.email
+        });
+        createdSaleIds.push(createdSale.id);
+      }
+
+      navigate(`/sales?print=${createdSaleIds.join(',')}`);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to record sales invoice.');
     } finally {
@@ -280,6 +359,7 @@ export const CreateSale: React.FC = () => {
                   <thead className="bg-muted/50 text-muted-foreground uppercase font-semibold border-b border-border">
                     <tr>
                       <th className="px-4 py-3">Service Details</th>
+                      {isCompanySelected && <th className="px-4 py-3 w-48">Assign To</th>}
                       <th className="px-4 py-3 text-center w-32">Qty</th>
                       <th className="px-4 py-3 w-32">Unit Price</th>
                       <th className="px-4 py-3 text-right">Subtotal</th>
@@ -289,19 +369,39 @@ export const CreateSale: React.FC = () => {
                   <tbody className="divide-y divide-border/60">
                     {cart.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground italic">
+                        <td colSpan={isCompanySelected ? 6 : 5} className="px-4 py-10 text-center text-muted-foreground italic">
                           Shopping cart is empty. Tap a service card above to begin billing.
                         </td>
                       </tr>
                     ) : (
                       cart.map((item, index) => (
-                        <tr key={item.service.id} className="hover:bg-muted/10">
+                        <tr key={index} className="hover:bg-muted/10">
                           <td className="px-4 py-3">
                             <div className="font-semibold text-foreground">{item.service.name}</div>
                             <div className="text-[10px] text-muted-foreground mt-0.5">
                               Standard: {item.service.price.toFixed(2)} AED
                             </div>
                           </td>
+                          {isCompanySelected && (
+                            <td className="px-4 py-3">
+                              <select
+                                value={item.assigned_customer_id || customerId}
+                                onChange={(e) => {
+                                  const updated = [...cart];
+                                  updated[index].assigned_customer_id = e.target.value;
+                                  setCart(updated);
+                                }}
+                                className="w-full px-2 py-1 bg-muted/50 border border-border rounded text-xs text-foreground animate-none"
+                              >
+                                <option value={customerId}>Company Account (Direct)</option>
+                                {companyEmployees.map(emp => (
+                                  <option key={emp.id} value={emp.id}>
+                                    {emp.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                          )}
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-center gap-2">
                               <button
@@ -395,13 +495,23 @@ export const CreateSale: React.FC = () => {
                   <select
                     value={customerId}
                     onChange={(e) => setCustomerId(e.target.value)}
-                    className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground"
+                    className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground text-xs"
                     required={customerType === 'existing'}
                   >
                     <option value="">-- Choose Customer --</option>
-                    {customers.map(c => (
-                      <option key={c.id} value={c.id}>{c.name} {c.phone ? `(${c.phone})` : ''}</option>
-                    ))}
+                    {customers.map(c => {
+                      const parentCompanyName = c.company?.name;
+                      const displayLabel = c.customer_type === 'individual' && parentCompanyName
+                        ? `${c.name} (Member of ${parentCompanyName})`
+                        : c.customer_type === 'company'
+                        ? `${c.name} (Company Account)`
+                        : c.name;
+                      return (
+                        <option key={c.id} value={c.id}>
+                          {displayLabel} {c.phone ? `(${c.phone})` : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               ) : (

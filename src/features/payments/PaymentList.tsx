@@ -44,7 +44,13 @@ export const PaymentList: React.FC = () => {
             sale_invoice: sale.invoice_no,
             sale_branch_id: sale.branch_id,
             sale_branch_name: sale.branch?.name || 'Central Branch',
-            sale_customer_name: sale.customer?.name || 'Walk-in Customer',
+            sale_customer_name: sale.customer 
+              ? sale.person_name
+                ? `${sale.person_name} (${sale.customer.name})`
+                : sale.customer.company?.name
+                ? `${sale.customer.name} (${sale.customer.company.name})`
+                : sale.customer.name
+              : 'Walk-in Customer',
             received_by_name: allUsers.find(u => u.id === p.received_by)?.name || 'Cashier'
           });
         });
