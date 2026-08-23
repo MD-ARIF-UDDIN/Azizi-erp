@@ -3,6 +3,7 @@ import { db } from '../../lib/db';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
 import { useNavigate } from 'react-router-dom';
+import { exportPayments } from '../../lib/excelExport';
 import {
   DollarSign,
   Search,
@@ -11,7 +12,8 @@ import {
   Building,
   User,
   Receipt,
-  Plus
+  Plus,
+  Download
 } from 'lucide-react';
 
 export const PaymentList: React.FC = () => {
@@ -152,17 +154,27 @@ export const PaymentList: React.FC = () => {
             />
           </div>
           
-          <select
-            value={methodFilter}
-            onChange={(e) => setMethodFilter(e.target.value)}
-            className="px-3 py-2 bg-popover border border-border rounded-lg text-xs text-foreground w-full sm:w-auto"
-          >
-            <option value="">All Payment Modes</option>
-            <option value="Cash">Cash</option>
-            <option value="Card">Card</option>
-            <option value="Mobile Banking">Mobile Banking (bKash/Nagad)</option>
-            <option value="Bank Transfer">Bank Transfer</option>
-          </select>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <select
+              value={methodFilter}
+              onChange={(e) => setMethodFilter(e.target.value)}
+              className="px-3 py-2 bg-popover border border-border rounded-lg text-xs text-foreground w-full sm:w-auto"
+            >
+              <option value="">All Payment Modes</option>
+              <option value="Cash">Cash</option>
+              <option value="Card">Card</option>
+              <option value="Mobile Banking">Mobile Banking (bKash/Nagad)</option>
+              <option value="Bank Transfer">Bank Transfer</option>
+            </select>
+
+            <button
+              onClick={() => exportPayments(filteredPayments)}
+              className="flex items-center gap-1.5 border border-border text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all cursor-pointer whitespace-nowrap w-full sm:w-auto justify-center"
+            >
+              <Download size={14} />
+              Export Excel
+            </button>
+          </div>
         </div>
 
         {/* DATA TABLE */}

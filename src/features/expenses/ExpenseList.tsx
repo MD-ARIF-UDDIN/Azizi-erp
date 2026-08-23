@@ -4,6 +4,7 @@ import type { Expense, ExpenseCategory, Branch } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
 import { useNavigate } from 'react-router-dom';
+import { exportExpenses, exportExpenseCategories } from '../../lib/excelExport';
 import {
   TrendingDown,
   Plus,
@@ -14,7 +15,8 @@ import {
   Layers,
   Tag,
   DollarSign,
-  Briefcase
+  Briefcase,
+  Download
 } from 'lucide-react';
 
 export const ExpenseList: React.FC = () => {
@@ -185,15 +187,24 @@ export const ExpenseList: React.FC = () => {
                     />
                   </div>
 
-                  {hasPermission('Expenses.Create') && (
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
                     <button
-                      onClick={() => navigate('/expenses/create')}
-                      className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all self-stretch sm:self-auto justify-center"
+                      onClick={() => exportExpenses(filteredExpenses)}
+                      className="flex items-center gap-1.5 border border-border text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all cursor-pointer w-full sm:w-auto justify-center"
                     >
-                      <Plus size={14} />
-                      Log Expense
+                      <Download size={14} />
+                      Export Excel
                     </button>
-                  )}
+                    {hasPermission('Expenses.Create') && (
+                      <button
+                        onClick={() => navigate('/expenses/create')}
+                        className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all w-full sm:w-auto justify-center"
+                      >
+                        <Plus size={14} />
+                        Log Expense
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Expenses Log Table */}
@@ -279,19 +290,28 @@ export const ExpenseList: React.FC = () => {
             {/* EXPENSE CATEGORIES PANEL */}
             {activeTab === 'categories' && (
               <div className="space-y-4">
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center gap-4">
                   <span className="text-xs text-muted-foreground font-medium">
                     Categorize expenditures (such as Shop Rent, Utilities, Paper, Toner) for financial statements.
                   </span>
-                  {hasPermission('Expenses.Create') && (
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={() => navigate('/expenses/category/create')}
-                      className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all"
+                      onClick={() => exportExpenseCategories(categories)}
+                      className="flex items-center gap-1.5 border border-border text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all cursor-pointer whitespace-nowrap"
                     >
-                      <Plus size={14} />
-                      Add Category
+                      <Download size={14} />
+                      Export Excel
                     </button>
-                  )}
+                    {hasPermission('Expenses.Create') && (
+                      <button
+                        onClick={() => navigate('/expenses/category/create')}
+                        className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all whitespace-nowrap"
+                      >
+                        <Plus size={14} />
+                        Add Category
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -4,6 +4,7 @@ import type { OrderStatus } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { exportSales } from '../../lib/excelExport';
 import {
   Plus,
   Search,
@@ -12,7 +13,8 @@ import {
   Clock,
   X,
   CreditCard,
-  MessageSquare
+  MessageSquare,
+  Download
 } from 'lucide-react';
 
 const handleWhatsAppShare = (sale: any) => {
@@ -257,6 +259,17 @@ export const SalesList: React.FC = () => {
               <option value="grand_total-desc">Highest Bill</option>
               <option value="grand_total-asc">Lowest Bill</option>
             </select>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                exportSales(filteredSales);
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-border text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all w-full sm:w-auto justify-center cursor-pointer"
+            >
+              <Download size={14} />
+              Export Excel
+            </button>
           </div>
         </div>
 

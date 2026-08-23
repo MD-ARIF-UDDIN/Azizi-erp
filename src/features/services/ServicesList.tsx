@@ -4,13 +4,15 @@ import type { Service, ServiceCategory } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
 import { useNavigate } from 'react-router-dom';
+import { exportServices, exportServiceCategories } from '../../lib/excelExport';
 import {
   Plus,
   Edit2,
   Trash2,
   Tag,
   Briefcase,
-  Layers
+  Layers,
+  Download
 } from 'lucide-react';
 
 export const ServicesList: React.FC = () => {
@@ -114,15 +116,24 @@ export const ServicesList: React.FC = () => {
                   <span className="text-xs text-muted-foreground font-medium">
                     Showing {services.length} registered typing & printing items.
                   </span>
-                  {hasPermission('Customer.Update') && (
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={() => navigate('/services/create')}
-                      className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all"
+                      onClick={() => exportServices(services)}
+                      className="flex items-center gap-1.5 border border-border text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all cursor-pointer"
                     >
-                      <Plus size={14} />
-                      Add Service Item
+                      <Download size={14} />
+                      Export Excel
                     </button>
-                  )}
+                    {hasPermission('Customer.Update') && (
+                      <button
+                        onClick={() => navigate('/services/create')}
+                        className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all"
+                      >
+                        <Plus size={14} />
+                        Add Service Item
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="glass border border-border rounded-2xl overflow-hidden shadow-xl">
@@ -205,15 +216,24 @@ export const ServicesList: React.FC = () => {
               <div className="space-y-4">
                 <div className="flex justify-between items-center w-full">
                   <div />
-                  {hasPermission('Customer.Update') && (
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={() => navigate('/services/category/create')}
-                      className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all"
+                      onClick={() => exportServiceCategories(categories, services)}
+                      className="flex items-center gap-1.5 border border-border text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all cursor-pointer"
                     >
-                      <Plus size={14} />
-                      Add Category
+                      <Download size={14} />
+                      Export Excel
                     </button>
-                  )}
+                    {hasPermission('Customer.Update') && (
+                      <button
+                        onClick={() => navigate('/services/category/create')}
+                        className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all"
+                      >
+                        <Plus size={14} />
+                        Add Category
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -4,6 +4,7 @@ import type { Customer, ClientDocument, Service } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
 import { useNavigate } from 'react-router-dom';
+import { exportCustomers } from '../../lib/excelExport';
 import {
   Plus,
   Minus,
@@ -24,7 +25,8 @@ import {
   CreditCard,
   MessageSquare,
   User,
-  Building2
+  Building2,
+  Download
 } from 'lucide-react';
 
 const handleWhatsAppShare = (sale: any) => {
@@ -418,6 +420,17 @@ export const CustomerList: React.FC = () => {
             >
               <AlertTriangle size={14} />
               Show Due Balance Only
+            </button>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                exportCustomers(filteredCustomers);
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-border text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all w-full sm:w-auto justify-center cursor-pointer"
+            >
+              <Download size={14} />
+              Export Excel
             </button>
           </div>
 

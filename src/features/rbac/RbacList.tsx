@@ -3,6 +3,7 @@ import { db } from '../../lib/db';
 import type { User, Role, Branch, Permission } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
+import { exportUsers, exportRoles, exportBranches } from '../../lib/excelExport';
 import {
   Users,
   Shield,
@@ -15,7 +16,8 @@ import {
   Phone,
   CheckSquare,
   Square,
-  X
+  X,
+  Download
 } from 'lucide-react';
 
 export const RbacList: React.FC = () => {
@@ -286,20 +288,28 @@ export const RbacList: React.FC = () => {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full sm:max-w-xs px-4 py-2 rounded-lg border border-border bg-muted/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
                   />
-                  {/* Add Trigger */}
-                  {hasPermission('Users.Create') && (
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
                     <button
-                      onClick={() => {
-                        setEditingUser(null);
-                        setUserForm({ name: '', email: '', phone: '', role_id: roles[0]?.id || '', branch_id: branches[0]?.id || '', status: 'Active', permissions: [] });
-                        setShowUserModal(true);
-                      }}
-                      className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all self-stretch sm:self-auto justify-center"
+                      onClick={() => exportUsers(filteredUsers)}
+                      className="flex items-center gap-1.5 border border-border text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all cursor-pointer w-full sm:w-auto justify-center"
                     >
-                      <Plus size={14} />
-                      Add Employee
+                      <Download size={14} />
+                      Export Excel
                     </button>
-                  )}
+                    {hasPermission('Users.Create') && (
+                      <button
+                        onClick={() => {
+                          setEditingUser(null);
+                          setUserForm({ name: '', email: '', phone: '', role_id: roles[0]?.id || '', branch_id: branches[0]?.id || '', status: 'Active', permissions: [] });
+                          setShowUserModal(true);
+                        }}
+                        className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all w-full sm:w-auto justify-center"
+                      >
+                        <Plus size={14} />
+                        Add Employee
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Employees Grid Card */}
@@ -402,18 +412,27 @@ export const RbacList: React.FC = () => {
                       </p>
                     </div>
                   </div>
-                  {hasPermission('Roles.Update') && (
+                  <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 justify-end">
                     <button
-                      onClick={() => {
-                        setRoleForm({ name: '', description: '' });
-                        setShowRoleModal(true);
-                      }}
-                      className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all shrink-0 w-full sm:w-auto justify-center"
+                      onClick={() => exportRoles(roles, rolePermsMap, permissions)}
+                      className="flex items-center gap-1.5 border border-border text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all cursor-pointer w-full sm:w-auto justify-center"
                     >
-                      <Plus size={14} />
-                      Add New Role
+                      <Download size={14} />
+                      Export Excel
                     </button>
-                  )}
+                    {hasPermission('Roles.Update') && (
+                      <button
+                        onClick={() => {
+                          setRoleForm({ name: '', description: '' });
+                          setShowRoleModal(true);
+                        }}
+                        className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all w-full sm:w-auto justify-center"
+                      >
+                        <Plus size={14} />
+                        Add New Role
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* MATRIX GRID TABLE */}
@@ -474,7 +493,14 @@ export const RbacList: React.FC = () => {
             {/* BRANCHES TAB PANEL */}
             {activeTab === 'branches' && (
               <div className="space-y-4">
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => exportBranches(branches)}
+                    className="flex items-center gap-1.5 border border-border text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all cursor-pointer"
+                  >
+                    <Download size={14} />
+                    Export Excel
+                  </button>
                   {hasPermission('Branches.Create') && (
                     <button
                       onClick={() => {

@@ -12,6 +12,12 @@ import {
   TrendingDown,
   X
 } from 'lucide-react';
+import {
+  exportSalesReport,
+  exportExpensesReport,
+  exportServicePerformanceReport,
+  exportBalanceReport
+} from '../../lib/excelExport';
 
 
 export const ReportsCenter: React.FC = () => {
@@ -285,6 +291,18 @@ export const ReportsCenter: React.FC = () => {
     document.body.removeChild(link);
   };
 
+  const handleExportExcel = () => {
+    if (activeTab === 'sales') {
+      exportSalesReport(filteredSales, startDate, endDate);
+    } else if (activeTab === 'expenses') {
+      exportExpensesReport(filteredExpenses, startDate, endDate);
+    } else if (activeTab === 'services') {
+      exportServicePerformanceReport(servicePerformanceList, startDate, endDate);
+    } else if (activeTab === 'balance') {
+      exportBalanceReport(dailyBalanceList, startDate, endDate);
+    }
+  };
+
   const handlePrint = () => {
     window.print();
   };
@@ -406,8 +424,15 @@ export const ReportsCenter: React.FC = () => {
               Print Report
             </button>
             <button
+              onClick={handleExportExcel}
+              className="flex items-center gap-1.5 border border-border text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all cursor-pointer"
+            >
+              <Download size={14} />
+              Export Excel
+            </button>
+            <button
               onClick={handleExportCSV}
-              className="flex items-center gap-1 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-colors"
+              className="flex items-center gap-1 bg-primary/20 hover:bg-primary/30 border border-primary/30 text-primary px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-colors"
             >
               <Download size={14} />
               Export CSV
