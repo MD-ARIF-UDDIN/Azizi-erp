@@ -122,6 +122,7 @@ export interface Sale {
   person_name?: string;
   person_phone?: string;
   person_email?: string;
+  quotation_id?: string;
 }
 
 export interface SaleItem {
@@ -208,3 +209,47 @@ export interface ClientDocument {
   updated_at: string;
   customer?: Customer;
 }
+
+export interface Quotation {
+  id: string;
+  quotation_no: string;
+  customer_id?: string;
+  branch_id: string;
+  employee_id?: string;
+  discount: number;
+  subtotal: number;
+  grand_total: number;
+  status: 'Draft' | 'Sent' | 'Accepted' | 'Rejected' | 'Expired' | 'Converted';
+  valid_until?: string;
+  notes?: string;
+  person_name?: string;
+  person_phone?: string;
+  person_email?: string;
+  converted_sale_id?: string;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+  updated_by?: string;
+}
+
+export interface QuotationItem {
+  id: string;
+  quotation_id: string;
+  service_id: string;
+  quantity: number;
+  unit_price: number;
+  subtotal: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuotationStatusHistory {
+  id: string;
+  quotation_id: string;
+  status: string;
+  remarks?: string;
+  changed_at: string;
+  changed_by?: string;
+}
+

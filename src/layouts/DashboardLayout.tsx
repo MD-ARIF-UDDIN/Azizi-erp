@@ -22,7 +22,8 @@ import {
   PanelLeft,
   Menu,
   X,
-  Calendar
+  Calendar,
+  FileText
 } from 'lucide-react';
 
 import { Logo } from '../components/Logo';
@@ -99,7 +100,7 @@ const SidebarDropdown: React.FC<SidebarDropdownProps> = ({ label, icon, collapse
   const isAllowed = !permission || hasPermission(permission);
 
   const isAnyActive = allowedLinks.some(link => {
-    if (link.to === '/sales' || link.to === '/customers' || link.to === '/services' || link.to === '/expenses' || link.to === '/payments') {
+    if (link.to === '/sales' || link.to === '/quotations' || link.to === '/customers' || link.to === '/services' || link.to === '/expenses' || link.to === '/payments') {
       return location.pathname === link.to;
     }
     return location.pathname === link.to || (link.to !== '/' && location.pathname.startsWith(link.to));
@@ -322,6 +323,40 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                 <SidebarSection label="Business" collapsed={isCollapsedResponsive} />
 
                 <SidebarDropdown
+                  label="eCustomers"
+                  icon={<Users size={18} />}
+                  collapsed={isCollapsedResponsive}
+                  permission="Customer.View"
+                  links={[
+                    { to: '/customers', label: 'List', permission: 'Customer.View' },
+                    { to: '/customers/create', label: 'Create', permission: 'Customer.Create' }
+                  ]}
+                />
+
+                <SidebarDropdown
+                  label="eServices"
+                  icon={<Briefcase size={18} />}
+                  collapsed={isCollapsedResponsive}
+                  permission="Customer.View"
+                  links={[
+                    { to: '/services', label: 'List', permission: 'Customer.View' },
+                    { to: '/services/create', label: 'Create', permission: 'Customer.Create' },
+                    { to: '/services/category/create', label: 'Create Category', permission: 'Customer.Create' }
+                  ]}
+                />
+
+                <SidebarDropdown
+                  label="eQuotations"
+                  icon={<FileText size={18} />}
+                  collapsed={isCollapsedResponsive}
+                  permission="Sales.View"
+                  links={[
+                    { to: '/quotations', label: 'List', permission: 'Sales.View' },
+                    { to: '/quotations/create', label: 'Create', permission: 'Sales.Create' }
+                  ]}
+                />
+
+                <SidebarDropdown
                   label="eSales"
                   icon={<Receipt size={18} />}
                   collapsed={isCollapsedResponsive}
@@ -331,53 +366,31 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                     { to: '/sales/create', label: 'Create', permission: 'Sales.Create' }
                   ]}
                 />
-            <SidebarDropdown
-              label="eCustomers"
-              icon={<Users size={18} />}
-              collapsed={isCollapsedResponsive}
-              permission="Customer.View"
-              links={[
-                { to: '/customers', label: 'List', permission: 'Customer.View' },
-                { to: '/customers/create', label: 'Create', permission: 'Customer.Create' }
-              ]}
-            />
 
-            <SidebarDropdown
-              label="eServices"
-              icon={<Briefcase size={18} />}
-              collapsed={isCollapsedResponsive}
-              permission="Customer.View"
-              links={[
-                { to: '/services', label: 'List', permission: 'Customer.View' },
-                { to: '/services/create', label: 'Create', permission: 'Customer.Create' },
-                { to: '/services/category/create', label: 'Create Category', permission: 'Customer.Create' }
-              ]}
-            />
+                <SidebarSection label="Finance" collapsed={isCollapsedResponsive} />
 
-            <SidebarSection label="Finance" collapsed={isCollapsedResponsive} />
+                <SidebarDropdown
+                  label="ePayments"
+                  icon={<DollarSign size={18} />}
+                  collapsed={isCollapsedResponsive}
+                  permission="Payments.View"
+                  links={[
+                    { to: '/payments', label: 'List', permission: 'Payments.View' },
+                    { to: '/payments/create', label: 'Create', permission: 'Payments.Create' }
+                  ]}
+                />
 
-            <SidebarDropdown
-              label="eExpenses"
-              icon={<TrendingDown size={18} />}
-              collapsed={isCollapsedResponsive}
-              permission="Expenses.View"
-              links={[
-                { to: '/expenses', label: 'List', permission: 'Expenses.View' },
-                { to: '/expenses/create', label: 'Create', permission: 'Expenses.Create' },
-                { to: '/expenses/category/create', label: 'Create Category', permission: 'Expenses.Create' }
-              ]}
-            />
-
-            <SidebarDropdown
-              label="ePayments"
-              icon={<DollarSign size={18} />}
-              collapsed={isCollapsedResponsive}
-              permission="Payments.View"
-              links={[
-                { to: '/payments', label: 'List', permission: 'Payments.View' },
-                { to: '/payments/create', label: 'Create', permission: 'Payments.Create' }
-              ]}
-            />
+                <SidebarDropdown
+                  label="eExpenses"
+                  icon={<TrendingDown size={18} />}
+                  collapsed={isCollapsedResponsive}
+                  permission="Expenses.View"
+                  links={[
+                    { to: '/expenses', label: 'List', permission: 'Expenses.View' },
+                    { to: '/expenses/create', label: 'Create', permission: 'Expenses.Create' },
+                    { to: '/expenses/category/create', label: 'Create Category', permission: 'Expenses.Create' }
+                  ]}
+                />
 
             <SidebarSection label="Administration" collapsed={isCollapsedResponsive} />
 
@@ -399,9 +412,109 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
 
         {/* Sidebar Footer */}
         <div className="p-3 border-t border-border space-y-2">
+          {/* Branch Selector (Sidebar version) */}
+          {!isCollapsedResponsive && (
+            <div className="relative w-full">
+              <button
+                onClick={() => { setShowBranchSwitcher(!showBranchSwitcher); setShowUserSwitcher(false); }}
+                className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg border border-border bg-muted/20 hover:bg-muted text-xs font-semibold text-foreground transition-all cursor-pointer ${
+                  !isAdmin ? 'opacity-75 cursor-not-allowed' : ''
+                }`}
+                disabled={!isAdmin}
+              >
+                <div className="flex items-center gap-2 truncate">
+                  <Building size={14} className="text-primary shrink-0" />
+                  <span className="truncate">{activeBranchName}</span>
+                </div>
+                {isAdmin && <ChevronsUpDown size={12} className="text-muted-foreground shrink-0" />}
+              </button>
+
+              {showBranchSwitcher && isAdmin && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowBranchSwitcher(false)} />
+                  <div className="absolute left-0 bottom-full mb-2 w-56 rounded-xl border border-border bg-card shadow-xl z-50 p-1.5">
+                    <div className="px-2 py-1 text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Branch View</div>
+                    <button
+                      onClick={() => { setActiveBranchId('all'); setShowBranchSwitcher(false); }}
+                      className="w-full text-left flex items-center justify-between px-2.5 py-1.5 text-xs rounded-lg hover:bg-accent transition-colors font-medium text-foreground cursor-pointer"
+                    >
+                      <span>All Branches</span>
+                      {activeBranchId === 'all' && <Check size={12} className="text-primary" />}
+                    </button>
+                    {availableBranches.map(b => (
+                      <button
+                        key={b.id}
+                        onClick={() => { setActiveBranchId(b.id); setShowBranchSwitcher(false); }}
+                        className="w-full text-left flex items-center justify-between px-2.5 py-1.5 text-xs rounded-lg hover:bg-accent transition-colors font-medium text-foreground cursor-pointer"
+                      >
+                        <span className="truncate">{b.name}</span>
+                        {activeBranchId === b.id && <Check size={12} className="text-primary" />}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* User Impersonator (Sidebar version) */}
+          <div className="relative w-full">
+            <button
+              onClick={() => { setShowUserSwitcher(!showUserSwitcher); setShowBranchSwitcher(false); }}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border border-border bg-muted/20 hover:bg-muted text-xs font-semibold text-foreground transition-all cursor-pointer"
+            >
+              <div className="flex items-center gap-2 truncate">
+                <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-[10px] uppercase shrink-0">
+                  {user?.name.charAt(0)}
+                </div>
+                {!isCollapsedResponsive && (
+                  <div className="text-left truncate">
+                    <div className="font-bold text-[11px] leading-none truncate">{user?.name}</div>
+                    <div className="text-[9px] text-muted-foreground leading-none mt-0.5 truncate">{currentUserRoleName}</div>
+                  </div>
+                )}
+              </div>
+              {!isCollapsedResponsive && <ChevronsUpDown size={12} className="text-muted-foreground shrink-0" />}
+            </button>
+
+            {showUserSwitcher && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowUserSwitcher(false)} />
+                <div className="absolute left-0 bottom-full mb-2 w-60 rounded-xl border border-border bg-card shadow-xl z-50 p-2">
+                  <div className="px-2 py-1 border-b border-border pb-1.5 mb-1.5">
+                    <div className="font-bold text-xs flex items-center gap-1.5 text-foreground">
+                      <Shield size={12} className="text-primary" />
+                      Impersonate Profile
+                    </div>
+                  </div>
+                  <div className="space-y-0.5 max-h-48 overflow-y-auto">
+                    {allUsersList.map(u => {
+                      const isCurrent = u.id === user?.id;
+                      return (
+                        <button
+                          key={u.id}
+                          onClick={() => handleImpersonate(u.email)}
+                          className={`w-full text-left px-2 py-1.5 rounded-lg text-[11px] hover:bg-accent transition-colors flex items-center justify-between font-medium text-foreground cursor-pointer ${
+                            isCurrent ? 'bg-accent font-bold text-primary' : ''
+                          }`}
+                        >
+                          <div className="truncate">
+                            <div className="truncate">{u.name}</div>
+                            <div className="text-[9px] text-muted-foreground truncate">{u.role?.name} • {u.branch?.name}</div>
+                          </div>
+                          {isCurrent && <Check size={10} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2 text-destructive/70 hover:text-destructive hover:bg-destructive/5 rounded-lg transition-colors group relative text-[13px]"
+            className="w-full flex items-center gap-3 px-3 py-2 text-destructive/70 hover:text-destructive hover:bg-destructive/5 rounded-lg transition-colors group relative text-[13px] font-bold cursor-pointer"
           >
             <LogOut size={18} className="group-hover:-translate-x-0.5 transition-transform" />
             {!isCollapsedResponsive && <span className="font-medium">Log Out</span>}
@@ -418,122 +531,20 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
 
       {/* ═══════ MAIN CONTENT ═══════ */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Header */}
-        <header className="h-14 border-b border-border flex items-center justify-between px-6 z-20 bg-card">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setMobileOpen(true)}
-              className="p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground rounded-lg transition-all md:hidden block"
-              title="Open Navigation"
-            >
-              <Menu size={20} />
-            </button>
-            <span className="text-muted-foreground text-sm hidden md:inline">
-              Welcome, <strong className="text-foreground font-semibold">{user?.name}</strong>
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            {/* Branch Selector */}
-            <div className="relative">
-              <button
-                onClick={() => setShowBranchSwitcher(!showBranchSwitcher)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-card text-sm hover:bg-muted transition-all ${
-                  !isAdmin ? 'opacity-75 cursor-not-allowed' : ''
-                }`}
-                disabled={!isAdmin}
-              >
-                <Building size={15} className="text-primary" />
-                <span className="font-medium text-xs max-w-[120px] truncate">{activeBranchName}</span>
-                {isAdmin && <ChevronsUpDown size={13} className="text-muted-foreground" />}
-              </button>
-
-              {showBranchSwitcher && isAdmin && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowBranchSwitcher(false)} />
-                  <div className="absolute right-0 mt-2 w-56 rounded-xl border border-border bg-card shadow-xl z-50 p-1.5">
-                    <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Branch View</div>
-                    <button
-                      onClick={() => { setActiveBranchId('all'); setShowBranchSwitcher(false); }}
-                      className="w-full text-left flex items-center justify-between px-3 py-2 text-sm rounded-lg hover:bg-accent transition-colors"
-                    >
-                      <span>All Branches</span>
-                      {activeBranchId === 'all' && <Check size={14} className="text-primary" />}
-                    </button>
-                    {availableBranches.map(b => (
-                      <button
-                        key={b.id}
-                        onClick={() => { setActiveBranchId(b.id); setShowBranchSwitcher(false); }}
-                        className="w-full text-left flex items-center justify-between px-3 py-2 text-sm rounded-lg hover:bg-accent transition-colors"
-                      >
-                        <span className="truncate">{b.name}</span>
-                        {activeBranchId === b.id && <Check size={14} className="text-primary" />}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Session Impersonator */}
-            <div className="relative">
-              <button
-                onClick={() => setShowUserSwitcher(!showUserSwitcher)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-muted text-sm transition-all"
-              >
-                <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-xs uppercase">
-                  {user?.name.charAt(0)}
-                </div>
-                <div className="text-left hidden sm:block">
-                  <div className="font-semibold text-xs leading-none">{user?.name}</div>
-                  <div className="text-[10px] text-muted-foreground leading-none mt-0.5">{currentUserRoleName}</div>
-                </div>
-                <ChevronsUpDown size={13} className="text-muted-foreground" />
-              </button>
-
-              {showUserSwitcher && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowUserSwitcher(false)} />
-                  <div className="absolute right-0 mt-2 w-64 rounded-xl border border-border bg-card shadow-xl z-50 p-2">
-                    <div className="px-2 py-1 border-b border-border pb-2 mb-2">
-                      <div className="font-semibold text-sm flex items-center gap-1.5">
-                        <Shield size={14} className="text-primary" />
-                        Role Impersonator
-                      </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Switch identities to test permissions.
-                      </p>
-                    </div>
-
-                    <div className="space-y-0.5">
-                      {allUsersList.map(u => {
-                        const isCurrent = u.id === user?.id;
-                        return (
-                          <button
-                            key={u.id}
-                            onClick={() => handleImpersonate(u.email)}
-                            className={`w-full text-left px-2.5 py-2 rounded-lg text-xs hover:bg-accent transition-colors flex items-center justify-between ${
-                              isCurrent ? 'bg-accent font-semibold text-primary' : ''
-                            }`}
-                          >
-                            <div>
-                              <div>{u.name}</div>
-                              <div className="text-[10px] text-muted-foreground">{u.role?.name} • {u.branch?.name}</div>
-                            </div>
-                            {isCurrent && <Check size={12} />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+        {/* Mobile Header (Hidden on Desktop) */}
+        <header className="h-12 border-b border-border flex items-center px-4 bg-card md:hidden shrink-0">
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground rounded-lg transition-all"
+            title="Open Navigation"
+          >
+            <Menu size={18} />
+          </button>
+          <span className="ml-3 font-bold text-xs text-foreground tracking-wide uppercase">Azizi ERP</span>
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-background">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 bg-background">
           <div className="mx-auto w-full">
             {children}
           </div>

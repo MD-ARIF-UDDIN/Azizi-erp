@@ -2,7 +2,8 @@ import { isSupabaseConfigured, supabase } from './supabase';
 import type {
   Branch, Role, Permission, RolePermission, User, Customer,
   ServiceCategory, Service, OrderStatus, Sale, SaleItem, Payment,
-  ExpenseCategory, Expense, OrderStatusHistory, AuditLog, ClientDocument
+  ExpenseCategory, Expense, OrderStatusHistory, AuditLog, ClientDocument,
+  Quotation, QuotationItem
 } from '../types/database';
 
 // A mock helper to generate UUIDs locally
@@ -27,6 +28,9 @@ const KEYS = {
   ORDER_STATUS_HISTORY: 'azizi_erp_order_status_history',
   AUDIT_LOGS: 'azizi_erp_audit_logs',
   CLIENT_DOCUMENTS: 'azizi_erp_client_documents',
+  QUOTATIONS: 'azizi_erp_quotations',
+  QUOTATION_ITEMS: 'azizi_erp_quotation_items',
+  QUOTATION_STATUS_HISTORY: 'azizi_erp_quotation_status_history',
 };
 
 // Seed Helper
@@ -210,7 +214,10 @@ const SEED_SALES_AND_FINANCIALS = (
     const discount = i % 5 === 0 ? 20.00 : 0.00;
     const grand_total = Math.max(0, subtotal - discount);
 
-    const invoice_no = `INV-${saleDate.getFullYear()}${(saleDate.getMonth() + 1).toString().padStart(2, '0')}${saleDate.getDate().toString().padStart(2, '0')}-${(100 + i)}`;
+    const branchPrefix = b.name.replace(/\s+/g, '').substring(0, 3).toUpperCase();
+    const dateStr = saleDate.getFullYear().toString() + (saleDate.getMonth() + 1).toString().padStart(2, '0') + saleDate.getDate().toString().padStart(2, '0');
+    const serialStr = (i + 1).toString().padStart(4, '0');
+    const invoice_no = `INV-${branchPrefix}-${dateStr}-${serialStr}`;
 
     let order_status = statuses.find(s => s.name === 'Completed')!;
     let pay_status: 'Paid' | 'Partially Paid' | 'Unpaid' = 'Paid';
@@ -398,6 +405,9 @@ const SEED_CLIENT_DOCUMENTS = (customers: Customer[]) => {
 };
 
 let _clientDocuments: ClientDocument[] = getOrSeed(KEYS.CLIENT_DOCUMENTS, () => SEED_CLIENT_DOCUMENTS(_customers));
+let _quotations: Quotation[] = getOrSeed(KEYS.QUOTATIONS, () => []);
+let _quotationItems: QuotationItem[] = getOrSeed(KEYS.QUOTATION_ITEMS, () => []);
+let _quotationHistory: QuotationStatusHistory[] = getOrSeed(KEYS.QUOTATION_STATUS_HISTORY, () => []);
 
 const saveAll = () => {
   saveToLocalStorage(KEYS.BRANCHES, _branches);
@@ -417,6 +427,9 @@ const saveAll = () => {
   saveToLocalStorage(KEYS.ORDER_STATUS_HISTORY, _history);
   saveToLocalStorage(KEYS.AUDIT_LOGS, _logs);
   saveToLocalStorage(KEYS.CLIENT_DOCUMENTS, _clientDocuments);
+  saveToLocalStorage(KEYS.QUOTATIONS, _quotations);
+  saveToLocalStorage(KEYS.QUOTATION_ITEMS, _quotationItems);
+  saveToLocalStorage(KEYS.QUOTATION_STATUS_HISTORY, _quotationHistory);
 };
 
 const logAudit = (userId: string | undefined, action: string, tableName: string, recordId: string, oldData?: any, newData?: any) => {
@@ -1148,6 +1161,7 @@ export const db = {
       person_name?: string;
       person_phone?: string;
       person_email?: string;
+      quotation_id?: string;
     }) => {
       const subtotal = data.items.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
       const grand_total = Math.max(0, subtotal - data.discount);
@@ -1161,7 +1175,12 @@ export const db = {
 
         const { count } = await supabase.from('sales').select('*', { count: 'exact', head: true });
         const invoiceSeq = (count || 0) + 1;
-        const invoice_no = `INV-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}-${invoiceSeq.toString().padStart(4, '0')}`;
+        const { data: branchData } = await supabase.from('branches').select('name').eq('id', data.branch_id).single();
+        const branchName = branchData?.name || 'Branch';
+        const branchPrefix = branchName.replace(/\s+/g, '').substring(0, 3).toUpperCase();
+        const dateStr = now.getFullYear().toString() + (now.getMonth() + 1).toString().padStart(2, '0') + now.getDate().toString().padStart(2, '0');
+        const serialStr = invoiceSeq.toString().padStart(4, '0');
+        const invoice_no = `INV-${branchPrefix}-${dateStr}-${serialStr}`;
 
         const paidAmount = data.initialPayment ? data.initialPayment.amount : 0;
         let payment_status: Sale['payment_status'] = 'Unpaid';
@@ -1185,7 +1204,8 @@ export const db = {
           updated_by: activeUser.id,
           person_name: data.person_name,
           person_phone: data.person_phone,
-          person_email: data.person_email
+          person_email: data.person_email,
+          quotation_id: data.quotation_id
         }]).select().single();
 
         if (saleErr) throw saleErr;
@@ -1221,11 +1241,30 @@ export const db = {
           remarks: 'Order Invoice Created'
         }]);
 
+        if (data.quotation_id) {
+          await supabase.from('quotations').update({
+            status: 'Converted',
+            converted_sale_id: saleId
+          }).eq('id', data.quotation_id);
+
+          await supabase.from('quotation_status_history').insert([{
+            quotation_id: data.quotation_id,
+            status: 'Converted',
+            remarks: `Converted to Sale Invoice #${invoice_no}`,
+            changed_by: activeUser.id
+          }]);
+        }
+
         return createdSale as Sale;
       }
 
       const invoiceSeq = _sales.length + 1;
-      const invoice_no = `INV-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}-${invoiceSeq.toString().padStart(4, '0')}`;
+      const branch = _branches.find(b => b.id === data.branch_id);
+      const branchName = branch ? branch.name : 'Branch';
+      const branchPrefix = branchName.replace(/\s+/g, '').substring(0, 3).toUpperCase();
+      const dateStr = now.getFullYear().toString() + (now.getMonth() + 1).toString().padStart(2, '0') + now.getDate().toString().padStart(2, '0');
+      const serialStr = invoiceSeq.toString().padStart(4, '0');
+      const invoice_no = `INV-${branchPrefix}-${dateStr}-${serialStr}`;
       const pendingStatus = _statuses.find(os => os.name === 'Pending') || _statuses[0];
       const saleId = generateUUID();
 
@@ -1264,11 +1303,34 @@ export const db = {
         updated_by: activeUser.id,
         person_name: data.person_name,
         person_phone: data.person_phone,
-        person_email: data.person_email
+        person_email: data.person_email,
+        quotation_id: data.quotation_id
       };
 
       _sales.push(newSale);
       _saleItems.push(...createdItems);
+
+      if (data.quotation_id) {
+        const qIndex = _quotations.findIndex(x => x.id === data.quotation_id);
+        if (qIndex !== -1) {
+          _quotations[qIndex] = {
+            ..._quotations[qIndex],
+            status: 'Converted',
+            converted_sale_id: saleId,
+            updated_at: now.toISOString()
+          };
+
+          const hist: QuotationStatusHistory = {
+            id: generateUUID(),
+            quotation_id: data.quotation_id,
+            status: 'Converted',
+            remarks: `Converted to Sale Invoice #${invoice_no}`,
+            changed_at: now.toISOString(),
+            changed_by: activeUser.id
+          };
+          _quotationHistory.unshift(hist);
+        }
+      }
 
       if (data.initialPayment && data.initialPayment.amount > 0) {
         const newPay: Payment = {
@@ -1367,6 +1429,93 @@ export const db = {
       _sales[index] = updated;
       saveAll();
       logAudit(getActiveUserSession().id, 'DELETE_SOFT_SALE', 'sales', id, old, updated);
+      return delay(true);
+    },
+    addItem: async (saleId: string, item: { service_id: string; quantity: number; unit_price: number }) => {
+      const activeUser = getActiveUserSession();
+      const now = new Date();
+      const subtotal = item.unit_price * item.quantity;
+
+      if (isSupabaseConfigured && supabase) {
+        const { error: itemErr } = await supabase.from('sale_items').insert([{
+          sale_id: saleId,
+          service_id: item.service_id,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          subtotal
+        }]);
+        if (itemErr) throw itemErr;
+
+        const { data: allItems } = await supabase.from('sale_items').select('subtotal').eq('sale_id', saleId);
+        const newSubtotal = (allItems || []).reduce((s: number, i: any) => s + i.subtotal, 0);
+        const { data: saleRow } = await supabase.from('sales').select('discount').eq('id', saleId).single();
+        const newGrandTotal = Math.max(0, newSubtotal - (saleRow?.discount || 0));
+
+        const { data: updated, error: upErr } = await supabase.from('sales').update({
+          subtotal: newSubtotal,
+          grand_total: newGrandTotal,
+          updated_by: activeUser.id
+        }).eq('id', saleId).select().single();
+        if (upErr) throw upErr;
+        return updated as Sale;
+      }
+
+      const saleIndex = _sales.findIndex(s => s.id === saleId);
+      if (saleIndex === -1) throw new Error('Sale not found');
+      const newItem: SaleItem = {
+        id: generateUUID(),
+        sale_id: saleId,
+        service_id: item.service_id,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        subtotal,
+        created_at: now.toISOString(),
+        updated_at: now.toISOString()
+      };
+      _saleItems.push(newItem);
+      const allItems = _saleItems.filter(si => si.sale_id === saleId);
+      const newSubtotal = allItems.reduce((s, i) => s + i.subtotal, 0);
+      const oldSale = _sales[saleIndex];
+      const newGrandTotal = Math.max(0, newSubtotal - oldSale.discount);
+      const updated = { ...oldSale, subtotal: newSubtotal, grand_total: newGrandTotal, updated_at: now.toISOString() };
+      _sales[saleIndex] = updated;
+      saveAll();
+      logAudit(activeUser.id, 'ADD_SALE_ITEM', 'sale_items', newItem.id, null, newItem);
+      return delay(updated as Sale);
+    },
+    removeItem: async (saleId: string, saleItemId: string) => {
+      const activeUser = getActiveUserSession();
+      const now = new Date();
+
+      if (isSupabaseConfigured && supabase) {
+        const { error: delErr } = await supabase.from('sale_items').delete().eq('id', saleItemId);
+        if (delErr) throw delErr;
+        const { data: allItems } = await supabase.from('sale_items').select('subtotal').eq('sale_id', saleId);
+        const newSubtotal = (allItems || []).reduce((s: number, i: any) => s + i.subtotal, 0);
+        const { data: saleRow } = await supabase.from('sales').select('discount').eq('id', saleId).single();
+        const newGrandTotal = Math.max(0, newSubtotal - (saleRow?.discount || 0));
+        const { data: updated, error: upErr } = await supabase.from('sales').update({
+          subtotal: newSubtotal, grand_total: newGrandTotal, updated_by: activeUser.id
+        }).eq('id', saleId).select().single();
+        if (upErr) throw upErr;
+        return updated as Sale;
+      }
+
+      const idx = _saleItems.findIndex(si => si.id === saleItemId);
+      if (idx !== -1) {
+        const old = _saleItems[idx];
+        _saleItems.splice(idx, 1);
+        const saleIndex = _sales.findIndex(s => s.id === saleId);
+        if (saleIndex !== -1) {
+          const allItems = _saleItems.filter(si => si.sale_id === saleId);
+          const newSubtotal = allItems.reduce((s, i) => s + i.subtotal, 0);
+          const oldSale = _sales[saleIndex];
+          const newGrandTotal = Math.max(0, newSubtotal - oldSale.discount);
+          _sales[saleIndex] = { ...oldSale, subtotal: newSubtotal, grand_total: newGrandTotal, updated_at: now.toISOString() };
+          logAudit(activeUser.id, 'REMOVE_SALE_ITEM', 'sale_items', saleItemId, old, null);
+        }
+        saveAll();
+      }
       return delay(true);
     }
   },
@@ -1679,6 +1828,369 @@ export const db = {
       saveAll();
       logAudit(getActiveUserSession().id, 'DELETE', 'client_documents', id, old, null);
       return delay(true);
+    }
+  },
+
+  quotations: {
+    getAll: async (branchId?: string) => {
+      if (isSupabaseConfigured && supabase) {
+        let query = supabase.from('quotations').select('*, customer:customers(*), branch:branches(*), employee:users!employee_id(*), converted_sale:sales!quotations_converted_sale_id_fkey(*)').eq('is_deleted', false);
+        if (branchId) {
+          query = query.eq('branch_id', branchId);
+        }
+        const { data, error } = await query;
+        if (error) throw error;
+
+        const resolvedQuotations = [];
+        for (const q of (data || [])) {
+          const { data: items } = await supabase.from('quotation_items').select('*, service:services(*)').eq('quotation_id', q.id);
+          resolvedQuotations.push({
+            ...q,
+            items: items || []
+          });
+        }
+        return resolvedQuotations;
+      }
+
+      let list = _quotations.filter(q => !q.is_deleted);
+      if (branchId) {
+        list = list.filter(q => q.branch_id === branchId);
+      }
+      return delay(list.map(q => ({
+        ...q,
+        customer: _customers.find(c => c.id === q.customer_id),
+        branch: _branches.find(b => b.id === q.branch_id),
+        employee: _users.find(u => u.id === q.employee_id),
+        converted_sale: _sales.find(s => s.id === q.converted_sale_id),
+        items: _quotationItems.filter((qi: QuotationItem) => qi.quotation_id === q.id).map((qi: QuotationItem) => ({
+          ...qi,
+          service: _services.find(srv => srv.id === qi.service_id)
+        }))
+      })));
+    },
+    getById: async (id: string) => {
+      if (isSupabaseConfigured && supabase) {
+        const { data: q, error: qErr } = await supabase.from('quotations').select('*, customer:customers(*), branch:branches(*), employee:users!employee_id(*), converted_sale:sales!quotations_converted_sale_id_fkey(*)').eq('id', id).eq('is_deleted', false).single();
+        if (qErr) throw qErr;
+
+        const { data: items } = await supabase.from('quotation_items').select('*, service:services(*)').eq('quotation_id', id);
+
+        return {
+          ...q,
+          items: items || []
+        };
+      }
+
+      const q = _quotations.find(x => x.id === id && !x.is_deleted);
+      if (!q) return delay(undefined);
+
+      const items = _quotationItems.filter((qi: QuotationItem) => qi.quotation_id === q.id).map((qi: QuotationItem) => ({
+        ...qi,
+        service: _services.find(srv => srv.id === qi.service_id)
+      }));
+
+      return delay({
+        ...q,
+        customer: _customers.find(c => c.id === q.customer_id),
+        branch: _branches.find(b => b.id === q.branch_id),
+        employee: _users.find(u => u.id === q.employee_id),
+        converted_sale: _sales.find(s => s.id === q.converted_sale_id),
+        items
+      });
+    },
+    create: async (data: {
+      customer_id?: string;
+      branch_id: string;
+      discount: number;
+      status?: Quotation['status'];
+      valid_until?: string;
+      notes?: string;
+      items: Array<{ service_id: string; quantity: number; unit_price: number }>;
+      person_name?: string;
+      person_phone?: string;
+      person_email?: string;
+    }) => {
+      const subtotal = data.items.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
+      const grand_total = Math.max(0, subtotal - data.discount);
+      const activeUser = getActiveUserSession();
+      const now = new Date();
+
+      if (isSupabaseConfigured && supabase) {
+        const { count } = await supabase.from('quotations').select('*', { count: 'exact', head: true });
+        const quoteSeq = (count || 0) + 1;
+        const { data: branchData } = await supabase.from('branches').select('name').eq('id', data.branch_id).single();
+        const branchName = branchData?.name || 'Branch';
+        const branchPrefix = branchName.replace(/\s+/g, '').substring(0, 3).toUpperCase();
+        const dateStr = now.getFullYear().toString() + (now.getMonth() + 1).toString().padStart(2, '0') + now.getDate().toString().padStart(2, '0');
+        const serialStr = quoteSeq.toString().padStart(4, '0');
+        const quotation_no = `QT-${branchPrefix}-${dateStr}-${serialStr}`;
+
+        const quoteId = generateUUID();
+        const { data: createdQuote, error: qErr } = await supabase.from('quotations').insert([{
+          id: quoteId,
+          quotation_no,
+          customer_id: data.customer_id,
+          branch_id: data.branch_id,
+          employee_id: activeUser.id,
+          discount: data.discount,
+          subtotal,
+          grand_total,
+          status: data.status || 'Draft',
+          valid_until: data.valid_until,
+          notes: data.notes,
+          created_by: activeUser.id,
+          updated_by: activeUser.id,
+          person_name: data.person_name,
+          person_phone: data.person_phone,
+          person_email: data.person_email
+        }]).select().single();
+
+        if (qErr) throw qErr;
+
+        const itemsPayload = data.items.map(item => ({
+          quotation_id: createdQuote.id,
+          service_id: item.service_id,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          subtotal: item.unit_price * item.quantity
+        }));
+        const { error: itemsErr } = await supabase.from('quotation_items').insert(itemsPayload);
+        if (itemsErr) throw itemsErr;
+
+        await supabase.from('quotation_status_history').insert([{
+          quotation_id: createdQuote.id,
+          status: data.status || 'Draft',
+          remarks: 'Quotation Created',
+          changed_by: activeUser.id
+        }]);
+
+        return createdQuote as Quotation;
+      }
+
+      const quoteSeq = _quotations.length + 1;
+      const branch = _branches.find(b => b.id === data.branch_id);
+      const branchName = branch ? branch.name : 'Branch';
+      const branchPrefix = branchName.replace(/\s+/g, '').substring(0, 3).toUpperCase();
+      const dateStr = now.getFullYear().toString() + (now.getMonth() + 1).toString().padStart(2, '0') + now.getDate().toString().padStart(2, '0');
+      const serialStr = quoteSeq.toString().padStart(4, '0');
+      const quotation_no = `QT-${branchPrefix}-${dateStr}-${serialStr}`;
+      const quoteId = generateUUID();
+
+      const createdItems: QuotationItem[] = data.items.map(item => ({
+        id: generateUUID(),
+        quotation_id: quoteId,
+        service_id: item.service_id,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        subtotal: item.unit_price * item.quantity,
+        created_at: now.toISOString(),
+        updated_at: now.toISOString()
+      }));
+
+      const newQuote: Quotation = {
+        id: quoteId,
+        quotation_no,
+        customer_id: data.customer_id,
+        branch_id: data.branch_id,
+        employee_id: activeUser.id,
+        discount: data.discount,
+        subtotal,
+        grand_total,
+        status: data.status || 'Draft',
+        valid_until: data.valid_until,
+        notes: data.notes,
+        person_name: data.person_name,
+        person_phone: data.person_phone,
+        person_email: data.person_email,
+        is_deleted: false,
+        created_at: now.toISOString(),
+        updated_at: now.toISOString(),
+        created_by: activeUser.id,
+        updated_by: activeUser.id
+      };
+
+      _quotations.push(newQuote);
+      _quotationItems.push(...createdItems);
+
+      const hist: QuotationStatusHistory = {
+        id: generateUUID(),
+        quotation_id: quoteId,
+        status: data.status || 'Draft',
+        remarks: 'Quotation Created',
+        changed_at: now.toISOString(),
+        changed_by: activeUser.id
+      };
+      _quotationHistory.unshift(hist);
+
+      saveAll();
+      logAudit(activeUser.id, 'INSERT', 'quotations', quoteId, null, newQuote);
+      return delay(newQuote);
+    },
+    update: async (id: string, data: Partial<Omit<Quotation, 'id' | 'created_at' | 'updated_at'>>) => {
+      if (isSupabaseConfigured && supabase) {
+        const { data: updated, error } = await supabase.from('quotations').update(data).eq('id', id).select().single();
+        if (error) throw error;
+        return updated as Quotation;
+      }
+
+      const index = _quotations.findIndex(q => q.id === id);
+      if (index === -1) throw new Error('Quotation not found');
+      const old = _quotations[index];
+      const updated = { ...old, ...data, updated_at: new Date().toISOString() };
+      _quotations[index] = updated;
+      saveAll();
+      logAudit(getActiveUserSession().id, 'UPDATE', 'quotations', id, old, updated);
+      return delay(updated);
+    },
+    updateStatus: async (id: string, status: Quotation['status'], remarks?: string) => {
+      const activeUser = getActiveUserSession();
+      if (isSupabaseConfigured && supabase) {
+        const { data: updated, error } = await supabase.from('quotations').update({ status }).eq('id', id).select().single();
+        if (error) throw error;
+
+        const { error: histError } = await supabase.from('quotation_status_history').insert([{
+          quotation_id: id,
+          status,
+          remarks,
+          changed_by: activeUser.id
+        }]);
+        if (histError) throw histError;
+
+        return updated as Quotation;
+      }
+
+      const index = _quotations.findIndex(q => q.id === id);
+      if (index === -1) throw new Error('Quotation not found');
+      const old = _quotations[index];
+      const updated = { ...old, status, updated_at: new Date().toISOString() };
+      _quotations[index] = updated;
+
+      const hist: QuotationStatusHistory = {
+        id: generateUUID(),
+        quotation_id: id,
+        status,
+        remarks,
+        changed_at: new Date().toISOString(),
+        changed_by: activeUser.id
+      };
+      _quotationHistory.unshift(hist);
+
+      saveAll();
+      logAudit(activeUser.id, 'UPDATE_STATUS', 'quotations', id, old, updated);
+      return delay(updated);
+    },
+    getStatusHistory: async (quotationId: string) => {
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase
+          .from('quotation_status_history')
+          .select('*, changed_by_user:users(name)')
+          .eq('quotation_id', quotationId)
+          .order('changed_at', { ascending: false });
+        if (error) throw error;
+        return data.map(item => ({
+          ...item,
+          changed_by_name: item.changed_by_user?.name || 'System'
+        }));
+      }
+
+      const list = _quotationHistory.filter(h => h.quotation_id === quotationId);
+      return list.map(h => {
+        const u = _users.find(x => x.id === h.changed_by);
+        return {
+          ...h,
+          changed_by_name: u ? u.name : 'System'
+        };
+      }).sort((a,b) => new Date(b.changed_at).getTime() - new Date(a.changed_at).getTime());
+    },
+    delete: async (id: string) => {
+      if (isSupabaseConfigured && supabase) {
+        const { error } = await supabase.from('quotations').update({ is_deleted: true }).eq('id', id);
+        if (error) throw error;
+        return true;
+      }
+
+      const index = _quotations.findIndex(q => q.id === id);
+      if (index === -1) throw new Error('Quotation not found');
+      const old = _quotations[index];
+      const updated = { ...old, is_deleted: true, updated_at: new Date().toISOString() };
+      _quotations[index] = updated;
+      saveAll();
+      logAudit(getActiveUserSession().id, 'DELETE_SOFT', 'quotations', id, old, updated);
+      return delay(true);
+    },
+    convertToSale: async (id: string) => {
+      const activeUser = getActiveUserSession();
+      let quotation: any;
+      if (isSupabaseConfigured && supabase) {
+        const { data: q, error: qErr } = await supabase.from('quotations').select('*').eq('id', id).single();
+        if (qErr) throw qErr;
+        const { data: items } = await supabase.from('quotation_items').select('*').eq('quotation_id', id);
+        quotation = { ...q, items: items || [] };
+      } else {
+        const q = _quotations.find(x => x.id === id && !x.is_deleted);
+        if (!q) throw new Error('Quotation not found');
+        const items = _quotationItems.filter(qi => qi.quotation_id === id);
+        quotation = { ...q, items };
+      }
+
+      if (quotation.status === 'Converted') {
+        throw new Error('Quotation has already been converted to a sale.');
+      }
+
+      const createdSale = await db.sales.create({
+        customer_id: quotation.customer_id || undefined,
+        branch_id: quotation.branch_id,
+        discount: quotation.discount,
+        notes: quotation.notes ? `Converted from Quotation #${quotation.quotation_no}. ${quotation.notes}` : `Converted from Quotation #${quotation.quotation_no}.`,
+        items: quotation.items.map((item: any) => ({
+          service_id: item.service_id,
+          quantity: item.quantity,
+          unit_price: item.unit_price
+        })),
+        person_name: quotation.person_name,
+        person_phone: quotation.person_phone,
+        person_email: quotation.person_email,
+        quotation_id: id
+      });
+
+      if (isSupabaseConfigured && supabase) {
+        const { error: updErr } = await supabase.from('quotations').update({
+          status: 'Converted',
+          converted_sale_id: createdSale.id
+        }).eq('id', id);
+        if (updErr) throw updErr;
+
+        await supabase.from('quotation_status_history').insert([{
+          quotation_id: id,
+          status: 'Converted',
+          remarks: `Converted to Sale Invoice #${createdSale.invoice_no}`,
+          changed_by: activeUser.id
+        }]);
+      } else {
+        const qIndex = _quotations.findIndex(x => x.id === id);
+        if (qIndex !== -1) {
+          _quotations[qIndex] = {
+            ..._quotations[qIndex],
+            status: 'Converted',
+            converted_sale_id: createdSale.id,
+            updated_at: new Date().toISOString()
+          };
+          
+          const hist: QuotationStatusHistory = {
+            id: generateUUID(),
+            quotation_id: id,
+            status: 'Converted',
+            remarks: `Converted to Sale Invoice #${createdSale.invoice_no}`,
+            changed_at: new Date().toISOString(),
+            changed_by: activeUser.id
+          };
+          _quotationHistory.unshift(hist);
+          
+          saveAll();
+        }
+      }
+
+      return createdSale;
     }
   }
 };

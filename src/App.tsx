@@ -21,6 +21,8 @@ import { RbacList } from './features/rbac/RbacList';
 import { ReportsCenter } from './features/reports/ReportsCenter';
 import { SettingsPanel } from './features/settings/SettingsPanel';
 import { ExpiryTracker } from './features/documents/ExpiryTracker';
+import { QuotationsList } from './features/quotations/QuotationsList';
+import { CreateQuotation } from './features/quotations/CreateQuotation';
 
 // Initialize Query Client
 const queryClient = new QueryClient({
@@ -92,6 +94,22 @@ function App() {
               element={
                 <AuthenticatedRoute>
                   <CreateSale />
+                </AuthenticatedRoute>
+              }
+            />
+            <Route
+              path="/quotations"
+              element={
+                <AuthenticatedRoute>
+                  <QuotationsList />
+                </AuthenticatedRoute>
+              }
+            />
+            <Route
+              path="/quotations/create"
+              element={
+                <AuthenticatedRoute>
+                  <CreateQuotation />
                 </AuthenticatedRoute>
               }
             />

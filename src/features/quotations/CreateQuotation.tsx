@@ -10,10 +10,10 @@ import {
   Minus,
   Trash2,
   User,
-  Building,
   FileText,
   Percent,
-  ChevronLeft
+  ChevronLeft,
+  Calendar
 } from 'lucide-react';
 
 interface CartItem {
@@ -23,8 +23,8 @@ interface CartItem {
   assigned_customer_id?: string;
 }
 
-export const CreateSale: React.FC = () => {
-  const { user, isAdmin, availableBranches } = useAuth();
+export const CreateQuotation: React.FC = () => {
+  const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
 
   // Master Data
@@ -41,14 +41,10 @@ export const CreateSale: React.FC = () => {
   const [branchId, setBranchId] = useState('');
   const [discount, setDiscount] = useState(0);
   const [notes, setNotes] = useState('');
-  
+  const [validUntil, setValidUntil] = useState('');
+
   // Cart
   const [cart, setCart] = useState<CartItem[]>([]);
-
-  // Initial Payment Toggle
-  const [hasInitialPayment, setHasInitialPayment] = useState(false);
-  const [paymentAmount, setPaymentAmount] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'Mobile Banking' | 'Bank Transfer'>('Cash');
 
   const [errorMsg, setErrorMsg] = useState('');
   const [saving, setSaving] = useState(false);
@@ -59,33 +55,9 @@ export const CreateSale: React.FC = () => {
     ? selectedCustomerRecord.members
     : [];
 
-  const [availableQuotes, setAvailableQuotes] = useState<any[]>([]);
-  const [importedQuoteId, setImportedQuoteId] = useState<string>('');
-
   useEffect(() => {
     setCart([]);
-    setImportedQuoteId('');
   }, [customerId, customerType]);
-
-  useEffect(() => {
-    const fetchQuotesForCustomer = async () => {
-      if (!customerId) {
-        setAvailableQuotes([]);
-        return;
-      }
-      try {
-        const qData = await db.quotations.getAll();
-        const filtered = qData.filter(q => 
-          q.status !== 'Converted' && 
-          q.customer_id === customerId
-        );
-        setAvailableQuotes(filtered);
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    fetchQuotesForCustomer();
-  }, [customerId]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -94,19 +66,21 @@ export const CreateSale: React.FC = () => {
         const sData = await db.services.getAll();
         
         setCustomers(cData);
-        // Only allow selling active services
         setServices(sData.filter(s => s.status === 'Active'));
 
-        // Default branch
         if (user) {
           setBranchId(user.branch_id);
         }
 
-        // Auto-select walk-in customer if exists
         const walkin = cData.find(c => c.name.toLowerCase().includes('walk-in'));
         if (walkin) {
           setCustomerId(walkin.id);
         }
+
+        // Set default valid until date to 30 days from now
+        const defaultDate = new Date();
+        defaultDate.setDate(defaultDate.getDate() + 30);
+        setValidUntil(defaultDate.toISOString().split('T')[0]);
       } catch (err) {
         console.error(err);
       }
@@ -114,7 +88,6 @@ export const CreateSale: React.FC = () => {
     loadData();
   }, [user]);
 
-  // Add a service directly from card click
   const addServiceToCart = (service: Service) => {
     const defaultAssignedId = customerId;
     const existingIndex = cart.findIndex(item => item.service.id === service.id && item.assigned_customer_id === defaultAssignedId);
@@ -130,41 +103,6 @@ export const CreateSale: React.FC = () => {
         unit_price: service.price, 
         assigned_customer_id: defaultAssignedId || undefined 
       }]);
-    }
-  };
-
-  const handleImportQuotation = async (qId: string) => {
-    if (!qId) {
-      setImportedQuoteId('');
-      setCart([]);
-      setDiscount(0);
-      return;
-    }
-    try {
-      const quote = await db.quotations.getById(qId);
-      if (!quote) return;
-
-      // Autofill discount, notes, and cart items!
-      setDiscount(quote.discount);
-      setNotes(quote.notes ? `Imported from Quotation #${quote.quotation_no}. ${quote.notes}` : `Imported from Quotation #${quote.quotation_no}.`);
-      
-      const loadedServices = await db.services.getAll();
-      const quoteItems = quote.items || [];
-      
-      const newCart = quoteItems.map((qi: any) => {
-        const srv = loadedServices.find(s => s.id === qi.service_id);
-        return {
-          service: srv || { id: qi.service_id, name: 'Service', price: qi.unit_price } as any,
-          quantity: qi.quantity,
-          unit_price: qi.unit_price,
-          assigned_customer_id: customerId || undefined
-        };
-      });
-
-      setCart(newCart);
-      setImportedQuoteId(qId);
-    } catch (err) {
-      console.error(err);
     }
   };
 
@@ -190,15 +128,7 @@ export const CreateSale: React.FC = () => {
   const subtotal = cart.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
   const grandTotal = Math.max(0, subtotal - discount);
 
-  // Sync initial payment when total changes
-  useEffect(() => {
-    if (hasInitialPayment && paymentAmount === 0) {
-      setPaymentAmount(grandTotal);
-    }
-  }, [grandTotal, hasInitialPayment]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async (status: 'Draft' | 'Sent') => {
     if (!branchId) {
       setErrorMsg('Please select a branch.');
       return;
@@ -209,10 +139,6 @@ export const CreateSale: React.FC = () => {
     }
     if (discount < 0 || discount > subtotal) {
       setErrorMsg('Invalid discount amount.');
-      return;
-    }
-    if (hasInitialPayment && (paymentAmount <= 0 || paymentAmount > grandTotal)) {
-      setErrorMsg('Initial payment must be greater than zero and cannot exceed grand total.');
       return;
     }
 
@@ -267,56 +193,37 @@ export const CreateSale: React.FC = () => {
         }
       });
 
-      // Distribute initial payment sequentially
-      let remainingPayment = hasInitialPayment ? paymentAmount : 0;
-      const groupPayments: Record<string, number> = {};
-
-      groupKeys.forEach((key) => {
-        const groupSub = groups[key].reduce((s, i) => s + i.unit_price * i.quantity, 0);
-        const groupDisc = groupDiscounts[key];
-        const groupTotal = Math.max(0, groupSub - groupDisc);
-
-        const payForGroup = Math.min(remainingPayment, groupTotal);
-        groupPayments[key] = payForGroup;
-        remainingPayment -= payForGroup;
-      });
-
-      // Save sales
-      const createdSaleIds: string[] = [];
+      const createdQuotationIds: string[] = [];
       for (const key of groupKeys) {
         const groupItems = groups[key];
         const groupDisc = groupDiscounts[key];
-        const payAmount = groupPayments[key] || 0;
         
         const memberObj = key !== finalCustomerId 
           ? companyEmployees.find(emp => emp.id === key) 
           : undefined;
 
-        const createdSale = await db.sales.create({
+        const createdQuote = await db.quotations.create({
           customer_id: finalCustomerId || undefined,
           branch_id: branchId,
           discount: groupDisc,
+          status,
+          valid_until: validUntil || undefined,
           notes: notes ? `${notes}` : undefined,
           items: groupItems.map(item => ({
             service_id: item.service.id,
             quantity: item.quantity,
             unit_price: item.unit_price
           })),
-          initialPayment: payAmount > 0 ? {
-            amount: payAmount,
-            payment_method: paymentMethod
-          } : undefined,
           person_name: memberObj?.name,
           person_phone: memberObj?.phone,
-          person_email: memberObj?.email,
-          quotation_id: importedQuoteId || undefined
+          person_email: memberObj?.email
         });
-        createdSaleIds.push(createdSale.id);
+        createdQuotationIds.push(createdQuote.id);
       }
 
-      navigate(`/sales?print=${createdSaleIds.join(',')}`);
+      navigate(`/quotations?highlight=${createdQuotationIds.join(',')}`);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to record sales invoice.');
+      setErrorMsg(err.message || 'Failed to record quotation.');
     } finally {
       setSaving(false);
     }
@@ -329,13 +236,13 @@ export const CreateSale: React.FC = () => {
         {/* TOP BAR */}
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/sales')}
+            onClick={() => navigate('/quotations')}
             className="p-2 border border-border bg-muted/30 hover:bg-secondary rounded-lg text-muted-foreground hover:text-foreground transition-colors"
           >
             <ChevronLeft size={16} />
           </button>
           <div>
-            <div className="text-xs font-bold text-primary uppercase tracking-wider mb-0.5">eSales</div>
+            <div className="text-xs font-bold text-primary uppercase tracking-wider mb-0.5">eQuotations</div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground m-0">Create</h1>
           </div>
         </div>
@@ -346,7 +253,7 @@ export const CreateSale: React.FC = () => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           {/* LEFT SECTION: CART & SERVICE SELECTION (2 cols) */}
           <div className="lg:col-span-2 space-y-4">
@@ -354,14 +261,14 @@ export const CreateSale: React.FC = () => {
               
               <div className="flex items-center gap-2 border-b border-border pb-3">
                 <ShoppingCart className="text-primary" size={20} />
-                <h2 className="font-bold text-foreground text-lg m-0">Bill Items Catalog</h2>
+                <h2 className="font-bold text-foreground text-lg m-0">Quotation Items Catalog</h2>
               </div>
 
-              {/* Service Cards Grid — tap to add */}
+              {/* Service Cards Grid */}
               {services.length > 0 ? (
                 <div>
                   <p className="text-xs text-muted-foreground mb-3 font-medium">
-                    Tap a service card to add it to the bill:
+                    Tap a service card to add it to the quotation:
                   </p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                     {services.map(service => {
@@ -381,22 +288,19 @@ export const CreateSale: React.FC = () => {
                             }
                           `}
                         >
-                          {/* Quantity badge when in cart */}
                           {inCart && (
                             <span className="absolute top-1.5 right-1.5 bg-primary text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 leading-none">
                               {cartItem.quantity}
                             </span>
                           )}
 
-                          <div className={`text-[11px] font-bold leading-snug mb-1 ${inCart ? 'text-primary' : 'text-foreground group-hover:text-primary'} transition-colors`}
-                               style={inCart ? undefined : { paddingRight: '0' }}>
+                          <div className={`text-[11px] font-bold leading-snug mb-1 ${inCart ? 'text-primary' : 'text-foreground group-hover:text-primary'} transition-colors`}>
                             {service.name}
                           </div>
                           <div className={`text-[11px] font-semibold ${inCart ? 'text-primary/80' : 'text-muted-foreground'}`}>
                             {service.price.toFixed(2)} AED
                           </div>
 
-                          {/* Hover plus icon */}
                           {!inCart && (
                             <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                               <Plus size={11} className="text-primary" />
@@ -430,7 +334,7 @@ export const CreateSale: React.FC = () => {
                     {cart.length === 0 ? (
                       <tr>
                         <td colSpan={isCompanySelected ? 6 : 5} className="px-4 py-10 text-center text-muted-foreground italic">
-                          Shopping cart is empty. Tap a service card above to begin billing.
+                          Shopping cart is empty. Tap a service card above to add items.
                         </td>
                       </tr>
                     ) : (
@@ -463,43 +367,48 @@ export const CreateSale: React.FC = () => {
                             </td>
                           )}
                           <td className="px-4 py-3">
-                            <div className="flex items-center justify-center gap-2">
+                            <div className="flex items-center justify-center gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => updateQuantity(index, -1)}
-                                className="h-6 w-6 rounded border border-border bg-muted/30 flex items-center justify-center hover:bg-secondary transition-colors"
+                                className="p-1 border border-border hover:bg-secondary rounded text-muted-foreground hover:text-foreground cursor-pointer"
                               >
-                                <Minus size={12} />
+                                <Minus size={10} />
                               </button>
-                              <span className="font-semibold text-sm w-6 text-center text-foreground">{item.quantity}</span>
+                              <span className="font-bold text-xs w-6 text-center text-foreground">{item.quantity}</span>
                               <button
                                 type="button"
                                 onClick={() => updateQuantity(index, 1)}
-                                className="h-6 w-6 rounded border border-border bg-muted/30 flex items-center justify-center hover:bg-secondary transition-colors"
+                                className="p-1 border border-border hover:bg-secondary rounded text-muted-foreground hover:text-foreground cursor-pointer"
                               >
-                                <Plus size={12} />
+                                <Plus size={10} />
                               </button>
                             </div>
                           </td>
                           <td className="px-4 py-3">
                             <input
                               type="number"
-                              min={0}
+                              min="0"
+                              step="0.01"
                               value={item.unit_price}
                               onChange={(e) => updatePriceOverride(index, parseFloat(e.target.value) || 0)}
-                              className="w-20 px-2 py-1 bg-muted/50 border border-border rounded text-center text-xs text-foreground"
+                              className="w-full px-2 py-1 bg-muted/50 border border-border rounded text-xs text-foreground text-right"
                             />
                           </td>
-                          <td className="px-4 py-3 text-right font-semibold text-foreground">
+                          <td className="px-4 py-3 text-right font-bold text-foreground">
                             {(item.unit_price * item.quantity).toFixed(2)} AED
                           </td>
                           <td className="px-4 py-3 text-center">
                             <button
                               type="button"
-                              onClick={() => updateQuantity(index, -item.quantity)}
-                              className="text-muted-foreground hover:text-destructive p-1 rounded"
+                              onClick={() => {
+                                const updated = [...cart];
+                                updated.splice(index, 1);
+                                setCart(updated);
+                              }}
+                              className="p-1 hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded transition-colors cursor-pointer"
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={12} />
                             </button>
                           </td>
                         </tr>
@@ -508,26 +417,27 @@ export const CreateSale: React.FC = () => {
                   </tbody>
                 </table>
               </div>
-
             </div>
           </div>
 
-          {/* RIGHT SECTION: METADATA, TOTALS & CHEKOUT (1 col) */}
-          <div className="lg:col-span-1 space-y-4">
-            <div className="glass border border-border rounded-2xl p-6 space-y-6 shadow-xl">
-              
-              <div className="border-b border-border pb-3">
-                <h3 className="font-bold text-foreground text-md m-0">Billing & Destination</h3>
+          {/* RIGHT SECTION: DETAILS & ACTION PANEL (1 col) */}
+          <div className="space-y-4">
+            
+            {/* Customer Details Box */}
+            <div className="glass border border-border rounded-2xl p-6 space-y-4 shadow-xl">
+              <div className="flex items-center gap-2 border-b border-border pb-3">
+                <User className="text-primary" size={18} />
+                <h2 className="font-bold text-foreground text-sm m-0">Customer Assignment</h2>
               </div>
 
-              {/* Customer Type Selector */}
-              <div className="flex rounded-lg bg-muted/50 p-1 border border-border">
+              {/* Selector for new vs existing */}
+              <div className="flex bg-muted/55 rounded-lg p-1">
                 <button
                   type="button"
                   onClick={() => setCustomerType('existing')}
-                  className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  className={`flex-1 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
                     customerType === 'existing'
-                      ? 'bg-primary text-white shadow-sm'
+                      ? 'bg-card text-foreground shadow-xs'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
@@ -536,236 +446,189 @@ export const CreateSale: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setCustomerType('new')}
-                  className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  className={`flex-1 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
                     customerType === 'new'
-                      ? 'bg-primary text-white shadow-sm'
+                      ? 'bg-card text-foreground shadow-xs'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  New Customer
+                  New Register
                 </button>
               </div>
 
-              {/* Customer input fields */}
               {customerType === 'existing' ? (
-                <div className="space-y-1.5 text-xs">
-                  <label className="text-muted-foreground font-semibold flex items-center gap-1">
-                    <User size={13} /> Select Customer Profile *
-                  </label>
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground">Select Customer</label>
                   <select
                     value={customerId}
                     onChange={(e) => setCustomerId(e.target.value)}
-                    className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground text-xs"
-                    required={customerType === 'existing'}
+                    className="w-full px-3 py-2 bg-muted/30 border border-border rounded-lg text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   >
-                    <option value="">-- Choose Customer --</option>
-                    {customers.map(c => {
-                      const parentCompanyName = c.company?.name;
-                      const displayLabel = c.customer_type === 'individual' && parentCompanyName
-                        ? `${c.name} (Member of ${parentCompanyName})`
-                        : c.customer_type === 'company'
-                        ? `${c.name} (Company Account)`
-                        : c.name;
-                      return (
-                        <option key={c.id} value={c.id}>
-                          {displayLabel} {c.phone ? `(${c.phone})` : ''}
-                        </option>
-                      );
-                    })}
+                    <option value="">Select Customer...</option>
+                    {customers.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {c.phone ? `(${c.phone})` : ''} {c.customer_type === 'company' ? ' [Company]' : ''}
+                      </option>
+                    ))}
                   </select>
-
-                  {availableQuotes.length > 0 && (
-                    <div className="space-y-1.5 text-xs mt-3 bg-amber-500/5 border border-amber-500/10 p-2.5 rounded-xl">
-                      <label className="text-amber-600 font-bold flex items-center gap-1.5">
-                        <FileText size={13} /> Link Open Quotation
-                      </label>
-                      <select
-                        value={importedQuoteId}
-                        onChange={(e) => handleImportQuotation(e.target.value)}
-                        className="w-full px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg text-foreground text-xs font-semibold cursor-pointer"
-                      >
-                        <option value="">-- Direct Sale (No Quote) --</option>
-                        {availableQuotes.map(q => (
-                          <option key={q.id} value={q.id}>
-                            #{q.quotation_no} - {q.grand_total.toFixed(2)} AED ({q.status})
-                          </option>
-                        ))}
-                      </select>
-                      <p className="text-[10px] text-amber-600/70 font-medium leading-tight">
-                        Importing a quotation will auto-fill the bill items catalog cart, discount deduction, and customer details.
-                      </p>
-                    </div>
-                  )}
                 </div>
               ) : (
-                <div className="space-y-3.5 border border-border/60 p-3 rounded-xl bg-muted/20">
-                  <div className="space-y-1.5 text-xs">
-                    <label className="text-muted-foreground font-semibold">Full Name *</label>
+                <div className="space-y-3 pt-2">
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground">Name *</label>
                     <input
                       type="text"
-                      required={customerType === 'new'}
+                      placeholder="Customer Name"
                       value={newCustomerName}
                       onChange={(e) => setNewCustomerName(e.target.value)}
-                      placeholder="Enter customer's name"
-                      className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground"
+                      className="w-full px-3 py-1.5 bg-muted/30 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                     />
                   </div>
-                  <div className="space-y-1.5 text-xs">
-                    <label className="text-muted-foreground font-semibold">Phone Number</label>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground">Phone Number</label>
                     <input
                       type="text"
+                      placeholder="+971500000000"
                       value={newCustomerPhone}
                       onChange={(e) => setNewCustomerPhone(e.target.value)}
-                      placeholder="E.g. +8801700000000"
-                      className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground"
+                      className="w-full px-3 py-1.5 bg-muted/30 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                     />
                   </div>
-                  <div className="space-y-1.5 text-xs">
-                    <label className="text-muted-foreground font-semibold">Email Address</label>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground">Email</label>
                     <input
                       type="email"
+                      placeholder="client@gmail.com"
                       value={newCustomerEmail}
                       onChange={(e) => setNewCustomerEmail(e.target.value)}
-                      placeholder="customer@domain.com"
-                      className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground"
+                      className="w-full px-3 py-1.5 bg-muted/30 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                     />
                   </div>
-                  <div className="space-y-1.5 text-xs">
-                    <label className="text-muted-foreground font-semibold">Address</label>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground">Address</label>
                     <input
                       type="text"
+                      placeholder="Musaffah M37, Abu Dhabi"
                       value={newCustomerAddress}
                       onChange={(e) => setNewCustomerAddress(e.target.value)}
-                      placeholder="City, Area, Road"
-                      className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground"
+                      className="w-full px-3 py-1.5 bg-muted/30 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                     />
                   </div>
                 </div>
               )}
+            </div>
 
-              {/* Branch Selector */}
-              <div className="space-y-1.5 text-xs">
-                <label className="text-muted-foreground font-semibold flex items-center gap-1">
-                  <Building size={13} /> Destination Branch *
-                </label>
-                <select
-                  value={branchId}
-                  onChange={(e) => setBranchId(e.target.value)}
-                  disabled={!isAdmin}
-                  className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground disabled:opacity-75 disabled:cursor-not-allowed"
-                  required
-                >
-                  <option value="">-- Select Branch --</option>
-                  {availableBranches.map(b => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
+            {/* Quotation Parameters Box */}
+            <div className="glass border border-border rounded-2xl p-6 space-y-4 shadow-xl">
+              <div className="flex items-center gap-2 border-b border-border pb-3">
+                <FileText className="text-primary" size={18} />
+                <h2 className="font-bold text-foreground text-sm m-0">Quotation Summary</h2>
               </div>
 
-              {/* Order Notes */}
-              <div className="space-y-1.5 text-xs">
-                <label className="text-muted-foreground font-semibold flex items-center gap-1">
-                  <FileText size={13} /> Order Instruction / Remarks
+              {/* Branch Selector */}
+              {isAdmin && (
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground">Branch Store</label>
+                  <select
+                    value={branchId}
+                    onChange={(e) => setBranchId(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-muted/30 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="">Select Branch...</option>
+                    {user?.branch_id && (
+                      <option value={user.branch_id}>My Branch ({user.branch?.name})</option>
+                    )}
+                  </select>
+                </div>
+              )}
+
+              {/* Valid Until Selector */}
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground flex items-center gap-1">
+                  <Calendar size={11} className="text-primary" />
+                  Valid Until *
                 </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={2}
-                  className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-foreground resize-none"
-                  placeholder="E.g. Font style, stamp border design info..."
+                <input
+                  type="date"
+                  value={validUntil}
+                  onChange={(e) => setValidUntil(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-muted/30 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
 
-              {/* Billing Totals Panel */}
-              <div className="bg-muted/25 p-4 rounded-xl border border-border/80 space-y-3.5 text-xs">
-                <div className="flex justify-between items-center text-muted-foreground">
-                  <span>Subtotal</span>
-                  <span className="font-semibold text-foreground">{subtotal.toFixed(2)} AED</span>
-                </div>
+              {/* Discount */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground flex items-center gap-1">
+                  <Percent size={11} className="text-primary" />
+                  Discount (AED)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={discount}
+                  onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
+                  className="w-full px-3 py-1.5 bg-muted/30 border border-border rounded-lg text-xs text-foreground font-semibold"
+                />
+              </div>
 
-                {/* Discount input */}
-                <div className="flex justify-between items-center gap-3">
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    <Percent size={12} /> Apply Discount
-                  </span>
-                  <div className="relative w-28">
-                    <input
-                      type="number"
-                      min={0}
-                      max={subtotal}
-                      value={discount}
-                      onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
-                      className="w-full px-2 py-1 text-right bg-muted/50 border border-border rounded text-foreground font-semibold pr-8"
-                    />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">AED</span>
+              {/* Notes */}
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground">Notes / Remarks</label>
+                <textarea
+                  rows={2}
+                  placeholder="Terms, details, stamp blueprints..."
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-muted/30 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              {/* Summary Calculations */}
+              <div className="space-y-2 pt-2 border-t border-border/80">
+                <div className="flex justify-between text-xs font-semibold text-muted-foreground">
+                  <span>Cart Subtotal:</span>
+                  <span>{subtotal.toFixed(2)} AED</span>
+                </div>
+                {discount > 0 && (
+                  <div className="flex justify-between text-xs font-semibold text-rose-400">
+                    <span>Discount Deduction:</span>
+                    <span>- {discount.toFixed(2)} AED</span>
                   </div>
-                </div>
-
-                <div className="border-t border-border/60 my-2 pt-2.5 flex justify-between items-center text-sm font-bold">
-                  <span className="text-foreground">Grand Total</span>
-                  <span className="text-primary text-md">{grandTotal.toFixed(2)} AED</span>
+                )}
+                <div className="flex justify-between text-sm font-black border-t border-dashed border-border/50 pt-2 text-foreground">
+                  <span>GRAND TOTAL:</span>
+                  <span className="text-primary">{grandTotal.toFixed(2)} AED</span>
                 </div>
               </div>
 
-              {/* Take Payment Checkbox */}
-              {grandTotal > 0 && (
-                <div className="space-y-3 border-t border-border/50 pt-4">
-                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold text-foreground">
-                    <input
-                      type="checkbox"
-                      checked={hasInitialPayment}
-                      onChange={(e) => setHasInitialPayment(e.target.checked)}
-                      className="rounded border-border bg-muted/50 text-primary focus:ring-primary"
-                    />
-                    Record Downpayment Collection
-                  </label>
-
-                  {hasInitialPayment && (
-                    <div className="bg-muted/30 p-3 rounded-xl border border-border/80 space-y-3 animate-fade-in text-xs">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <label className="text-muted-foreground font-semibold">Method</label>
-                          <select
-                            value={paymentMethod}
-                            onChange={(e) => setPaymentMethod(e.target.value as any)}
-                            className="w-full px-2 py-1 bg-popover border border-border rounded text-foreground"
-                          >
-                            <option value="Cash">Cash</option>
-                            <option value="Card">Card</option>
-                            <option value="Mobile Banking">Mobile Banking</option>
-                            <option value="Bank Transfer">Bank Transfer</option>
-                          </select>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-muted-foreground font-semibold">Paid Amount</label>
-                          <input
-                            type="number"
-                            min={1}
-                            max={grandTotal}
-                            value={paymentAmount}
-                            onChange={(e) => setPaymentAmount(Math.min(grandTotal, parseFloat(e.target.value) || 0))}
-                            className="w-full px-2 py-1 bg-muted/50 border border-border rounded text-foreground text-right font-semibold"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Submit Checkout Button */}
-              <button
-                type="submit"
-                disabled={saving || cart.length === 0}
-                className="w-full bg-primary hover:bg-primary-hover disabled:opacity-50 text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 flex items-center justify-center gap-2 transition-all"
-              >
-                {saving ? 'Creating Order Invoice...' : 'Finalize Sale & Checkout'}
-              </button>
-
+              {/* Actions */}
+              <div className="grid grid-cols-2 gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => handleSave('Draft')}
+                  disabled={saving}
+                  className="w-full bg-secondary hover:bg-muted text-foreground px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm border border-border cursor-pointer disabled:opacity-50 text-center"
+                >
+                  Save as Draft
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSave('Sent')}
+                  disabled={saving}
+                  className="w-full bg-primary hover:bg-primary-hover text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50 text-center"
+                >
+                  {saving ? 'Saving...' : 'Save & Send'}
+                </button>
+              </div>
             </div>
+
           </div>
 
-        </form>
+        </div>
 
       </div>
     </PermissionGuard>

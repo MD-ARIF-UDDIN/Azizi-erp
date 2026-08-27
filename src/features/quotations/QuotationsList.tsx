@@ -1,0 +1,884 @@
+import React, { useState, useEffect } from 'react';
+import { db } from '../../lib/db';
+import { PermissionGuard } from '../../components/PermissionGuard';
+import { useAuth } from '../../components/AuthProvider';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  Plus,
+  Search,
+  Printer,
+  Clock,
+  X,
+  MessageSquare,
+  Trash2,
+  CheckCircle,
+  FileCheck2
+} from 'lucide-react';
+
+const handleWhatsAppShare = (quote: any) => {
+  const customerName = quote.customer?.name || 'Customer';
+  const quotationNo = quote.quotation_no;
+  const grandTotal = quote.grand_total.toFixed(2);
+  const itemsText = quote.items?.map((i: any) => `• ${i.service?.name || 'Service'} (Qty: ${i.quantity}) - ${(i.subtotal || 0).toFixed(2)} AED`).join('\n') || '';
+  const validUntilText = quote.valid_until ? new Date(quote.valid_until).toLocaleDateString() : 'N/A';
+
+  const message = `*AZIZI TYPING & STAMP MAKING*
+Musaffah M37, Abu Dhabi
+Tel: 0542797933
+
+Dear *${customerName}*,
+Here is the summary of your requested quotation:
+
+*Quotation No:* #${quotationNo}
+*Date:* ${new Date(quote.created_at).toLocaleDateString()}
+*Valid Until:* ${validUntilText}
+
+*Proposed Services:*
+${itemsText}
+
+*Grand Total:* ${grandTotal} AED
+
+Thank you for choosing AZIZI!`;
+
+  const rawPhone = quote.customer?.phone || '';
+  const phone = rawPhone.replace(/\D/g, '');
+  const url = phone 
+    ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
+    : `https://wa.me/?text=${encodeURIComponent(message)}`;
+    
+  window.open(url, '_blank');
+};
+
+export const QuotationsList: React.FC = () => {
+  const { hasPermission, activeBranchId } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const highlightId = searchParams.get('highlight');
+
+  // Data States
+  const [quotations, setQuotations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+
+  // Filter States
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [sortField, setSortField] = useState<'created_at' | 'grand_total'>('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Detail Modal States
+  const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
+  const [selectedQuoteDetails, setSelectedQuoteDetails] = useState<any | null>(null);
+  const [converting, setConverting] = useState(false);
+
+  // Status Update & Timeline States
+  const [statusHistory, setStatusHistory] = useState<any[]>([]);
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [updateStatusQuoteId, setUpdateStatusQuoteId] = useState<string | null>(null);
+  const [newStatus, setNewStatus] = useState<'Draft' | 'Sent' | 'Accepted' | 'Rejected' | 'Expired' | 'Converted'>('Draft');
+  const [remarks, setRemarks] = useState('');
+  const [historyLogModalOpen, setHistoryLogModalOpen] = useState(false);
+  const [viewHistoryQuoteId, setViewHistoryQuoteId] = useState<string | null>(null);
+  const [viewHistoryQuoteNo, setViewHistoryQuoteNo] = useState<string>('');
+
+  const fetchQuotations = async () => {
+    setLoading(true);
+    try {
+      const branchFilterVal = activeBranchId === 'all' ? undefined : activeBranchId;
+      const qData = await db.quotations.getAll(branchFilterVal);
+      setQuotations(qData);
+
+      // Refresh Detail Panel if open
+      if (selectedQuoteId) {
+        const detail = await db.quotations.getById(selectedQuoteId);
+        setSelectedQuoteDetails(detail);
+        const hist = await db.quotations.getStatusHistory(selectedQuoteId);
+        setStatusHistory(hist);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchQuotations();
+  }, [activeBranchId, selectedQuoteId]);
+
+  const handleOpenDetail = async (id: string) => {
+    setSelectedQuoteId(id);
+    setLoading(true);
+    try {
+      const detail = await db.quotations.getById(id);
+      setSelectedQuoteDetails(detail);
+      const hist = await db.quotations.getStatusHistory(id);
+      setStatusHistory(hist);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStatusSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const qId = updateStatusQuoteId || selectedQuoteId;
+    if (!qId) return;
+    try {
+      await db.quotations.updateStatus(qId, newStatus, remarks);
+      setStatusModalOpen(false);
+      setRemarks('');
+      setUpdateStatusQuoteId(null);
+      await fetchQuotations();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleOpenHistoryLog = async (qId: string, qNo: string) => {
+    try {
+      setLoading(true);
+      const hist = await db.quotations.getStatusHistory(qId);
+      setStatusHistory(hist);
+      setViewHistoryQuoteId(qId);
+      setViewHistoryQuoteNo(qNo);
+      setHistoryLogModalOpen(true);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this quotation?')) return;
+    try {
+      await db.quotations.delete(id);
+      setSelectedQuoteDetails(null);
+      setSelectedQuoteId(null);
+      await fetchQuotations();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to delete quotation.');
+    }
+  };
+
+  const handleConvertToSale = async (id: string) => {
+    if (!window.confirm('Convert this quotation directly into a Sale invoice?')) return;
+    setConverting(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+    try {
+      const createdSale = await db.quotations.convertToSale(id);
+      setSuccessMsg(`Quotation converted to Sale Invoice #${createdSale.invoice_no} successfully!`);
+      setSelectedQuoteDetails(null);
+      setSelectedQuoteId(null);
+      
+      // Auto redirect to sales with print template after 1.5 seconds
+      setTimeout(() => {
+        navigate(`/sales?print=${createdSale.id}`);
+      }, 1500);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to convert quotation to sale.');
+    } finally {
+      setConverting(false);
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  // Sort & Filter
+  const filteredQuotations = quotations.filter(q => {
+    const matchesSearch =
+      q.quotation_no.toLowerCase().includes(search.toLowerCase()) ||
+      (q.customer && q.customer.name.toLowerCase().includes(search.toLowerCase())) ||
+      (q.customer && q.customer.phone && q.customer.phone.includes(search));
+
+    const matchesStatus = statusFilter ? q.status === statusFilter : true;
+
+    return matchesSearch && matchesStatus;
+  }).sort((a, b) => {
+    let multiplier = sortOrder === 'desc' ? -1 : 1;
+    if (sortField === 'created_at') {
+      return (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * multiplier;
+    } else {
+      return (a.grand_total - b.grand_total) * multiplier;
+    }
+  });
+
+  return (
+    <PermissionGuard permission="Sales.View" fallback="ui">
+      <div className="space-y-6 print:p-0 print:bg-white print:text-black">
+        
+        {/* HEADER */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
+          <div>
+            <div className="text-xs font-bold text-primary uppercase tracking-wider mb-0.5">eQuotations</div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground m-0">List</h1>
+          </div>
+          {hasPermission('Sales.Create') && (
+            <button
+              onClick={() => navigate('/quotations/create')}
+              className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2.5 rounded-lg text-xs font-semibold shadow-md transition-all self-start sm:self-auto cursor-pointer"
+            >
+              <Plus size={14} />
+              New Quotation
+            </button>
+          )}
+        </div>
+
+        {successMsg && (
+          <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm p-4 rounded-xl text-center font-semibold animate-pulse print:hidden">
+            {successMsg}
+          </div>
+        )}
+
+        {errorMsg && (
+          <div className="bg-destructive/10 border border-destructive/20 text-destructive text-sm p-4 rounded-xl text-center font-medium print:hidden">
+            {errorMsg}
+          </div>
+        )}
+
+        {/* TOOLBAR FILTERS */}
+        <div className="flex flex-col lg:flex-row gap-3 bg-muted/30 p-3 rounded-xl border border-border print:hidden">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
+            <input
+              type="text"
+              placeholder="Search by quotation no, customer name..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
+            />
+          </div>
+
+          <div className="flex flex-wrap sm:flex-nowrap gap-2">
+            {/* Status Filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2 bg-popover border border-border rounded-lg text-xs text-foreground font-semibold"
+            >
+              <option value="">All Statuses</option>
+              <option value="Draft">Draft</option>
+              <option value="Sent">Sent</option>
+              <option value="Accepted">Accepted</option>
+              <option value="Rejected">Rejected</option>
+              <option value="Expired">Expired</option>
+              <option value="Converted">Converted</option>
+            </select>
+
+            {/* Sort Field */}
+            <select
+              value={`${sortField}-${sortOrder}`}
+              onChange={(e) => {
+                const [field, order] = e.target.value.split('-') as [any, any];
+                setSortField(field);
+                setSortOrder(order);
+              }}
+              className="px-3 py-2 bg-popover border border-border rounded-lg text-xs text-foreground font-semibold"
+            >
+              <option value="created_at-desc">Newest First</option>
+              <option value="created_at-asc">Oldest First</option>
+              <option value="grand_total-desc">Highest Total</option>
+              <option value="grand_total-asc">Lowest Total</option>
+            </select>
+          </div>
+        </div>
+
+        {/* MAIN LIST VIEW */}
+        <div className="w-full">
+          <div className="w-full space-y-4 print:hidden">
+            {loading && quotations.length === 0 ? (
+              <div className="space-y-3">
+                <div className="h-10 bg-muted/30 rounded-xl animate-pulse" />
+                <div className="h-28 bg-muted/30 rounded-xl animate-pulse" />
+              </div>
+            ) : (
+              <div className="glass border border-border rounded-2xl overflow-hidden shadow-xl">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-secondary/40 border-b border-border text-muted-foreground text-xs uppercase font-semibold">
+                      <tr>
+                        <th className="px-4 py-4 text-center w-12">SL</th>
+                        <th className="px-5 py-4">Quotation No & Date</th>
+                        <th className="px-5 py-4">Customer</th>
+                        <th className="px-5 py-4">Valid Until</th>
+                        <th className="px-5 py-4">Status</th>
+                        <th className="px-5 py-4 text-right">Grand Total</th>
+                        <th className="px-5 py-4 text-center w-48">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {filteredQuotations.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
+                            No quotations matched selection filters.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredQuotations.map((q, idx) => {
+                          const isSelected = selectedQuoteId === q.id;
+                          const isHighlighted = highlightId?.split(',').includes(q.id);
+                          return (
+                            <tr
+                              key={q.id}
+                              style={isHighlighted ? { backgroundColor: 'color-mix(in srgb, var(--color-primary) 5%, transparent)' } : undefined}
+                              className={`hover:bg-muted/25 transition-colors ${
+                                isSelected ? 'bg-secondary/25 font-medium' : ''
+                              }`}
+                            >
+                              <td className="px-4 py-4 text-center text-muted-foreground font-semibold">
+                                {idx + 1}
+                              </td>
+                              <td className="px-5 py-4">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary/10 border border-primary/20 text-primary font-mono font-bold text-[11px] tracking-wide">
+                                  # {q.quotation_no}
+                                </span>
+                                <div className="text-[10px] text-muted-foreground mt-1.5">
+                                  {new Date(q.created_at).toLocaleString()} • {q.branch?.name}
+                                </div>
+                              </td>
+                              <td className="px-5 py-4">
+                                {q.customer ? (
+                                  <>
+                                    <div className="text-foreground font-medium flex flex-wrap items-center gap-1.5">
+                                      {q.person_name ? (
+                                        <>
+                                          <span>{q.person_name}</span>
+                                          <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded font-semibold">
+                                            Company: {q.customer.name}
+                                          </span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <span>{q.customer.name}</span>
+                                          {q.customer.company && (
+                                            <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded font-semibold">
+                                              Billed to: {q.customer.company.name}
+                                            </span>
+                                          )}
+                                        </>
+                                      )}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mt-0.5">{q.person_phone || q.customer.phone || 'No phone'}</div>
+                                  </>
+                                ) : (
+                                  <div className="text-foreground font-medium">Walk-in Customer</div>
+                                )}
+                              </td>
+                              <td className="px-5 py-4 text-xs text-foreground font-semibold">
+                                {q.valid_until ? (
+                                  <span className="inline-flex items-center gap-1">
+                                    <Clock size={12} className="text-muted-foreground" />
+                                    {new Date(q.valid_until).toLocaleDateString()}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground italic">N/A</span>
+                                )}
+                              </td>
+                               <td className="px-5 py-4 cursor-pointer hover:opacity-80 transition-all" onClick={(e) => { e.stopPropagation(); handleOpenHistoryLog(q.id, q.quotation_no); }} title="Click to view status history steps">
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                  q.status === 'Converted' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                                  q.status === 'Accepted' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                                  q.status === 'Draft' ? 'bg-muted text-muted-foreground border border-border' :
+                                  q.status === 'Sent' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' :
+                                  q.status === 'Rejected' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
+                                  'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                }`}>
+                                  {q.status}
+                                </span>
+                              </td>
+                              <td className="px-5 py-4 text-right font-bold text-foreground">
+                                {q.grand_total.toFixed(2)} AED
+                              </td>
+                              <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    onClick={() => handleOpenDetail(q.id)}
+                                    className="px-2.5 py-1.5 bg-secondary hover:bg-secondary-foreground/10 text-foreground text-xs font-bold rounded-lg transition-all cursor-pointer"
+                                  >
+                                    Details
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      const detail = await db.quotations.getById(q.id);
+                                      setSelectedQuoteId(q.id);
+                                      setSelectedQuoteDetails(detail);
+                                      setTimeout(() => {
+                                        window.print();
+                                      }, 400);
+                                    }}
+                                    className="p-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-white rounded-lg transition-all inline-flex items-center justify-center align-middle cursor-pointer"
+                                    title="Print Quotation"
+                                  >
+                                    <Printer size={13} />
+                                  </button>
+                                  {q.status !== 'Converted' && (
+                                    <>
+                                      <button
+                                        onClick={() => {
+                                          setUpdateStatusQuoteId(q.id);
+                                          setNewStatus(q.status);
+                                          setRemarks('');
+                                          setStatusModalOpen(true);
+                                        }}
+                                        className="p-1.5 bg-amber-500/10 hover:bg-amber-500 text-amber-500 hover:text-white rounded-lg transition-all inline-flex items-center justify-center align-middle cursor-pointer"
+                                        title="Change Status"
+                                      >
+                                        <Clock size={13} />
+                                      </button>
+                                      <button
+                                        onClick={() => handleConvertToSale(q.id)}
+                                        disabled={converting}
+                                        className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white rounded-lg transition-all inline-flex items-center justify-center align-middle cursor-pointer"
+                                        title="Convert to Sale Invoice"
+                                      >
+                                        <FileCheck2 size={13} />
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* DETAIL MODAL PANEL */}
+          {selectedQuoteDetails && (() => {
+            const quote = selectedQuoteDetails;
+            const items = quote.items || [];
+            const canConvert = quote.status !== 'Converted';
+
+            return (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm print:p-0 print:bg-white overflow-y-auto">
+                <div className="glass border border-border rounded-2xl p-6 shadow-2xl relative bg-white print:border-none print:shadow-none print:p-0 print:static print-invoice-sheet w-full max-w-4xl max-h-[90vh] overflow-y-auto my-8">
+                  
+                  {/* Close Button */}
+                  <button
+                    onClick={() => { setSelectedQuoteDetails(null); setSelectedQuoteId(null); }}
+                    className="absolute right-4 top-4 p-2 text-muted-foreground hover:text-foreground print:hidden bg-muted/40 rounded-full transition-colors cursor-pointer"
+                  >
+                    <X size={16} />
+                  </button>
+
+                  <div className="space-y-8 print:space-y-0">
+                    <div className="w-full">
+                      {/* Branding Header */}
+                      <div className="text-center space-y-1 pb-4 border-b border-gray-300">
+                        <div className="text-xl font-bold text-[#000ba0] font-serif tracking-wide italic">
+                          مكتب عزيزي للكتابة وعمل الأختام ذ.م.م - فرع ١
+                        </div>
+                        <div className="text-lg font-black text-[#f28f00] tracking-wide italic uppercase">
+                          AZIZI TYPING & STAMP MAKING Br. 1
+                        </div>
+                        <div className="text-xs text-black font-bold">
+                          Mobile: 0542797933 • Email: azizitypingbr@gmail.com
+                        </div>
+                        <div className="text-[11px] text-gray-700 font-semibold">
+                          Abu Dhabi, Musaffah M37, Near Irani Masjid
+                        </div>
+                      </div>
+
+                      {/* Orange Banner Header */}
+                      <div className="bg-[#f28f00] text-white flex items-center justify-between px-4 py-1.5 font-bold uppercase tracking-wider text-xs my-3 rounded-sm shadow-sm">
+                        <span>Customer Quotation</span>
+                        <span className="bg-[#000ba0] text-white px-3 py-0.5 rounded font-mono text-[11px] tracking-widest">
+                          # {quote.quotation_no}
+                        </span>
+                      </div>
+
+                      {/* Customer Metadata Table */}
+                      <table className="w-full border-collapse border border-gray-300 text-xs my-3 bg-white">
+                        <tbody>
+                          <tr>
+                            <td className="bg-[#000ba0] text-white font-bold px-3 py-2 border border-gray-300 w-1/4 uppercase tracking-wider">
+                              Quotation To
+                            </td>
+                            <td className="px-3 py-2 border border-gray-300 text-black font-bold text-sm w-3/4" colSpan={3}>
+                              {(() => {
+                                if (!quote.customer) return 'Walk-in Customer';
+                                if (quote.person_name) {
+                                  return (
+                                    <div className="flex flex-col">
+                                      <span className="font-extrabold text-foreground">{quote.person_name}</span>
+                                      <span className="text-xs text-[#000ba0] font-semibold mt-0.5">
+                                        Company Account: {quote.customer.name}
+                                      </span>
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div className="flex flex-col">
+                                    <span className="font-extrabold text-foreground">{quote.customer.name}</span>
+                                    {quote.customer.company && (
+                                      <span className="text-xs text-[#000ba0] font-semibold mt-0.5">
+                                        Billed via: {quote.customer.company.name}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="bg-gray-100 font-bold px-3 py-2 border border-gray-300 w-1/4">
+                              Phone Number
+                            </td>
+                            <td className="px-3 py-2 border border-gray-300 w-1/4 text-black font-semibold">
+                              {quote.person_phone || quote.customer?.phone || 'N/A'}
+                            </td>
+                            <td className="bg-gray-100 font-bold px-3 py-2 border border-gray-300 w-1/4">
+                              Quotation Date
+                            </td>
+                            <td className="px-3 py-2 border border-gray-300 w-1/4 text-black font-semibold">
+                              {new Date(quote.created_at).toLocaleDateString()}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="bg-gray-100 font-bold px-3 py-2 border border-gray-300 w-1/4">
+                              Email Address
+                            </td>
+                            <td className="px-3 py-2 border border-gray-300 w-1/4 text-black font-medium">
+                              {quote.person_email || quote.customer?.email || 'N/A'}
+                            </td>
+                            <td className="bg-gray-100 font-bold px-3 py-2 border border-gray-300 w-1/4">
+                              Valid Until Date
+                            </td>
+                            <td className="px-3 py-2 border border-gray-300 w-1/4 text-rose-600 font-bold">
+                              {quote.valid_until ? new Date(quote.valid_until).toLocaleDateString() : 'N/A'}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="bg-gray-100 font-bold px-3 py-2 border border-gray-300 w-1/4">
+                              Status Label
+                            </td>
+                            <td className="px-3 py-2 border border-gray-300 text-black font-bold" colSpan={3}>
+                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                                quote.status === 'Converted' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' :
+                                quote.status === 'Accepted' ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' :
+                                quote.status === 'Draft' ? 'bg-muted text-muted-foreground border-border' :
+                                quote.status === 'Sent' ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20' :
+                                quote.status === 'Rejected' ? 'bg-rose-500/10 text-rose-600 border-rose-500/20' :
+                                'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                              }`}>
+                                {quote.status}
+                              </span>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      {/* Items Details Table */}
+                      <table className="w-full border-collapse border border-gray-300 text-xs my-4 text-left">
+                        <thead>
+                          <tr className="bg-[#000ba0] text-white uppercase font-bold text-[10px] tracking-wider">
+                            <th className="px-3 py-2 border border-gray-300 text-center w-12">No</th>
+                            <th className="px-3 py-2 border border-gray-300">Service Description</th>
+                            <th className="px-3 py-2 border border-gray-300 text-center w-20">Qty</th>
+                            <th className="px-3 py-2 border border-gray-300 text-right w-28">Unit Price</th>
+                            <th className="px-3 py-2 border border-gray-300 text-right w-28">Subtotal</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="px-3 py-6 text-center text-gray-500 italic">
+                                No items linked to this quotation.
+                              </td>
+                            </tr>
+                          ) : (
+                            items.map((item: any, idx: number) => (
+                              <tr key={item.id} className="hover:bg-gray-50 text-black font-semibold">
+                                <td className="px-3 py-2 border border-gray-300 text-center text-gray-600">
+                                  {idx + 1}
+                                </td>
+                                <td className="px-3 py-2 border border-gray-300">
+                                  <div className="font-extrabold">{item.service?.name || 'Service Item'}</div>
+                                  <div className="text-[10px] text-gray-500 mt-0.5">{item.service?.description || 'N/A'}</div>
+                                </td>
+                                <td className="px-3 py-2 border border-gray-300 text-center text-sm font-bold">
+                                  {item.quantity}
+                                </td>
+                                <td className="px-3 py-2 border border-gray-300 text-right font-mono">
+                                  {item.unit_price.toFixed(2)}
+                                </td>
+                                <td className="px-3 py-2 border border-gray-300 text-right font-mono font-bold">
+                                  {item.subtotal.toFixed(2)} AED
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                          
+                          {/* Financial Summary rows */}
+                          <tr className="bg-gray-100 font-bold text-black text-right">
+                            <td colSpan={3} className="border border-gray-300 px-3 py-2">Subtotal Amount:</td>
+                            <td colSpan={2} className="border border-gray-300 px-3 py-2 font-mono">{quote.subtotal.toFixed(2)} AED</td>
+                          </tr>
+                          {quote.discount > 0 && (
+                            <tr className="bg-gray-100 font-bold text-rose-600 text-right">
+                              <td colSpan={3} className="border border-gray-300 px-3 py-2">Discount Deduction:</td>
+                              <td colSpan={2} className="border border-gray-300 px-3 py-2 font-mono">- {quote.discount.toFixed(2)} AED</td>
+                            </tr>
+                          )}
+                          <tr className="bg-[#000ba0] font-black text-white text-right text-sm">
+                            <td colSpan={3} className="border border-gray-300 px-3 py-2.5 uppercase tracking-wider">Net Payable Amount:</td>
+                            <td colSpan={2} className="border border-gray-300 px-3 py-2.5 font-mono">{quote.grand_total.toFixed(2)} AED</td>
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      {/* Notes Box */}
+                      {quote.notes && (
+                        <div className="mt-4 p-3 border border-gray-300 rounded text-xs bg-gray-55/40 text-black">
+                          <strong className="text-gray-800 block mb-1">Quotation Terms & Conditions:</strong>
+                          <span className="whitespace-pre-line text-[11px] text-gray-700 font-medium">{quote.notes}</span>
+                        </div>
+                      )}
+
+                      {/* Official Signature Footer */}
+                      <div className="mt-8 flex justify-between items-end border-t border-gray-300 pt-6">
+                        <div className="text-center font-bold text-[11px] text-black">
+                          <div className="h-10" />
+                          <div>Customer Signature</div>
+                        </div>
+                        <div className="text-center font-bold text-[11px] text-black">
+                          <div className="font-serif italic text-blue-800 text-[10px] mb-1 font-semibold">AZIZI TYPING CO.</div>
+                          <div className="border-t border-gray-300 w-32 mx-auto pt-1">Authorized Cashier</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Status Change History Timeline */}
+                    {statusHistory.length > 0 && (
+                      <div className="mt-8 border-t border-border pt-6 print:hidden">
+                        <h3 className="text-xs uppercase font-bold text-muted-foreground tracking-wider mb-4 flex items-center gap-1.5">
+                          <Clock size={13} className="text-primary" />
+                          Status History Log
+                        </h3>
+                        <div className="relative border-l border-border pl-4 space-y-4">
+                          {statusHistory.map((h, i) => (
+                            <div key={h.id || i} className="relative">
+                              {/* Dot */}
+                              <div className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-primary border-2 border-background" />
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                                  h.status === 'Converted' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' :
+                                  h.status === 'Accepted' ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20' :
+                                  h.status === 'Draft' ? 'bg-muted text-muted-foreground border border-border' :
+                                  h.status === 'Sent' ? 'bg-indigo-500/10 text-indigo-600 border border-indigo-500/20' :
+                                  h.status === 'Rejected' ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20' :
+                                  'bg-amber-500/10 text-amber-600 border border-amber-500/20'
+                                }`}>
+                                  {h.status}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground font-medium">
+                                  by {h.changed_by_name || 'System'} on {new Date(h.changed_at).toLocaleString()}
+                                </span>
+                              </div>
+                              {h.remarks && (
+                                <p className="text-[11px] text-foreground mt-1 bg-muted/30 p-2 rounded-lg border border-border/50 max-w-xl font-medium">
+                                  {h.remarks}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                        <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-4 print:hidden">
+                    {/* Left Actions */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={handlePrint}
+                        className="flex items-center gap-1 bg-secondary hover:bg-muted text-foreground px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs border border-border cursor-pointer"
+                      >
+                        <Printer size={14} />
+                        Print Quotation
+                      </button>
+                      
+                      <button
+                        onClick={() => handleWhatsAppShare(quote)}
+                        className="flex items-center gap-1 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
+                      >
+                        <MessageSquare size={14} />
+                        Share via WhatsApp
+                      </button>
+
+                      {hasPermission('Sales.Delete') && (
+                        <button
+                          onClick={() => handleDelete(quote.id)}
+                          className="flex items-center gap-1 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs border border-rose-500/20 cursor-pointer"
+                        >
+                          <Trash2 size={14} />
+                          Delete
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Right Actions */}
+                    <div className="flex flex-wrap items-center gap-3">
+                      {quote.status !== 'Converted' && (
+                        <button
+                          onClick={() => {
+                            setUpdateStatusQuoteId(quote.id);
+                            setNewStatus(quote.status);
+                            setRemarks('');
+                            setStatusModalOpen(true);
+                          }}
+                          className="flex items-center gap-1.5 bg-secondary hover:bg-muted text-foreground px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs border border-border cursor-pointer"
+                        >
+                          <Clock size={13} />
+                          Change Status
+                        </button>
+                      )}
+
+                      {canConvert && (
+                        <button
+                          onClick={() => handleConvertToSale(quote.id)}
+                          disabled={converting}
+                          className="flex items-center gap-1.5 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white border border-emerald-500/30 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+                        >
+                          <CheckCircle size={14} />
+                          Convert to Bill Invoice
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  </div>
+                </div>
+            );
+          })()}
+        </div>
+
+        {/* UPDATE STATUS MODAL */}
+        {statusModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className="glass border border-border rounded-2xl p-6 w-full max-w-md bg-white shadow-2xl relative">
+              <h3 className="text-sm font-bold text-foreground mb-4">Update Quotation Status</h3>
+              <form onSubmit={handleStatusSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">New Status</label>
+                  <select
+                    value={newStatus}
+                    onChange={(e) => setNewStatus(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-primary cursor-pointer"
+                  >
+                    <option value="Draft">Draft</option>
+                    <option value="Sent">Sent</option>
+                    <option value="Accepted">Accepted</option>
+                    <option value="Rejected">Rejected</option>
+                    <option value="Expired">Expired</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Remarks / Comments</label>
+                  <textarea
+                    value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                    placeholder="e.g. Customer approved this draft quotation..."
+                    rows={3}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-primary resize-none"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setStatusModalOpen(false)}
+                    className="px-4 py-2 border border-border text-foreground hover:bg-muted text-xs font-bold rounded-xl transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-primary hover:bg-primary/95 text-white text-xs font-bold rounded-xl transition-all shadow-md cursor-pointer"
+                  >
+                    Save Status
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* STATUS HISTORY LOG POPUP MODAL */}
+        {historyLogModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className="glass border border-border rounded-2xl p-6 w-full max-w-lg bg-white shadow-2xl relative">
+              {/* Close Button */}
+              <button
+                onClick={() => { setHistoryLogModalOpen(false); setViewHistoryQuoteId(null); }}
+                className="absolute right-4 top-4 p-2 text-muted-foreground hover:text-foreground bg-muted/40 rounded-full transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+              
+              <div className="flex items-center gap-2 mb-6">
+                <Clock size={16} className="text-primary" />
+                <div>
+                  <h3 className="text-sm font-bold text-foreground leading-none">Status History Steps</h3>
+                  <span className="text-[10px] text-muted-foreground font-mono mt-1 block">Quotation #{viewHistoryQuoteNo}</span>
+                </div>
+              </div>
+
+              {statusHistory.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-6">No status changes have been recorded for this quotation yet.</p>
+              ) : (
+                <div className="relative border-l border-border pl-4 space-y-5 my-2 max-h-72 overflow-y-auto">
+                  {statusHistory.map((h, i) => (
+                    <div key={h.id || i} className="relative">
+                      {/* Dot */}
+                      <div className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-primary border-2 border-background" />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                          h.status === 'Converted' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' :
+                          h.status === 'Accepted' ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20' :
+                          h.status === 'Draft' ? 'bg-muted text-muted-foreground border border-border' :
+                          h.status === 'Sent' ? 'bg-indigo-500/10 text-indigo-600 border border-indigo-500/20' :
+                          h.status === 'Rejected' ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20' :
+                          'bg-amber-500/10 text-amber-600 border border-amber-500/20'
+                        }`}>
+                          {h.status}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-medium">
+                          by {h.changed_by_name || 'System'} on {new Date(h.changed_at).toLocaleString()}
+                        </span>
+                      </div>
+                      {h.remarks && (
+                        <p className="text-[11px] text-foreground mt-1.5 bg-muted/30 p-2 rounded-lg border border-border/50 max-w-xl font-medium">
+                          {h.remarks}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex justify-end pt-4 border-t border-border mt-6">
+                <button
+                  onClick={() => { setHistoryLogModalOpen(false); setViewHistoryQuoteId(null); }}
+                  className="px-4 py-2 bg-secondary hover:bg-muted text-foreground text-xs font-bold rounded-xl transition-all cursor-pointer"
+                >
+                  Close Logs
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </PermissionGuard>
+  );
+};

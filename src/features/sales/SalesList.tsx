@@ -14,7 +14,9 @@ import {
   X,
   CreditCard,
   MessageSquare,
-  Download
+  Download,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 
 const handleWhatsAppShare = (sale: any) => {
@@ -77,6 +79,26 @@ export const SalesList: React.FC = () => {
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [newStatusId, setNewStatusId] = useState('');
   const [statusRemarks, setStatusRemarks] = useState('');
+
+  // Edit Items Modal States
+  const [editItemsModalOpen, setEditItemsModalOpen] = useState(false);
+  const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
+  const [editingSaleItems, setEditingSaleItems] = useState<any[]>([]);
+  const [allServices, setAllServices] = useState<any[]>([]);
+  const [addServiceId, setAddServiceId] = useState('');
+  const [addQty, setAddQty] = useState(1);
+  const [addPrice, setAddPrice] = useState(0);
+  const [editSaving, setEditSaving] = useState(false);
+
+  // Payment Modal States
+  const [payModalOpen, setPayModalOpen] = useState(false);
+  const [payingSaleId, setPayingSaleId] = useState<string | null>(null);
+  const [payingSaleDetails, setPayingSaleDetails] = useState<any | null>(null);
+  const [payAmount, setPayAmount] = useState(0);
+  const [payMethod, setPayMethod] = useState<'Cash' | 'Card' | 'Mobile Banking' | 'Bank Transfer'>('Cash');
+  const [payTxnNo, setPayTxnNo] = useState('');
+  const [payNotes, setPayNotes] = useState('');
+  const [paySaving, setPaySaving] = useState(false);
 
   const fetchSales = async () => {
     setLoading(true);
@@ -162,6 +184,88 @@ export const SalesList: React.FC = () => {
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleOpenEditItems = async (saleId: string) => {
+    try {
+      setEditingSaleId(saleId);
+      const detail = await db.sales.getById(saleId);
+      setEditingSaleItems(detail?.items || []);
+      const svcs = await db.services.getAll();
+      setAllServices(svcs.filter(s => s.status === 'Active'));
+      setAddServiceId('');
+      setAddQty(1);
+      setAddPrice(0);
+      setEditItemsModalOpen(true);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAddItem = async () => {
+    if (!editingSaleId || !addServiceId || addQty <= 0) return;
+    setEditSaving(true);
+    try {
+      await db.sales.addItem(editingSaleId, { service_id: addServiceId, quantity: addQty, unit_price: addPrice });
+      const detail = await db.sales.getById(editingSaleId);
+      setEditingSaleItems(detail?.items || []);
+      setAddServiceId('');
+      setAddQty(1);
+      setAddPrice(0);
+      await fetchSales();
+    } catch (err) { console.error(err); }
+    finally { setEditSaving(false); }
+  };
+
+  const handleRemoveItem = async (itemId: string) => {
+    if (!editingSaleId || !window.confirm('Remove this item from the invoice?')) return;
+    setEditSaving(true);
+    try {
+      await db.sales.removeItem(editingSaleId, itemId);
+      const detail = await db.sales.getById(editingSaleId);
+      setEditingSaleItems(detail?.items || []);
+      await fetchSales();
+    } catch (err) { console.error(err); }
+    finally { setEditSaving(false); }
+  };
+
+  const handleOpenPayModal = async (saleId: string) => {
+    try {
+      const detail = await db.sales.getById(saleId);
+      setPayingSaleId(saleId);
+      setPayingSaleDetails(detail);
+      const totalPaid = (detail?.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0);
+      const due = Math.max(0, (detail?.grand_total || 0) - totalPaid);
+      setPayAmount(parseFloat(due.toFixed(2)));
+      setPayMethod('Cash');
+      setPayTxnNo('');
+      setPayNotes('');
+      setPayModalOpen(true);
+    } catch (err) { console.error(err); }
+  };
+
+  const handleSubmitPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!payingSaleId || payAmount <= 0) return;
+    setPaySaving(true);
+    try {
+      await db.payments.create({
+        sale_id: payingSaleId,
+        amount: payAmount,
+        payment_method: payMethod,
+        transaction_no: payTxnNo || undefined,
+        notes: payNotes || undefined
+      });
+      const detail = await db.sales.getById(payingSaleId);
+      setPayingSaleDetails(detail);
+      const totalPaid = (detail?.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0);
+      const due = Math.max(0, (detail?.grand_total || 0) - totalPaid);
+      setPayAmount(parseFloat(due.toFixed(2)));
+      setPayTxnNo('');
+      setPayNotes('');
+      await fetchSales();
+    } catch (err) { console.error(err); }
+    finally { setPaySaving(false); }
   };
 
   // Sort & Filter
@@ -291,6 +395,7 @@ export const SalesList: React.FC = () => {
                       <tr>
                         <th className="px-4 py-4 text-center w-12">SL</th>
                         <th className="px-5 py-4">Invoice No & Date</th>
+                        <th className="px-5 py-4">Quotation Ref</th>
                         <th className="px-5 py-4">Customer</th>
                         <th className="px-5 py-4">Job Status</th>
                         <th className="px-5 py-4">Payment</th>
@@ -301,7 +406,7 @@ export const SalesList: React.FC = () => {
                     <tbody className="divide-y divide-border/60">
                       {filteredSales.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
+                          <td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">
                             No invoices matched selection filters.
                           </td>
                         </tr>
@@ -325,6 +430,15 @@ export const SalesList: React.FC = () => {
                                 <div className="text-[10px] text-muted-foreground mt-1.5">
                                   {new Date(s.created_at).toLocaleString()} • {s.branch?.name}
                                 </div>
+                              </td>
+                              <td className="px-5 py-4">
+                                {(s as any).quotation_id ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                                    Linked
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground text-[10px]">—</span>
+                                )}
                               </td>
                               <td className="px-5 py-4">
                                 {s.customer ? (
@@ -378,37 +492,53 @@ export const SalesList: React.FC = () => {
                               <td className="px-5 py-4 text-right font-bold text-foreground">
                                  {s.grand_total.toFixed(2)} AED
                               </td>
-                              <td className="px-5 py-4 text-center space-x-2" onClick={(e) => e.stopPropagation()}>
-                                <button
-                                  onClick={() => handleOpenDetail(s.id)}
-                                  className="px-2.5 py-1.5 bg-secondary hover:bg-secondary-foreground/10 text-foreground text-xs font-bold rounded-lg transition-all"
-                                >
-                                  Details
-                                </button>
-                                <button
-                                  onClick={async () => {
-                                    const detail = await db.sales.getById(s.id);
-                                    setSelectedSaleId(s.id);
-                                    setSelectedSaleDetails(detail);
-                                    setTimeout(() => {
-                                      window.print();
-                                    }, 400);
-                                  }}
-                                  className="p-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-white rounded-lg transition-all inline-flex items-center justify-center align-middle"
-                                  title="Print Invoice"
-                                >
-                                  <Printer size={13} />
-                                </button>
-                                <button
-                                  onClick={async () => {
-                                    const detail = await db.sales.getById(s.id);
-                                    handleWhatsAppShare(detail);
-                                  }}
-                                  className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white rounded-lg transition-all inline-flex items-center justify-center align-middle"
-                                  title="Share Invoice Details on WhatsApp"
-                                >
-                                  <MessageSquare size={13} />
-                                </button>
+                              <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    onClick={() => handleOpenDetail(s.id)}
+                                    className="px-2.5 py-1.5 bg-secondary hover:bg-secondary-foreground/10 text-foreground text-xs font-bold rounded-lg transition-all cursor-pointer"
+                                  >
+                                    Details
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      const detail = await db.sales.getById(s.id);
+                                      setSelectedSaleId(s.id);
+                                      setSelectedSaleDetails(detail);
+                                      setTimeout(() => {
+                                        window.print();
+                                      }, 400);
+                                    }}
+                                    className="p-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-white rounded-lg transition-all inline-flex items-center justify-center align-middle cursor-pointer"
+                                    title="Print Invoice"
+                                  >
+                                    <Printer size={13} />
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      const detail = await db.sales.getById(s.id);
+                                      handleWhatsAppShare(detail);
+                                    }}
+                                    className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white rounded-lg transition-all inline-flex items-center justify-center align-middle cursor-pointer"
+                                    title="Share Invoice Details on WhatsApp"
+                                  >
+                                    <MessageSquare size={13} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleOpenEditItems(s.id)}
+                                    className="p-1.5 bg-violet-500/10 hover:bg-violet-500 text-violet-500 hover:text-white rounded-lg transition-all inline-flex items-center justify-center align-middle cursor-pointer"
+                                    title="Edit Invoice Items"
+                                  >
+                                    <Pencil size={13} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleOpenPayModal(s.id)}
+                                    className="p-1.5 bg-emerald-600/10 hover:bg-emerald-600 text-emerald-600 hover:text-white rounded-lg transition-all inline-flex items-center justify-center align-middle cursor-pointer"
+                                    title="Collect Payment / View Payment History"
+                                  >
+                                    <CreditCard size={13} />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -839,6 +969,289 @@ export const SalesList: React.FC = () => {
             </div>
           </div>
         )}
+        {/* EDIT SALE ITEMS MODAL */}
+        {editItemsModalOpen && editingSaleId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className="glass border border-border rounded-2xl p-6 w-full max-w-xl bg-white shadow-2xl relative max-h-[90vh] overflow-y-auto">
+              <button
+                onClick={() => { setEditItemsModalOpen(false); setEditingSaleId(null); }}
+                className="absolute right-4 top-4 p-2 text-muted-foreground hover:text-foreground bg-muted/40 rounded-full transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+
+              <div className="flex items-center gap-2 mb-5">
+                <Pencil size={16} className="text-violet-500" />
+                <div>
+                  <h3 className="text-sm font-bold text-foreground leading-none">Edit Invoice Items</h3>
+                  <span className="text-[10px] text-muted-foreground mt-1 block">Add or remove line items from this sale invoice</span>
+                </div>
+              </div>
+
+              {/* Current Items */}
+              <div className="border border-border rounded-xl overflow-hidden mb-5">
+                <div className="bg-muted/40 px-3 py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border">
+                  Current Items ({editingSaleItems.length})
+                </div>
+                {editingSaleItems.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-5">No items on this invoice.</p>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/20">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-muted-foreground font-semibold">Service</th>
+                        <th className="px-3 py-2 text-center text-muted-foreground font-semibold">Qty</th>
+                        <th className="px-3 py-2 text-right text-muted-foreground font-semibold">Price</th>
+                        <th className="px-3 py-2 text-right text-muted-foreground font-semibold">Total</th>
+                        <th className="px-2 py-2 w-8"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {editingSaleItems.map((item: any) => (
+                        <tr key={item.id} className="border-t border-border/40">
+                          <td className="px-3 py-2 font-medium text-foreground">{item.service?.name || 'Service'}</td>
+                          <td className="px-3 py-2 text-center">{item.quantity}</td>
+                          <td className="px-3 py-2 text-right">{item.unit_price.toFixed(2)}</td>
+                          <td className="px-3 py-2 text-right font-bold">{item.subtotal.toFixed(2)}</td>
+                          <td className="px-2 py-2 text-center">
+                            <button
+                              onClick={() => handleRemoveItem(item.id)}
+                              disabled={editSaving}
+                              className="p-1 text-rose-400 hover:text-rose-600 hover:bg-rose-500/10 rounded transition-colors cursor-pointer"
+                              title="Remove item"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Add New Item */}
+              <div className="border border-violet-500/20 bg-violet-500/5 rounded-xl p-4 space-y-3">
+                <p className="text-[11px] font-bold text-violet-600 uppercase tracking-wider">Add New Item</p>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Service</label>
+                  <select
+                    value={addServiceId}
+                    onChange={(e) => {
+                      const svc = allServices.find(s => s.id === e.target.value);
+                      setAddServiceId(e.target.value);
+                      if (svc) setAddPrice(svc.price);
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-violet-500 cursor-pointer"
+                  >
+                    <option value="">-- Select a Service --</option>
+                    {allServices.map(s => (
+                      <option key={s.id} value={s.id}>{s.name} — {s.price.toFixed(2)} AED</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Quantity</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={addQty}
+                      onChange={(e) => setAddQty(parseInt(e.target.value) || 1)}
+                      className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-violet-500"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Unit Price (AED)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={addPrice}
+                      onChange={(e) => setAddPrice(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-violet-500"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-xs text-muted-foreground font-semibold">
+                    Subtotal: <strong className="text-foreground">{(addQty * addPrice).toFixed(2)} AED</strong>
+                  </span>
+                  <button
+                    onClick={handleAddItem}
+                    disabled={editSaving || !addServiceId}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-violet-500 hover:bg-violet-600 text-white text-xs font-bold rounded-xl transition-all shadow-md disabled:opacity-50 cursor-pointer"
+                  >
+                    <Plus size={13} />
+                    Add to Invoice
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4 border-t border-border mt-4">
+                <button
+                  onClick={() => { setEditItemsModalOpen(false); setEditingSaleId(null); }}
+                  className="px-4 py-2 bg-secondary hover:bg-muted text-foreground text-xs font-bold rounded-xl transition-all cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* PAYMENT MODAL */}
+        {payModalOpen && payingSaleDetails && (() => {
+          const totalPaid = (payingSaleDetails.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0);
+          const grandTotal = payingSaleDetails.grand_total || 0;
+          const due = Math.max(0, grandTotal - totalPaid);
+          const isPaid = due <= 0;
+
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+              <div className="glass border border-border rounded-2xl p-6 w-full max-w-lg bg-white shadow-2xl relative max-h-[90vh] overflow-y-auto">
+                <button
+                  onClick={() => { setPayModalOpen(false); setPayingSaleId(null); setPayingSaleDetails(null); }}
+                  className="absolute right-4 top-4 p-2 text-muted-foreground hover:text-foreground bg-muted/40 rounded-full transition-colors cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+
+                <div className="flex items-center gap-2 mb-5">
+                  <CreditCard size={16} className="text-emerald-600" />
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground leading-none">Payment — #{payingSaleDetails.invoice_no}</h3>
+                    <span className="text-[10px] text-muted-foreground mt-1 block">{payingSaleDetails.customer?.name || 'Walk-in Customer'}</span>
+                  </div>
+                </div>
+
+                {/* Summary Cards */}
+                <div className="grid grid-cols-3 gap-3 mb-5">
+                  <div className="bg-muted/30 border border-border rounded-xl p-3 text-center">
+                    <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Grand Total</div>
+                    <div className="text-sm font-bold text-foreground">{grandTotal.toFixed(2)} <span className="text-[10px] text-muted-foreground">AED</span></div>
+                  </div>
+                  <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-3 text-center">
+                    <div className="text-[10px] font-bold text-emerald-600/70 uppercase tracking-wider mb-1">Total Paid</div>
+                    <div className="text-sm font-bold text-emerald-600">{totalPaid.toFixed(2)} <span className="text-[10px]">AED</span></div>
+                  </div>
+                  <div className={`border rounded-xl p-3 text-center ${isPaid ? 'bg-blue-500/5 border-blue-500/20' : 'bg-rose-500/5 border-rose-500/20'}`}>
+                    <div className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${isPaid ? 'text-blue-500/70' : 'text-rose-500/70'}`}>Outstanding Due</div>
+                    <div className={`text-sm font-bold ${isPaid ? 'text-blue-500' : 'text-rose-500'}`}>{due.toFixed(2)} <span className="text-[10px]">AED</span></div>
+                  </div>
+                </div>
+
+                {/* Payment History */}
+                <div className="border border-border rounded-xl overflow-hidden mb-5">
+                  <div className="bg-muted/40 px-3 py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border">
+                    Payment History ({(payingSaleDetails.payments || []).length})
+                  </div>
+                  {(payingSaleDetails.payments || []).length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-4">No payments recorded yet.</p>
+                  ) : (
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/20">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-muted-foreground font-semibold">Date</th>
+                          <th className="px-3 py-2 text-left text-muted-foreground font-semibold">Method</th>
+                          <th className="px-3 py-2 text-left text-muted-foreground font-semibold">Txn #</th>
+                          <th className="px-3 py-2 text-right text-muted-foreground font-semibold">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(payingSaleDetails.payments || []).map((p: any, idx: number) => (
+                          <tr key={p.id || idx} className="border-t border-border/40">
+                            <td className="px-3 py-2 text-muted-foreground">{new Date(p.payment_date || p.created_at).toLocaleDateString()}</td>
+                            <td className="px-3 py-2 font-medium text-foreground">{p.payment_method}</td>
+                            <td className="px-3 py-2 text-muted-foreground font-mono">{p.transaction_no || '—'}</td>
+                            <td className="px-3 py-2 text-right font-bold text-emerald-600">{p.amount.toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                {/* Collect Payment Form */}
+                {!isPaid ? (
+                  <form onSubmit={handleSubmitPayment} className="border border-emerald-500/20 bg-emerald-500/5 rounded-xl p-4 space-y-3">
+                    <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Collect Payment</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Amount (AED)</label>
+                        <input
+                          type="number"
+                          min={0.01}
+                          step={0.01}
+                          max={due}
+                          value={payAmount}
+                          onChange={(e) => setPayAmount(parseFloat(e.target.value) || 0)}
+                          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-emerald-500"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Method</label>
+                        <select
+                          value={payMethod}
+                          onChange={(e) => setPayMethod(e.target.value as any)}
+                          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                        >
+                          <option value="Cash">Cash</option>
+                          <option value="Card">Card</option>
+                          <option value="Mobile Banking">Mobile Banking</option>
+                          <option value="Bank Transfer">Bank Transfer</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Transaction / Reference No.</label>
+                      <input
+                        type="text"
+                        value={payTxnNo}
+                        onChange={(e) => setPayTxnNo(e.target.value)}
+                        placeholder="Optional — e.g. bank ref, receipt no"
+                        className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Notes</label>
+                      <input
+                        type="text"
+                        value={payNotes}
+                        onChange={(e) => setPayNotes(e.target.value)}
+                        placeholder="Optional remarks about this payment"
+                        className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="submit"
+                        disabled={paySaving || payAmount <= 0}
+                        className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-md disabled:opacity-50 cursor-pointer"
+                      >
+                        <CreditCard size={13} />
+                        Record Payment
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="text-center py-3 text-xs font-bold text-emerald-600 bg-emerald-500/5 border border-emerald-500/20 rounded-xl">
+                    ✓ Invoice fully paid. No outstanding balance.
+                  </div>
+                )}
+
+                <div className="flex justify-end pt-4 border-t border-border mt-4">
+                  <button
+                    onClick={() => { setPayModalOpen(false); setPayingSaleId(null); setPayingSaleDetails(null); }}
+                    className="px-4 py-2 bg-secondary hover:bg-muted text-foreground text-xs font-bold rounded-xl transition-all cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
       </div>
     </PermissionGuard>
