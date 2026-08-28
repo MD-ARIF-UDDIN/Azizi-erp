@@ -3,7 +3,7 @@ import type {
   Branch, Role, Permission, RolePermission, User, Customer,
   ServiceCategory, Service, OrderStatus, Sale, SaleItem, Payment,
   ExpenseCategory, Expense, OrderStatusHistory, AuditLog, ClientDocument,
-  Quotation, QuotationItem
+  Quotation, QuotationItem, QuotationStatusHistory, TermsConditions
 } from '../types/database';
 
 // A mock helper to generate UUIDs locally
@@ -31,6 +31,7 @@ const KEYS = {
   QUOTATIONS: 'azizi_erp_quotations',
   QUOTATION_ITEMS: 'azizi_erp_quotation_items',
   QUOTATION_STATUS_HISTORY: 'azizi_erp_quotation_status_history',
+  TERMS_CONDITIONS: 'azizi_erp_terms_conditions',
 };
 
 // Seed Helper
@@ -404,10 +405,44 @@ const SEED_CLIENT_DOCUMENTS = (customers: Customer[]) => {
   ];
 };
 
+const SEED_TERMS_CONDITIONS = (): TermsConditions[] => {
+  const now = new Date();
+  return [
+    {
+      id: 'tc-uuid-1',
+      title: 'Validity',
+      content: 'This quotation is valid for 15 days from the date of issue.',
+      sequence: 1,
+      is_deleted: false,
+      created_at: now.toISOString(),
+      updated_at: now.toISOString()
+    },
+    {
+      id: 'tc-uuid-2',
+      title: 'Payment Terms',
+      content: '50% advance payment is required to initiate orders. Remaining balance must be cleared upon delivery.',
+      sequence: 2,
+      is_deleted: false,
+      created_at: now.toISOString(),
+      updated_at: now.toISOString()
+    },
+    {
+      id: 'tc-uuid-3',
+      title: 'Verification',
+      content: 'Customers must carefully verify typed contents (names, spelling, numbers) before official submission.',
+      sequence: 3,
+      is_deleted: false,
+      created_at: now.toISOString(),
+      updated_at: now.toISOString()
+    }
+  ];
+};
+
 let _clientDocuments: ClientDocument[] = getOrSeed(KEYS.CLIENT_DOCUMENTS, () => SEED_CLIENT_DOCUMENTS(_customers));
 let _quotations: Quotation[] = getOrSeed(KEYS.QUOTATIONS, () => []);
 let _quotationItems: QuotationItem[] = getOrSeed(KEYS.QUOTATION_ITEMS, () => []);
 let _quotationHistory: QuotationStatusHistory[] = getOrSeed(KEYS.QUOTATION_STATUS_HISTORY, () => []);
+let _termsConditions: TermsConditions[] = getOrSeed(KEYS.TERMS_CONDITIONS, () => SEED_TERMS_CONDITIONS());
 
 const saveAll = () => {
   saveToLocalStorage(KEYS.BRANCHES, _branches);
@@ -430,6 +465,7 @@ const saveAll = () => {
   saveToLocalStorage(KEYS.QUOTATIONS, _quotations);
   saveToLocalStorage(KEYS.QUOTATION_ITEMS, _quotationItems);
   saveToLocalStorage(KEYS.QUOTATION_STATUS_HISTORY, _quotationHistory);
+  saveToLocalStorage(KEYS.TERMS_CONDITIONS, _termsConditions);
 };
 
 const logAudit = (userId: string | undefined, action: string, tableName: string, recordId: string, oldData?: any, newData?: any) => {
@@ -1842,11 +1878,14 @@ export const db = {
         if (error) throw error;
 
         const resolvedQuotations = [];
+        const { data: terms } = await supabase.from('terms_conditions').select('*');
         for (const q of (data || [])) {
           const { data: items } = await supabase.from('quotation_items').select('*, service:services(*)').eq('quotation_id', q.id);
+          const qTerms = (terms || []).filter(t => (q.terms_conditions_ids || []).includes(t.id));
           resolvedQuotations.push({
             ...q,
-            items: items || []
+            items: items || [],
+            terms_conditions: qTerms
           });
         }
         return resolvedQuotations;
@@ -1862,6 +1901,7 @@ export const db = {
         branch: _branches.find(b => b.id === q.branch_id),
         employee: _users.find(u => u.id === q.employee_id),
         converted_sale: _sales.find(s => s.id === q.converted_sale_id),
+        terms_conditions: _termsConditions.filter(t => (q.terms_conditions_ids || []).includes(t.id)),
         items: _quotationItems.filter((qi: QuotationItem) => qi.quotation_id === q.id).map((qi: QuotationItem) => ({
           ...qi,
           service: _services.find(srv => srv.id === qi.service_id)
@@ -1874,10 +1914,17 @@ export const db = {
         if (qErr) throw qErr;
 
         const { data: items } = await supabase.from('quotation_items').select('*, service:services(*)').eq('quotation_id', id);
+        
+        let qTerms: any[] = [];
+        if (q.terms_conditions_ids && q.terms_conditions_ids.length > 0) {
+          const { data: terms } = await supabase.from('terms_conditions').select('*').in('id', q.terms_conditions_ids);
+          qTerms = terms || [];
+        }
 
         return {
           ...q,
-          items: items || []
+          items: items || [],
+          terms_conditions: qTerms
         };
       }
 
@@ -1895,6 +1942,7 @@ export const db = {
         branch: _branches.find(b => b.id === q.branch_id),
         employee: _users.find(u => u.id === q.employee_id),
         converted_sale: _sales.find(s => s.id === q.converted_sale_id),
+        terms_conditions: _termsConditions.filter(t => (q.terms_conditions_ids || []).includes(t.id)),
         items
       });
     },
@@ -1905,6 +1953,7 @@ export const db = {
       status?: Quotation['status'];
       valid_until?: string;
       notes?: string;
+      terms_conditions_ids?: string[];
       items: Array<{ service_id: string; quantity: number; unit_price: number }>;
       person_name?: string;
       person_phone?: string;
@@ -1938,6 +1987,7 @@ export const db = {
           status: data.status || 'Draft',
           valid_until: data.valid_until,
           notes: data.notes,
+          terms_conditions_ids: data.terms_conditions_ids || [],
           created_by: activeUser.id,
           updated_by: activeUser.id,
           person_name: data.person_name,
@@ -1999,6 +2049,7 @@ export const db = {
         status: data.status || 'Draft',
         valid_until: data.valid_until,
         notes: data.notes,
+        terms_conditions_ids: data.terms_conditions_ids || [],
         person_name: data.person_name,
         person_phone: data.person_phone,
         person_email: data.person_email,
@@ -2191,6 +2242,87 @@ export const db = {
       }
 
       return createdSale;
+    }
+  },
+  termsConditions: {
+    getAll: async () => {
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase.from('terms_conditions').select('*').eq('is_deleted', false).order('sequence', { ascending: true });
+        if (error) throw error;
+        return data as TermsConditions[];
+      }
+      const active = _termsConditions.filter(t => !t.is_deleted).sort((a, b) => a.sequence - b.sequence);
+      return delay(active);
+    },
+    getById: async (id: string) => {
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase.from('terms_conditions').select('*').eq('id', id).eq('is_deleted', false).single();
+        if (error) throw error;
+        return data as TermsConditions;
+      }
+      const term = _termsConditions.find(t => t.id === id && !t.is_deleted);
+      return delay(term);
+    },
+    create: async (data: Omit<TermsConditions, 'id' | 'is_deleted' | 'created_at' | 'updated_at'>) => {
+      const activeUser = getActiveUserSession();
+      const now = new Date();
+      const id = generateUUID();
+      const newTerm: TermsConditions = {
+        ...data,
+        id,
+        is_deleted: false,
+        created_at: now.toISOString(),
+        updated_at: now.toISOString()
+      };
+
+      if (isSupabaseConfigured && supabase) {
+        const { data: created, error } = await supabase.from('terms_conditions').insert([newTerm]).select().single();
+        if (error) throw error;
+        return created as TermsConditions;
+      }
+
+      _termsConditions.push(newTerm);
+      saveAll();
+      logAudit(activeUser.id, 'INSERT_TERM', 'terms_conditions', id, null, newTerm);
+      return newTerm;
+    },
+    update: async (id: string, data: Partial<Omit<TermsConditions, 'id' | 'created_at' | 'updated_at'>>) => {
+      const activeUser = getActiveUserSession();
+      const now = new Date();
+
+      if (isSupabaseConfigured && supabase) {
+        const { data: updated, error } = await supabase.from('terms_conditions').update(data).eq('id', id).select().single();
+        if (error) throw error;
+        return updated as TermsConditions;
+      }
+
+      const idx = _termsConditions.findIndex(t => t.id === id);
+      if (idx === -1) throw new Error('Term & Condition not found');
+      const old = _termsConditions[idx];
+      const updated = { ...old, ...data, updated_at: now.toISOString() };
+      _termsConditions[idx] = updated;
+      saveAll();
+      logAudit(activeUser.id, 'UPDATE_TERM', 'terms_conditions', id, old, updated);
+      return updated;
+    },
+    delete: async (id: string) => {
+      const activeUser = getActiveUserSession();
+      const now = new Date();
+
+      if (isSupabaseConfigured && supabase) {
+        const { error } = await supabase.from('terms_conditions').update({ is_deleted: true }).eq('id', id);
+        if (error) throw error;
+        return true;
+      }
+
+      const idx = _termsConditions.findIndex(t => t.id === id);
+      if (idx === -1) throw new Error('Term & Condition not found');
+      const old = _termsConditions[idx];
+      const updated = { ...old, is_deleted: true, updated_at: now.toISOString() };
+      _termsConditions[idx] = updated;
+      saveAll();
+      logAudit(activeUser.id, 'DELETE_TERM', 'terms_conditions', id, old, updated);
+      return true;
     }
   }
 };

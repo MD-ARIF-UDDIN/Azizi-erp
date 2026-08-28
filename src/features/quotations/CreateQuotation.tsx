@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../lib/db';
-import type { Service, Customer } from '../../types/database';
+import type { Service, Customer, TermsConditions } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
 import { useNavigate } from 'react-router-dom';
@@ -48,6 +48,8 @@ export const CreateQuotation: React.FC = () => {
 
   const [errorMsg, setErrorMsg] = useState('');
   const [saving, setSaving] = useState(false);
+  const [termsList, setTermsList] = useState<TermsConditions[]>([]);
+  const [selectedTermIds, setSelectedTermIds] = useState<string[]>([]);
 
   const selectedCustomerRecord = customers.find(c => c.id === customerId);
   const isCompanySelected = selectedCustomerRecord?.customer_type === 'company';
@@ -81,6 +83,9 @@ export const CreateQuotation: React.FC = () => {
         const defaultDate = new Date();
         defaultDate.setDate(defaultDate.getDate() + 30);
         setValidUntil(defaultDate.toISOString().split('T')[0]);
+
+        const tData = await db.termsConditions.getAll();
+        setTermsList(tData);
       } catch (err) {
         console.error(err);
       }
@@ -209,6 +214,7 @@ export const CreateQuotation: React.FC = () => {
           status,
           valid_until: validUntil || undefined,
           notes: notes ? `${notes}` : undefined,
+          terms_conditions_ids: selectedTermIds,
           items: groupItems.map(item => ({
             service_id: item.service.id,
             quantity: item.quantity,
@@ -585,6 +591,40 @@ export const CreateQuotation: React.FC = () => {
                   onChange={(e) => setNotes(e.target.value)}
                   className="w-full px-3 py-1.5 bg-muted/30 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
+              </div>
+
+              {/* Terms & Conditions Selection */}
+              <div className="space-y-2 border-t border-border/80 pt-3">
+                <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground block">Apply Terms & Conditions</label>
+                {termsList.length === 0 ? (
+                  <p className="text-[11px] text-muted-foreground italic">No terms configured in global settings.</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-[150px] overflow-y-auto pr-1">
+                    {termsList.map(t => {
+                      const isSelected = selectedTermIds.includes(t.id);
+                      return (
+                        <label key={t.id} className="flex items-start gap-2 bg-muted/20 hover:bg-muted/30 p-2 rounded-lg border border-border/60 text-[11px] font-medium text-foreground cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {
+                              if (isSelected) {
+                                setSelectedTermIds(selectedTermIds.filter(id => id !== t.id));
+                              } else {
+                                setSelectedTermIds([...selectedTermIds, t.id]);
+                              }
+                            }}
+                            className="mt-0.5 cursor-pointer"
+                          />
+                          <div>
+                            <span className="font-bold text-foreground block">{t.title}</span>
+                            <span className="text-muted-foreground block text-[10px] leading-tight mt-0.5">{t.content}</span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Summary Calculations */}

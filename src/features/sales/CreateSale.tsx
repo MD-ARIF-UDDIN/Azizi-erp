@@ -335,7 +335,7 @@ export const CreateSale: React.FC = () => {
             <ChevronLeft size={16} />
           </button>
           <div>
-            <div className="text-xs font-bold text-primary uppercase tracking-wider mb-0.5">eSales</div>
+            <div className="text-xs font-bold text-primary uppercase tracking-wider mb-0.5">Invoices</div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground m-0">Create</h1>
           </div>
         </div>

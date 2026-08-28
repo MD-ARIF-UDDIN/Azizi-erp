@@ -14,6 +14,7 @@ import {
   Trash2,
   X
 } from 'lucide-react';
+import { TermsConditionsManager } from './TermsConditionsManager';
 
 export const SettingsPanel: React.FC = () => {
   useAuth();
@@ -151,6 +152,16 @@ export const SettingsPanel: React.FC = () => {
             }`}
           >
             Branch Settings
+          </button>
+          <button
+            onClick={() => setSearchParams({ tab: 'terms' })}
+            className={`px-4 py-2 text-xs font-semibold border-b-2 transition-all cursor-pointer ${
+              activeTab === 'terms'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Terms & Conditions
           </button>
         </div>
 
@@ -375,6 +386,9 @@ export const SettingsPanel: React.FC = () => {
                   </div>
                 </div>
               </div>
+            )}
+            {activeTab === 'terms' && (
+              <TermsConditionsManager />
             )}
           </div>
         )}

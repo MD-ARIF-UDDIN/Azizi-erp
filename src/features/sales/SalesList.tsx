@@ -295,7 +295,7 @@ export const SalesList: React.FC = () => {
         {/* HEADER */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
           <div>
-            <div className="text-xs font-bold text-primary uppercase tracking-wider mb-0.5">eSales</div>
+            <div className="text-xs font-bold text-primary uppercase tracking-wider mb-0.5">Invoices</div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground m-0">List</h1>
           </div>
           {hasPermission('Sales.Create') && (

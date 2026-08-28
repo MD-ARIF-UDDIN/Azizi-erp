@@ -226,6 +226,8 @@ export interface Quotation {
   person_phone?: string;
   person_email?: string;
   converted_sale_id?: string;
+  terms_conditions_ids?: string[];
+  terms_conditions?: TermsConditions[];
   is_deleted: boolean;
   created_at: string;
   updated_at: string;
@@ -251,5 +253,15 @@ export interface QuotationStatusHistory {
   remarks?: string;
   changed_at: string;
   changed_by?: string;
+}
+
+export interface TermsConditions {
+  id: string;
+  title: string;
+  content: string;
+  sequence: number;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
 }
 

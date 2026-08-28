@@ -26,7 +26,8 @@ import {
   MessageSquare,
   User,
   Building2,
-  Download
+  Download,
+  Pencil
 } from 'lucide-react';
 
 const handleWhatsAppShare = (sale: any) => {
@@ -118,6 +119,65 @@ export const CustomerList: React.FC = () => {
   const [qpNotes, setQpNotes] = useState('');
   const [qpSaving, setQpSaving] = useState(false);
   const [qpError, setQpError] = useState('');
+
+  // --- Edit Invoice Items State ---
+  const [editItemsModalOpen, setEditItemsModalOpen] = useState(false);
+  const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
+  const [editingSaleItems, setEditingSaleItems] = useState<any[]>([]);
+  const [allServices, setAllServices] = useState<any[]>([]);
+  const [addServiceId, setAddServiceId] = useState('');
+  const [addQty, setAddQty] = useState(1);
+  const [addPrice, setAddPrice] = useState(0);
+  const [editSaving, setEditSaving] = useState(false);
+
+  const handleOpenEditItems = async (saleId: string) => {
+    try {
+      setEditingSaleId(saleId);
+      const detail = await db.sales.getById(saleId);
+      setEditingSaleItems(detail?.items || []);
+      const svcs = await db.services.getAll();
+      setAllServices(svcs.filter(s => s.status === 'Active'));
+      setAddServiceId('');
+      setAddQty(1);
+      setAddPrice(0);
+      setEditItemsModalOpen(true);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAddItem = async () => {
+    if (!editingSaleId || !addServiceId || addQty <= 0) return;
+    setEditSaving(true);
+    try {
+      await db.sales.addItem(editingSaleId, { service_id: addServiceId, quantity: addQty, unit_price: addPrice });
+      const detail = await db.sales.getById(editingSaleId);
+      setEditingSaleItems(detail?.items || []);
+      setAddServiceId('');
+      setAddQty(1);
+      setAddPrice(0);
+      await fetchCustomers();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleRemoveItem = async (itemId: string) => {
+    if (!editingSaleId || !window.confirm('Remove this item from the invoice?')) return;
+    setEditSaving(true);
+    try {
+      await db.sales.removeItem(editingSaleId, itemId);
+      const detail = await db.sales.getById(editingSaleId);
+      setEditingSaleItems(detail?.items || []);
+      await fetchCustomers();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setEditSaving(false);
+    }
+  };
 
   const fetchCustomers = async () => {
     setLoading(true);
@@ -888,6 +948,15 @@ export const CustomerList: React.FC = () => {
                               <MessageSquare size={13} />
                             </button>
                           )}
+                          {hasPermission('Sales.Update') && (
+                            <button
+                              title="Edit Invoice Items"
+                              onClick={() => handleOpenEditItems(s.id)}
+                              className="p-2 rounded-lg bg-violet-500/10 hover:bg-violet-500 text-violet-500 hover:text-white transition-all flex-shrink-0"
+                            >
+                              <Pencil size={13} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))
@@ -1246,6 +1315,138 @@ export const CustomerList: React.FC = () => {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* EDIT INVOICE ITEMS MODAL (Z-INDEX 60 overlaying details modal) */}
+      {editItemsModalOpen && editingSaleId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm print:hidden">
+          <div className="glass border border-border rounded-2xl p-6 w-full max-w-xl bg-white shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => { setEditItemsModalOpen(false); setEditingSaleId(null); }}
+              className="absolute right-4 top-4 p-2 text-muted-foreground hover:text-foreground bg-muted/40 rounded-full transition-colors cursor-pointer"
+            >
+              <X size={16} />
+            </button>
+
+            <div className="flex items-center gap-2 mb-5">
+              <Pencil size={16} className="text-violet-500" />
+              <div>
+                <h3 className="text-sm font-bold text-foreground leading-none">Edit Invoice Items</h3>
+                <span className="text-[10px] text-muted-foreground mt-1 block">Add or remove line items from this sale invoice</span>
+              </div>
+            </div>
+
+            {/* Current Items */}
+            <div className="border border-border rounded-xl overflow-hidden mb-5">
+              <div className="bg-muted/40 px-3 py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border">
+                Current Items ({editingSaleItems.length})
+              </div>
+              {editingSaleItems.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-5">No items on this invoice.</p>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/20">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-muted-foreground font-semibold">Service</th>
+                      <th className="px-3 py-2 text-center text-muted-foreground font-semibold">Qty</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-semibold">Price</th>
+                      <th className="px-3 py-2 text-right text-muted-foreground font-semibold">Total</th>
+                      <th className="px-2 py-2 w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {editingSaleItems.map((item: any) => (
+                      <tr key={item.id} className="border-t border-border/40 text-foreground">
+                        <td className="px-3 py-2 font-medium text-foreground">{item.service?.name || 'Service'}</td>
+                        <td className="px-3 py-2 text-center text-foreground">{item.quantity}</td>
+                        <td className="px-3 py-2 text-right text-foreground">{item.unit_price.toFixed(2)}</td>
+                        <td className="px-3 py-2 text-right font-bold text-foreground">{item.subtotal.toFixed(2)}</td>
+                        <td className="px-2 py-2 text-center">
+                          <button
+                            onClick={() => handleRemoveItem(item.id)}
+                            disabled={editSaving}
+                            className="p-1 text-rose-400 hover:text-rose-600 hover:bg-rose-500/10 rounded transition-colors cursor-pointer"
+                            title="Remove item"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Add New Item */}
+            <div className="border border-violet-500/20 bg-violet-500/5 rounded-xl p-4 space-y-3">
+              <p className="text-[11px] font-bold text-violet-600 uppercase tracking-wider">Add New Item</p>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Service</label>
+                <select
+                  value={addServiceId}
+                  onChange={(e) => {
+                    const svc = allServices.find(s => s.id === e.target.value);
+                    setAddServiceId(e.target.value);
+                    if (svc) setAddPrice(svc.price);
+                  }}
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-violet-500 cursor-pointer"
+                >
+                  <option value="">-- Select a Service --</option>
+                  {allServices.map(s => (
+                    <option key={s.id} value={s.id}>{s.name} — {s.price.toFixed(2)} AED</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Quantity</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={addQty}
+                    onChange={(e) => setAddQty(parseInt(e.target.value) || 1)}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-violet-500"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Unit Price (AED)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={addPrice}
+                    onChange={(e) => setAddPrice(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-violet-500"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-xs text-muted-foreground font-semibold">
+                  Subtotal: <strong className="text-foreground">{(addQty * addPrice).toFixed(2)} AED</strong>
+                </span>
+                <button
+                  onClick={handleAddItem}
+                  disabled={editSaving || !addServiceId}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-violet-500 hover:bg-violet-600 text-white text-xs font-bold rounded-xl transition-all shadow-md disabled:opacity-50 cursor-pointer"
+                >
+                  <Plus size={13} />
+                  Add to Invoice
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-4 border-t border-border mt-4">
+              <button
+                onClick={() => { setEditItemsModalOpen(false); setEditingSaleId(null); }}
+                className="px-4 py-2 bg-secondary hover:bg-muted text-foreground text-xs font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Done
+              </button>
             </div>
           </div>
         </div>

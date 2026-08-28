@@ -357,7 +357,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                 />
 
                 <SidebarDropdown
-                  label="eSales"
+                  label="Invoices"
                   icon={<Receipt size={18} />}
                   collapsed={isCollapsedResponsive}
                   permission="Sales.View"
@@ -404,7 +404,8 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
               permission="Settings.Update"
               links={[
                 { to: '/settings?tab=company', label: 'Company Settings', permission: 'Settings.Update' },
-                { to: '/settings?tab=branches', label: 'Branch Settings', permission: 'Settings.Update' }
+                { to: '/settings?tab=branches', label: 'Branch Settings', permission: 'Settings.Update' },
+                { to: '/settings?tab=terms', label: 'Terms & Conditions', permission: 'Settings.Update' }
               ]}
             />
           </nav>

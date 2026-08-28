@@ -638,11 +638,24 @@ export const QuotationsList: React.FC = () => {
                         </tbody>
                       </table>
 
-                      {/* Notes Box */}
-                      {quote.notes && (
-                        <div className="mt-4 p-3 border border-gray-300 rounded text-xs bg-gray-55/40 text-black">
-                          <strong className="text-gray-800 block mb-1">Quotation Terms & Conditions:</strong>
-                          <span className="whitespace-pre-line text-[11px] text-gray-700 font-medium">{quote.notes}</span>
+                      {/* Terms & Conditions Box */}
+                      {((quote.terms_conditions && quote.terms_conditions.length > 0) || quote.notes) && (
+                        <div className="mt-4 p-3 border border-gray-300 rounded text-xs bg-gray-50 text-black text-left">
+                          <strong className="text-gray-800 block mb-1.5 font-bold">Terms & Conditions:</strong>
+                          {quote.terms_conditions && quote.terms_conditions.length > 0 && (
+                            <ol className="list-decimal pl-4 mb-2 space-y-1 text-[11px] text-gray-700 font-medium leading-relaxed">
+                              {quote.terms_conditions.map((tc: any) => (
+                                <li key={tc.id}>
+                                  <span className="font-bold text-gray-850">{tc.title}:</span> {tc.content}
+                                </li>
+                              ))}
+                            </ol>
+                          )}
+                          {quote.notes && (
+                            <div className="text-[11px] text-gray-700 font-medium whitespace-pre-line leading-relaxed border-t border-gray-200/60 pt-2 mt-2">
+                              {quote.notes}
+                            </div>
+                          )}
                         </div>
                       )}
 
