@@ -133,6 +133,7 @@ export interface SaleItem {
   unit_price: number;
   subtotal: number;
   person_name?: string;
+  service_date?: string;
   service?: Service;
   created_at: string;
   updated_at: string;

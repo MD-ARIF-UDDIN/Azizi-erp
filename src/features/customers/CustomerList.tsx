@@ -28,7 +28,8 @@ import {
   Users,
   Building2,
   Download,
-  Pencil
+  Pencil,
+  CheckCircle2
 } from 'lucide-react';
 
 const handleWhatsAppShare = (sale: any) => {
@@ -997,84 +998,123 @@ export const CustomerList: React.FC = () => {
               </div>
 
               {/* 2. OVERVIEW KPI TILES */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-5 border-b border-border shrink-0 bg-background">
-                {/* Tile 1: Outstanding Balance */}
-                <div className="p-3.5 rounded-xl border border-border bg-muted/20 flex flex-col justify-between">
-                  <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    Outstanding Balance
-                  </div>
-                  <div className="mt-1 flex items-center justify-between">
-                    {selectedCustomer.due > 0 ? (
-                      <div>
-                        <div className="text-lg font-black text-rose-600 dark:text-rose-400">
-                          {selectedCustomer.due.toFixed(2)} <span className="text-xs font-normal">AED</span>
-                        </div>
-                        <span className="text-[10px] font-semibold text-rose-500">Unpaid Balance Due</span>
-                      </div>
-                    ) : (
-                      <div>
-                        <div className="text-lg font-black text-emerald-600 dark:text-emerald-400">
-                          0.00 <span className="text-xs font-normal">AED</span>
-                        </div>
-                        <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">✓ Account Clear</span>
-                      </div>
-                    )}
-                    {selectedCustomer.due > 0 && hasPermission('Payments.Create') && (
-                      <button
-                        onClick={() => {
-                          const targetCust = selectedCustomer;
-                          setSelectedCustomer(null);
-                          openQuickPayment(targetCust);
-                        }}
-                        className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg shadow-xs transition-all cursor-pointer flex items-center gap-1"
-                      >
-                        <CreditCard size={12} />
-                        <span>Pay</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
+              {(() => {
+                const totalBilling = (selectedCustomer.sales || []).reduce((sum: number, s: any) => sum + (s.grand_total || 0), 0);
+                const outstandingDue = Number(selectedCustomer.due) || 0;
+                
+                // Calculate paid amount from payments if available, else derive from billing - due
+                const paymentsSum = (selectedCustomer.sales || []).reduce((sum: number, s: any) => {
+                  const salePayments = (s.payments || []).reduce((pSum: number, p: any) => pSum + (p.amount || 0), 0);
+                  if (salePayments > 0) return sum + salePayments;
+                  if (s.payment_status === 'Paid') return sum + (s.grand_total || 0);
+                  if (s.payment_status === 'Partially Paid') return sum + Math.max(0, (s.grand_total || 0) - (s.remaining || 0));
+                  return sum;
+                }, 0);
+                const totalPaid = paymentsSum > 0 ? paymentsSum : Math.max(0, totalBilling - outstandingDue);
 
-                {/* Tile 2: Total Billing Ledger */}
-                <div className="p-3.5 rounded-xl border border-border bg-muted/20 flex flex-col justify-between">
-                  <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    Total Invoices & Billing
-                  </div>
-                  <div className="mt-1">
-                    <div className="text-lg font-black text-foreground">
-                      {(selectedCustomer.sales || []).reduce((sum: number, s: any) => sum + (s.grand_total || 0), 0).toFixed(2)}{' '}
-                      <span className="text-xs font-normal text-muted-foreground">AED</span>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground font-semibold">
-                      Across {(selectedCustomer.sales || []).length} recorded invoice{(selectedCustomer.sales || []).length !== 1 ? 's' : ''}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Tile 3: Tracked Visas & Docs */}
-                <div className="p-3.5 rounded-xl border border-border bg-muted/20 flex flex-col justify-between">
-                  <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    Tracked Documents
-                  </div>
-                  <div className="mt-1 flex items-center justify-between">
-                    <div>
-                      <div className="text-lg font-black text-foreground">
-                        {selectedCustDocs.length}
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-5 border-b border-border shrink-0 bg-background">
+                    {/* Tile 1: Total Invoices & Billing */}
+                    <div className="p-3.5 rounded-xl border border-border bg-muted/20 flex flex-col justify-between">
+                      <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        Total Billing
                       </div>
-                      <span className="text-[10px] text-muted-foreground font-semibold">
-                        {selectedCustDocs.filter(d => getDaysRemaining(d.expiry_date) <= 30).length > 0 ? (
-                          <span className="text-amber-500 font-bold">
-                            ⚠️ {selectedCustDocs.filter(d => getDaysRemaining(d.expiry_date) <= 30).length} expiring soon
+                      <div className="mt-1 flex items-center justify-between">
+                        <div>
+                          <div className="text-lg font-black text-foreground">
+                            {totalBilling.toFixed(2)}{' '}
+                            <span className="text-xs font-normal text-muted-foreground">AED</span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground font-semibold">
+                            {(selectedCustomer.sales || []).length} invoice{(selectedCustomer.sales || []).length !== 1 ? 's' : ''}
                           </span>
-                        ) : (
-                          'Active valid records'
-                        )}
-                      </span>
+                        </div>
+                        <ReceiptText size={18} className="text-blue-500 opacity-70 shrink-0" />
+                      </div>
                     </div>
-                    <Calendar size={18} className="text-primary opacity-60" />
+
+                    {/* Tile 2: Total Paid (Collected) */}
+                    <div className="p-3.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 flex flex-col justify-between">
+                      <div className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                        Total Paid
+                      </div>
+                      <div className="mt-1 flex items-center justify-between">
+                        <div>
+                          <div className="text-lg font-black text-emerald-600 dark:text-emerald-400">
+                            {totalPaid.toFixed(2)}{' '}
+                            <span className="text-xs font-normal">AED</span>
+                          </div>
+                          <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 font-semibold">
+                            ✓ Collected
+                          </span>
+                        </div>
+                        <CheckCircle2 size={18} className="text-emerald-500 shrink-0" />
+                      </div>
+                    </div>
+
+                    {/* Tile 3: Outstanding Balance Due */}
+                    <div className={`p-3.5 rounded-xl border flex flex-col justify-between ${outstandingDue > 0 ? 'border-rose-500/20 bg-rose-500/5' : 'border-border bg-muted/20'}`}>
+                      <div className={`text-[11px] font-semibold uppercase tracking-wider ${outstandingDue > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground'}`}>
+                        Outstanding Due
+                      </div>
+                      <div className="mt-1 flex items-center justify-between">
+                        {outstandingDue > 0 ? (
+                          <div>
+                            <div className="text-lg font-black text-rose-600 dark:text-rose-400">
+                              {outstandingDue.toFixed(2)} <span className="text-xs font-normal">AED</span>
+                            </div>
+                            <span className="text-[10px] font-semibold text-rose-500">Unpaid Balance</span>
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="text-lg font-black text-emerald-600 dark:text-emerald-400">
+                              0.00 <span className="text-xs font-normal">AED</span>
+                            </div>
+                            <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">✓ Account Clear</span>
+                          </div>
+                        )}
+                        {outstandingDue > 0 && hasPermission('Payments.Create') && (
+                          <button
+                            onClick={() => {
+                              const targetCust = selectedCustomer;
+                              setSelectedCustomer(null);
+                              openQuickPayment(targetCust);
+                            }}
+                            className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold rounded-lg shadow-xs transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                          >
+                            <CreditCard size={12} />
+                            <span>Pay</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Tile 4: Tracked Visas & Docs */}
+                    <div className="p-3.5 rounded-xl border border-border bg-muted/20 flex flex-col justify-between">
+                      <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        Tracked Documents
+                      </div>
+                      <div className="mt-1 flex items-center justify-between">
+                        <div>
+                          <div className="text-lg font-black text-foreground">
+                            {selectedCustDocs.length}
+                          </div>
+                          <span className="text-[10px] text-muted-foreground font-semibold">
+                            {selectedCustDocs.filter(d => getDaysRemaining(d.expiry_date) <= 30).length > 0 ? (
+                              <span className="text-amber-500 font-bold">
+                                ⚠️ {selectedCustDocs.filter(d => getDaysRemaining(d.expiry_date) <= 30).length} expiring soon
+                              </span>
+                            ) : (
+                              'Active valid records'
+                            )}
+                          </span>
+                        </div>
+                        <Calendar size={18} className="text-primary opacity-60 shrink-0" />
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* 3. STRUCTURED NAVIGATION TABS */}
               <div className="flex items-center gap-2 px-5 pt-3 border-b border-border bg-muted/10 shrink-0">
@@ -2500,11 +2540,12 @@ export const CustomerList: React.FC = () => {
             <table className="w-full text-left border-collapse text-xs">
               <thead className="bg-[#000ba0] text-white font-bold">
                 <tr>
-                  <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[8%]">No</th>
-                  <th className="px-3 py-2.5 border-r border-gray-300 w-[57%]">Description of Service</th>
-                  <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[10%]">Qty</th>
+                  <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[6%]">No</th>
+                  <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[14%]">Date</th>
+                  <th className="px-3 py-2.5 border-r border-gray-300 w-[47%]">Description of Service</th>
+                  <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[9%]">Qty</th>
                   <th className="px-3 py-2.5 text-right border-r border-gray-300 w-[10%]">Rate</th>
-                  <th className="px-3 py-2.5 text-right w-[15%]">Amount</th>
+                  <th className="px-3 py-2.5 text-right w-[14%]">Amount</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-300">
@@ -2513,9 +2554,13 @@ export const CustomerList: React.FC = () => {
                   const totalRows = 11;
                   const rows: React.ReactNode[] = [];
                   items.forEach((item: any, index: number) => {
+                    const itemDate = item.service_date 
+                      ? new Date(item.service_date).toLocaleDateString()
+                      : new Date(item.created_at || printSaleData.created_at).toLocaleDateString();
                     rows.push(
                       <tr key={item.id} className="h-8">
                         <td className="px-3 py-1.5 text-center border-r border-gray-300 font-semibold">{index + 1}</td>
+                        <td className="px-3 py-1.5 text-center border-r border-gray-300 font-medium">{itemDate}</td>
                         <td className="px-3 py-1.5 border-r border-gray-300 font-bold">
                           {item.service?.name}
                           {item.person_name ? (
@@ -2537,6 +2582,7 @@ export const CustomerList: React.FC = () => {
                         <td className="px-3 py-1.5 border-r border-gray-300" />
                         <td className="px-3 py-1.5 border-r border-gray-300" />
                         <td className="px-3 py-1.5 border-r border-gray-300" />
+                        <td className="px-3 py-1.5 border-r border-gray-300" />
                         <td className="px-3 py-1.5" />
                       </tr>
                     );
@@ -2546,7 +2592,7 @@ export const CustomerList: React.FC = () => {
               </tbody>
               <tfoot>
                 <tr className="bg-[#f28f00] text-white font-bold border-t border-gray-300">
-                  <td className="px-3 py-2 text-center border-r border-gray-300" colSpan={4}>Sub Total</td>
+                  <td className="px-3 py-2 text-center border-r border-gray-300" colSpan={5}>Sub Total</td>
                   <td className="px-3 py-2 text-right">{printSaleData.subtotal?.toFixed(2)}</td>
                 </tr>
               </tfoot>

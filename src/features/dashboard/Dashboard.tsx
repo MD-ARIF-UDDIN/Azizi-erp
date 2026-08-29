@@ -9,7 +9,13 @@ import {
   ShoppingCart,
   Clock,
   ArrowUpRight,
-  Bell
+  Bell,
+  ReceiptText,
+  FileText,
+  UserPlus,
+  CreditCard,
+  BarChart3,
+  Plus
 } from 'lucide-react';
 import {
   AreaChart,
@@ -28,7 +34,7 @@ import {
 } from 'recharts';
 
 export const Dashboard: React.FC = () => {
-  const { activeBranchId, availableBranches, isAdmin } = useAuth();
+  const { activeBranchId, availableBranches, isAdmin, hasPermission } = useAuth();
   
   // Data States
   const [sales, setSales] = useState<any[]>([]);
@@ -170,14 +176,159 @@ export const Dashboard: React.FC = () => {
   return (
     <div className="space-y-6">
       
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground m-0">
-          Dashboard
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Overview of your business operations across all branches.
-        </p>
+      {/* Header with Top 1-Click CTA Buttons */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground m-0">
+            Dashboard
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Overview of your business operations across all branches.
+          </p>
+        </div>
+
+        {/* Header Action Buttons */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          {hasPermission('Quotations.Create') && (
+            <Link
+              to="/quotations/create"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-border bg-card hover:bg-muted text-foreground text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer"
+            >
+              <FileText size={15} className="text-amber-500" />
+              <span>New Quotation</span>
+            </Link>
+          )}
+
+          {hasPermission('Sales.Create') && (
+            <Link
+              to="/sales/create"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-all cursor-pointer"
+            >
+              <Plus size={16} />
+              <span>New Sale / Bill</span>
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* ── QUICK ACTIONS GRID ── */}
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+            Quick ERP Operations
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {/* New Sale / Bill */}
+          {hasPermission('Sales.Create') && (
+            <Link
+              to="/sales/create"
+              className="group relative flex flex-col items-start p-3.5 bg-card hover:bg-blue-500/5 border border-border hover:border-blue-500/40 rounded-2xl transition-all duration-200 shadow-xs hover:shadow-md hover:-translate-y-0.5 cursor-pointer overflow-hidden"
+            >
+              <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+                <ReceiptText size={20} />
+              </div>
+              <span className="font-bold text-xs text-foreground group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                New Sale / Bill
+              </span>
+              <span className="text-[10px] text-muted-foreground mt-0.5">
+                Fast billing &amp; print
+              </span>
+            </Link>
+          )}
+
+          {/* New Quotation */}
+          {hasPermission('Quotations.Create') && (
+            <Link
+              to="/quotations/create"
+              className="group relative flex flex-col items-start p-3.5 bg-card hover:bg-amber-500/5 border border-border hover:border-amber-500/40 rounded-2xl transition-all duration-200 shadow-xs hover:shadow-md hover:-translate-y-0.5 cursor-pointer overflow-hidden"
+            >
+              <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+                <FileText size={20} />
+              </div>
+              <span className="font-bold text-xs text-foreground group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                New Quotation
+              </span>
+              <span className="text-[10px] text-muted-foreground mt-0.5">
+                Estimate &amp; pricing
+              </span>
+            </Link>
+          )}
+
+          {/* Register Customer */}
+          {hasPermission('Customers.Create') && (
+            <Link
+              to="/customers"
+              className="group relative flex flex-col items-start p-3.5 bg-card hover:bg-emerald-500/5 border border-border hover:border-emerald-500/40 rounded-2xl transition-all duration-200 shadow-xs hover:shadow-md hover:-translate-y-0.5 cursor-pointer overflow-hidden"
+            >
+              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+                <UserPlus size={20} />
+              </div>
+              <span className="font-bold text-xs text-foreground group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                Customers
+              </span>
+              <span className="text-[10px] text-muted-foreground mt-0.5">
+                Fast client billing
+              </span>
+            </Link>
+          )}
+
+          {/* Record Payment */}
+          {hasPermission('Payments.Create') && (
+            <Link
+              to="/payments/create"
+              className="group relative flex flex-col items-start p-3.5 bg-card hover:bg-purple-500/5 border border-border hover:border-purple-500/40 rounded-2xl transition-all duration-200 shadow-xs hover:shadow-md hover:-translate-y-0.5 cursor-pointer overflow-hidden"
+            >
+              <div className="h-10 w-10 rounded-xl bg-purple-500/10 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+                <CreditCard size={20} />
+              </div>
+              <span className="font-bold text-xs text-foreground group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+                Record Payment
+              </span>
+              <span className="text-[10px] text-muted-foreground mt-0.5">
+                Collect due balance
+              </span>
+            </Link>
+          )}
+
+          {/* Add Expense */}
+          {hasPermission('Expenses.Create') && (
+            <Link
+              to="/expenses/create"
+              className="group relative flex flex-col items-start p-3.5 bg-card hover:bg-rose-500/5 border border-border hover:border-rose-500/40 rounded-2xl transition-all duration-200 shadow-xs hover:shadow-md hover:-translate-y-0.5 cursor-pointer overflow-hidden"
+            >
+              <div className="h-10 w-10 rounded-xl bg-rose-500/10 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+                <TrendingDown size={20} />
+              </div>
+              <span className="font-bold text-xs text-foreground group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
+                Add Expense
+              </span>
+              <span className="text-[10px] text-muted-foreground mt-0.5">
+                Branch expenditure
+              </span>
+            </Link>
+          )}
+
+          {/* Reports Center */}
+          {hasPermission('Reports.View') && (
+            <Link
+              to="/reports"
+              className="group relative flex flex-col items-start p-3.5 bg-card hover:bg-slate-500/5 border border-border hover:border-slate-500/40 rounded-2xl transition-all duration-200 shadow-xs hover:shadow-md hover:-translate-y-0.5 cursor-pointer overflow-hidden"
+            >
+              <div className="h-10 w-10 rounded-xl bg-slate-500/10 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform">
+                <BarChart3 size={20} />
+              </div>
+              <span className="font-bold text-xs text-foreground group-hover:text-slate-600 dark:group-hover:text-slate-200 transition-colors">
+                Reports &amp; PDF
+              </span>
+              <span className="text-[10px] text-muted-foreground mt-0.5">
+                Financial balances
+              </span>
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Loading */}

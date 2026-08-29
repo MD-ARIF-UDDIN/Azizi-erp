@@ -508,9 +508,11 @@ export const QuotationsList: React.FC = () => {
                   {/* PRINTABLE QUOTATION PAPER SHEET */}
                   <div className="print-invoice-sheet bg-white text-black p-6 sm:p-8 rounded-2xl shadow-2xl border border-border/80 print:border-none print:shadow-none print:p-0 print:rounded-none">
                     <div className="w-full">
-                      {/* Branding Header with raw logo */}
+                      {/* Branding Header with raw logo in a card */}
                       <div className="flex items-center justify-between pb-3 border-b border-gray-300 gap-3">
-                        <img src="/logo.png" alt="AZIZI Logo" className="w-14 h-14 object-contain shrink-0" />
+                        <div className="p-1 bg-white border border-gray-300 rounded-xl shadow-xs shrink-0">
+                          <img src="/logo.png" alt="AZIZI Logo" className="w-14 h-14 object-contain block" />
+                        </div>
                         <div className="text-center flex-1 space-y-0.5">
                           <div className="text-lg font-bold text-[#000ba0] font-serif tracking-wide italic">
                             مكتب عزيزي للكتابة وعمل الأختام ذ.م.م - فرع ١
@@ -525,7 +527,7 @@ export const QuotationsList: React.FC = () => {
                             Abu Dhabi, Musaffah M37, Near Irani Masjid
                           </div>
                         </div>
-                        <div className="w-14 shrink-0" />
+                        <div className="w-16 shrink-0" />
                       </div>
 
                       {/* Orange Banner Header */}

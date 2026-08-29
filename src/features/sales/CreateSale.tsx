@@ -23,6 +23,7 @@ interface CartItem {
   quantity: number;
   unit_price: number;
   person_name?: string;
+  service_date?: string;
 }
 
 export const CreateSale: React.FC = () => {
@@ -184,7 +185,8 @@ export const CreateSale: React.FC = () => {
         service, 
         quantity: 1, 
         unit_price: service.price, 
-        person_name: selectedPersonName || undefined 
+        person_name: selectedPersonName || undefined,
+        service_date: new Date().toISOString().split('T')[0]
       }]);
     }
   };
@@ -240,7 +242,8 @@ export const CreateSale: React.FC = () => {
           service: srv || { id: qi.service_id, name: 'Service', price: qi.unit_price } as any,
           quantity: qi.quantity,
           unit_price: qi.unit_price,
-          person_name: selectedPersonName || undefined
+          person_name: selectedPersonName || undefined,
+          service_date: qi.service_date || new Date().toISOString().split('T')[0]
         };
       });
 
@@ -333,7 +336,8 @@ export const CreateSale: React.FC = () => {
           service_id: item.service.id,
           quantity: item.quantity,
           unit_price: item.unit_price,
-          person_name: item.person_name || undefined
+          person_name: item.person_name || undefined,
+          service_date: item.service_date || new Date().toISOString().split('T')[0]
         })),
         initialPayment: paidAmount > 0 ? {
           amount: paidAmount,
@@ -577,17 +581,18 @@ export const CreateSale: React.FC = () => {
                     <tr>
                       <th className="w-10 text-center">#</th>
                       <th>Service Details</th>
-                      {isCompanySelected && companyEmployees.length > 0 && <th className="w-48">Person Under Company</th>}
+                      <th className="w-36 text-center">Service Date</th>
+                      {isCompanySelected && companyEmployees.length > 0 && <th className="w-44">Person Under Company</th>}
                       <th className="text-center w-28">Quantity</th>
-                      <th className="w-28 text-center">Unit Price</th>
-                      <th className="text-right w-28">Subtotal</th>
-                      <th className="text-center w-12"></th>
+                      <th className="w-24 text-center">Unit Price</th>
+                      <th className="text-right w-24">Subtotal</th>
+                      <th className="text-center w-10"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/50">
                     {cart.length === 0 ? (
                       <tr>
-                        <td colSpan={isCompanySelected && companyEmployees.length > 0 ? 7 : 6} className="py-12 text-center text-muted-foreground italic">
+                        <td colSpan={isCompanySelected && companyEmployees.length > 0 ? 8 : 7} className="py-12 text-center text-muted-foreground italic">
                           <div className="max-w-xs mx-auto space-y-2">
                             <div className="p-3 rounded-full bg-muted/60 w-fit mx-auto text-muted-foreground">
                               <Search size={22} />
@@ -608,6 +613,18 @@ export const CreateSale: React.FC = () => {
                             <div className="text-[10px] text-muted-foreground mt-0.5">
                               Standard: {item.service.price.toFixed(2)} AED
                             </div>
+                          </td>
+                          <td className="text-center">
+                            <input
+                              type="date"
+                              value={item.service_date || new Date().toISOString().split('T')[0]}
+                              onChange={(e) => {
+                                const updated = [...cart];
+                                updated[index].service_date = e.target.value;
+                                setCart(updated);
+                              }}
+                              className="px-2 py-1 bg-muted/50 border border-border rounded text-xs font-semibold text-foreground cursor-pointer"
+                            />
                           </td>
                           {isCompanySelected && companyEmployees.length > 0 && (
                             <td>

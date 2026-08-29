@@ -872,11 +872,12 @@ export const SalesList: React.FC = () => {
                           <table className="w-full text-left border-collapse">
                             <thead className="bg-[#000ba0] text-white font-bold">
                               <tr>
-                                <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[8%]">No</th>
-                                <th className="px-3 py-2.5 border-r border-gray-300 w-[57%]">Description of Service</th>
-                                <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[10%]">Qty</th>
+                                <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[6%]">No</th>
+                                <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[14%]">Date</th>
+                                <th className="px-3 py-2.5 border-r border-gray-300 w-[47%]">Description of Service</th>
+                                <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[9%]">Qty</th>
                                 <th className="px-3 py-2.5 text-right border-r border-gray-300 w-[10%]">Rate</th>
-                                <th className="px-3 py-2.5 text-right w-[15%]">Amount</th>
+                                <th className="px-3 py-2.5 text-right w-[14%]">Amount</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-300">
@@ -887,9 +888,13 @@ export const SalesList: React.FC = () => {
                                 
                                 // Render actual items
                                 items.forEach((item: any, index: number) => {
+                                  const itemDate = item.service_date 
+                                    ? new Date(item.service_date).toLocaleDateString()
+                                    : new Date(item.created_at || saleItem.created_at).toLocaleDateString();
                                   rows.push(
                                     <tr key={item.id} className="h-8 hover:bg-gray-50/50">
                                       <td className="px-3 py-1.5 text-center border-r border-gray-300 text-black font-semibold">{index + 1}</td>
+                                      <td className="px-3 py-1.5 text-center border-r border-gray-300 text-black font-medium">{itemDate}</td>
                                       <td className="px-3 py-1.5 border-r border-gray-300 text-black font-bold text-left">
                                         {item.service?.name}
                                         {item.person_name ? (
@@ -915,6 +920,7 @@ export const SalesList: React.FC = () => {
                                       <td className="px-3 py-1.5 border-r border-gray-300"></td>
                                       <td className="px-3 py-1.5 border-r border-gray-300"></td>
                                       <td className="px-3 py-1.5 border-r border-gray-300"></td>
+                                      <td className="px-3 py-1.5 border-r border-gray-300"></td>
                                       <td className="px-3 py-1.5 text-right"></td>
                                     </tr>
                                   );
@@ -925,7 +931,7 @@ export const SalesList: React.FC = () => {
                             </tbody>
                             <tfoot>
                               <tr className="bg-[#f28f00] text-white font-bold border-t border-gray-300">
-                                <td className="px-3 py-2 text-center border-r border-gray-300" colSpan={4}>
+                                <td className="px-3 py-2 text-center border-r border-gray-300" colSpan={5}>
                                   Sub Total
                                 </td>
                                 <td className="px-3 py-2 text-right text-white font-bold">

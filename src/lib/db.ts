@@ -1217,7 +1217,7 @@ export const db = {
       branch_id: string;
       discount: number;
       notes?: string;
-      items: Array<{ service_id: string; quantity: number; unit_price: number; person_name?: string }>;
+      items: Array<{ service_id: string; quantity: number; unit_price: number; person_name?: string; service_date?: string }>;
       initialPayment?: { amount: number; payment_method: Payment['payment_method'] };
       person_name?: string;
       person_phone?: string;
@@ -1355,7 +1355,8 @@ export const db = {
         unit_price: item.unit_price,
         subtotal: item.unit_price * item.quantity,
         person_name: item.person_name || undefined,
-        created_at: now.toISOString(),
+        service_date: item.service_date || now.toISOString().split('T')[0],
+        created_at: item.service_date ? new Date(item.service_date).toISOString() : now.toISOString(),
         updated_at: now.toISOString()
       }));
 
@@ -1512,11 +1513,12 @@ export const db = {
       logAudit(getActiveUserSession().id, 'DELETE_SOFT_SALE', 'sales', id, old, updated);
       return delay(true);
     },
-    addItem: async (saleId: string, item: { service_id: string; quantity: number; unit_price: number }) => {
+    addItem: async (saleId: string, item: { service_id: string; quantity: number; unit_price: number; person_name?: string; service_date?: string }) => {
       const activeUser = getActiveUserSession();
       const employeeId = sanitizeUUID(activeUser?.id);
       const now = new Date();
       const subtotal = item.unit_price * item.quantity;
+      const serviceDate = item.service_date || now.toISOString().split('T')[0];
 
       if (isSupabaseConfigured && supabase) {
         const { error: itemErr } = await supabase.from('sale_items').insert([{
@@ -1524,7 +1526,8 @@ export const db = {
           service_id: item.service_id,
           quantity: item.quantity,
           unit_price: item.unit_price,
-          subtotal
+          subtotal,
+          person_name: item.person_name || null
         }]);
         if (itemErr) throw itemErr;
 
@@ -1551,7 +1554,9 @@ export const db = {
         quantity: item.quantity,
         unit_price: item.unit_price,
         subtotal,
-        created_at: now.toISOString(),
+        person_name: item.person_name || undefined,
+        service_date: serviceDate,
+        created_at: item.service_date ? new Date(item.service_date).toISOString() : now.toISOString(),
         updated_at: now.toISOString()
       };
       _saleItems.push(newItem);
