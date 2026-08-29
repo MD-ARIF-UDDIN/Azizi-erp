@@ -3,7 +3,7 @@ import { db } from '../../lib/db';
 import type { Service, Customer } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ShoppingCart,
   Plus,
@@ -20,16 +20,22 @@ interface CartItem {
   service: Service;
   quantity: number;
   unit_price: number;
-  assigned_customer_id?: string;
+  person_name?: string;
 }
 
 export const CreateSale: React.FC = () => {
   const { user, isAdmin, availableBranches } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   // Master Data
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+
+  // Catalog Search & Category Filter
+  const [serviceSearch, setServiceSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   // Form States
   const [customerType, setCustomerType] = useState<'existing' | 'new'>('existing');
@@ -59,12 +65,14 @@ export const CreateSale: React.FC = () => {
     ? selectedCustomerRecord.members
     : [];
 
+  const [selectedPersonName, setSelectedPersonName] = useState<string>(searchParams.get('person_name') || '');
   const [availableQuotes, setAvailableQuotes] = useState<any[]>([]);
   const [importedQuoteId, setImportedQuoteId] = useState<string>('');
 
   useEffect(() => {
     setCart([]);
     setImportedQuoteId('');
+    setSelectedPersonName(searchParams.get('person_name') || '');
   }, [customerId, customerType]);
 
   useEffect(() => {
@@ -88,38 +96,58 @@ export const CreateSale: React.FC = () => {
   }, [customerId]);
 
   useEffect(() => {
-    const loadData = async () => {
+    const init = async () => {
       try {
-        const cData = await db.customers.getAll();
-        const sData = await db.services.getAll();
-        
-        setCustomers(cData);
-        // Only allow selling active services
-        setServices(sData.filter(s => s.status === 'Active'));
+        const [c, s, cats] = await Promise.all([
+          db.customers.getAll(),
+          db.services.getAll(),
+          db.serviceCategories.getAll()
+        ]);
+        setCustomers(c);
+        setServices(s.filter(srv => srv.status === 'Active'));
+        setCategories(cats);
 
-        // Default branch
-        if (user) {
-          setBranchId(user.branch_id);
+        const paramCustId = searchParams.get('customer_id');
+        if (paramCustId) {
+          const match = c.find(item => item.id === paramCustId);
+          if (match) {
+            setCustomerId(match.id);
+            setCustomerType('existing');
+          }
         }
 
-        // Auto-select walk-in customer if exists
-        const walkin = cData.find(c => c.name.toLowerCase().includes('walk-in'));
-        if (walkin) {
-          setCustomerId(walkin.id);
+        if (user && user.branch_id) {
+          setBranchId(user.branch_id);
+        } else if (availableBranches.length > 0) {
+          setBranchId(availableBranches[0].id);
         }
       } catch (err) {
         console.error(err);
       }
     };
-    loadData();
-  }, [user]);
+    init();
+  }, [user, availableBranches, searchParams]);
 
-  // Add a service directly from card click
+  const handleSelectWalkin = () => {
+    const walkin = customers.find(c => c.name.toLowerCase().includes('walk-in') || c.name.toLowerCase().includes('walkin'));
+    if (walkin) {
+      setCustomerId(walkin.id);
+      setCustomerType('existing');
+    }
+  };
+
+  const filteredCatalogServices = services.filter(s => {
+    const matchesCategory = selectedCategory === 'all' || s.category_id === selectedCategory;
+    const categoryName = (s as any).category?.name || '';
+    const matchesSearch = !serviceSearch.trim() || 
+      s.name.toLowerCase().includes(serviceSearch.toLowerCase()) ||
+      categoryName.toLowerCase().includes(serviceSearch.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
   const addServiceToCart = (service: Service) => {
-    const defaultAssignedId = customerId;
-    const existingIndex = cart.findIndex(item => item.service.id === service.id && item.assigned_customer_id === defaultAssignedId);
-    
-    if (!isCompanySelected && existingIndex !== -1) {
+    const existingIndex = cart.findIndex(item => item.service.id === service.id && item.person_name === (selectedPersonName || undefined));
+    if (existingIndex !== -1) {
       const updated = [...cart];
       updated[existingIndex].quantity += 1;
       setCart(updated);
@@ -128,7 +156,7 @@ export const CreateSale: React.FC = () => {
         service, 
         quantity: 1, 
         unit_price: service.price, 
-        assigned_customer_id: defaultAssignedId || undefined 
+        person_name: selectedPersonName || undefined 
       }]);
     }
   };
@@ -157,7 +185,7 @@ export const CreateSale: React.FC = () => {
           service: srv || { id: qi.service_id, name: 'Service', price: qi.unit_price } as any,
           quantity: qi.quantity,
           unit_price: qi.unit_price,
-          assigned_customer_id: customerId || undefined
+          person_name: selectedPersonName || undefined
         };
       });
 
@@ -237,84 +265,29 @@ export const CreateSale: React.FC = () => {
         finalCustomerId = createdCust.id;
       }
 
-      // Group cart items by assigned member
-      const groups: Record<string, CartItem[]> = {};
-      cart.forEach(item => {
-        const assignedId = item.assigned_customer_id || finalCustomerId;
-        if (!groups[assignedId]) groups[assignedId] = [];
-        groups[assignedId].push(item);
-      });
-
-      const groupKeys = Object.keys(groups);
       const total_subtotal = cart.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
+      const grand_total = Math.max(0, total_subtotal - discount);
+      const paidAmount = hasInitialPayment ? Math.min(paymentAmount, grand_total) : 0;
 
-      // Distribute discount proportionally
-      let remainingDiscount = discount;
-      let remainingSubtotal = total_subtotal;
-      const groupDiscounts: Record<string, number> = {};
-
-      groupKeys.forEach((key, idx) => {
-        if (idx === groupKeys.length - 1) {
-          groupDiscounts[key] = remainingDiscount;
-        } else {
-          const groupSub = groups[key].reduce((s, i) => s + i.unit_price * i.quantity, 0);
-          const groupDisc = remainingSubtotal > 0 
-            ? Math.round((discount * (groupSub / total_subtotal)) * 100) / 100 
-            : 0;
-          groupDiscounts[key] = Math.min(remainingDiscount, groupDisc);
-          remainingDiscount -= groupDiscounts[key];
-          remainingSubtotal -= groupSub;
-        }
+      const createdSale = await db.sales.create({
+        customer_id: finalCustomerId || undefined,
+        branch_id: branchId,
+        discount: discount,
+        notes: notes ? `${notes}` : undefined,
+        items: cart.map(item => ({
+          service_id: item.service.id,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          person_name: item.person_name || undefined
+        })),
+        initialPayment: paidAmount > 0 ? {
+          amount: paidAmount,
+          payment_method: paymentMethod
+        } : undefined,
+        quotation_id: importedQuoteId || undefined
       });
 
-      // Distribute initial payment sequentially
-      let remainingPayment = hasInitialPayment ? paymentAmount : 0;
-      const groupPayments: Record<string, number> = {};
-
-      groupKeys.forEach((key) => {
-        const groupSub = groups[key].reduce((s, i) => s + i.unit_price * i.quantity, 0);
-        const groupDisc = groupDiscounts[key];
-        const groupTotal = Math.max(0, groupSub - groupDisc);
-
-        const payForGroup = Math.min(remainingPayment, groupTotal);
-        groupPayments[key] = payForGroup;
-        remainingPayment -= payForGroup;
-      });
-
-      // Save sales
-      const createdSaleIds: string[] = [];
-      for (const key of groupKeys) {
-        const groupItems = groups[key];
-        const groupDisc = groupDiscounts[key];
-        const payAmount = groupPayments[key] || 0;
-        
-        const memberObj = key !== finalCustomerId 
-          ? companyEmployees.find(emp => emp.id === key) 
-          : undefined;
-
-        const createdSale = await db.sales.create({
-          customer_id: finalCustomerId || undefined,
-          branch_id: branchId,
-          discount: groupDisc,
-          notes: notes ? `${notes}` : undefined,
-          items: groupItems.map(item => ({
-            service_id: item.service.id,
-            quantity: item.quantity,
-            unit_price: item.unit_price
-          })),
-          initialPayment: payAmount > 0 ? {
-            amount: payAmount,
-            payment_method: paymentMethod
-          } : undefined,
-          person_name: memberObj?.name,
-          person_phone: memberObj?.phone,
-          person_email: memberObj?.email,
-          quotation_id: importedQuoteId || undefined
-        });
-        createdSaleIds.push(createdSale.id);
-      }
-
-      navigate(`/sales?print=${createdSaleIds.join(',')}`);
+      navigate(`/sales?print=${createdSale.id}`);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to record sales invoice.');
     } finally {
@@ -346,160 +319,219 @@ export const CreateSale: React.FC = () => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           
-          {/* LEFT SECTION: CART & SERVICE SELECTION (2 cols) */}
+          {/* LEFT SECTION: CATALOG & CART (2 cols) */}
           <div className="lg:col-span-2 space-y-4">
-            <div className="glass border border-border rounded-2xl p-6 space-y-6 shadow-xl">
+            <div className="glass border border-border rounded-2xl p-5 space-y-4 shadow-xl">
               
-              <div className="flex items-center gap-2 border-b border-border pb-3">
-                <ShoppingCart className="text-primary" size={20} />
-                <h2 className="font-bold text-foreground text-lg m-0">Bill Items Catalog</h2>
+              {/* CATALOG HEADER & SEARCH */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/80 pb-3.5">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                    <ShoppingCart size={18} />
+                  </div>
+                  <div>
+                    <h2 className="font-bold text-foreground text-base m-0">Services Catalog</h2>
+                    <div className="text-[11px] text-muted-foreground">Click any service card to add directly to the bill</div>
+                  </div>
+                </div>
+
+                {/* Instant Search Bar */}
+                <div className="relative w-full sm:w-64">
+                  <input
+                    type="text"
+                    placeholder="Search services (e.g. Visa, Stamp)..."
+                    value={serviceSearch}
+                    onChange={(e) => setServiceSearch(e.target.value)}
+                    className="w-full pl-8 pr-7 py-1.5 bg-muted/40 border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:ring-1 focus:ring-primary"
+                  />
+                  <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
+                    🔍
+                  </div>
+                  {serviceSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setServiceSearch('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Category Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('all')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                    selectedCategory === 'all'
+                      ? 'bg-primary text-white shadow-xs'
+                      : 'bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted'
+                  }`}
+                >
+                  All ({services.length})
+                </button>
+                {categories.map(cat => {
+                  const count = services.filter(s => s.category_id === cat.id).length;
+                  if (count === 0) return null;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setSelectedCategory(cat.id)}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                        selectedCategory === cat.id
+                          ? 'bg-primary text-white shadow-xs'
+                          : 'bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted'
+                      }`}
+                    >
+                      {cat.name} ({count})
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Service Cards Grid — tap to add */}
-              {services.length > 0 ? (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-3 font-medium">
-                    Tap a service card to add it to the bill:
-                  </p>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                    {services.map(service => {
-                      const cartItem = cart.find(item => item.service.id === service.id);
-                      const inCart = !!cartItem;
-                      return (
-                        <button
-                          key={service.id}
-                          type="button"
-                          onClick={() => addServiceToCart(service)}
-                          style={inCart ? { background: 'color-mix(in srgb, var(--color-primary) 8%, transparent)' } : undefined}
-                          className={`
-                            relative text-left p-3 rounded-xl border transition-all duration-150 group cursor-pointer
-                            ${inCart
-                              ? 'border-primary/50 shadow-sm'
-                              : 'border-border bg-muted/20 hover:border-primary/40 hover:bg-muted/40 hover:shadow-sm'
-                            }
-                          `}
-                        >
-                          {/* Quantity badge when in cart */}
-                          {inCart && (
-                            <span className="absolute top-1.5 right-1.5 bg-primary text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 leading-none">
-                              {cartItem.quantity}
+              {filteredCatalogServices.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 max-h-56 overflow-y-auto pr-1">
+                  {filteredCatalogServices.map(service => {
+                    const cartItem = cart.find(item => item.service.id === service.id);
+                    const inCart = !!cartItem;
+                    return (
+                      <button
+                        key={service.id}
+                        type="button"
+                        onClick={() => addServiceToCart(service)}
+                        style={inCart ? { background: 'hsl(var(--primary) / 0.1)' } : undefined}
+                        className={`
+                          relative text-left p-2.5 rounded-xl border transition-all duration-150 group cursor-pointer flex flex-col justify-between min-h-[70px]
+                          ${inCart
+                            ? 'border-primary/60 shadow-xs'
+                            : 'border-border bg-muted/20 hover:border-primary/50 hover:bg-muted/50 hover:shadow-xs'
+                          }
+                        `}
+                      >
+                        {/* Quantity badge when in cart */}
+                        {inCart && (
+                          <span className="absolute top-1.5 right-1.5 bg-primary text-white text-[10px] font-black rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 leading-none shadow-xs">
+                            {cartItem.quantity}
+                          </span>
+                        )}
+
+                        <div className={`text-xs font-bold leading-tight line-clamp-2 ${inCart ? 'text-primary' : 'text-foreground group-hover:text-primary'} transition-colors`}>
+                          {service.name}
+                        </div>
+                        <div className="mt-1 flex items-center justify-between">
+                          <span className={`text-xs font-bold ${inCart ? 'text-primary' : 'text-foreground'}`}>
+                            {service.price.toFixed(2)} <span className="text-[9px] font-normal text-muted-foreground">AED</span>
+                          </span>
+                          {!inCart && (
+                            <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity font-bold">
+                              + Add
                             </span>
                           )}
-
-                          <div className={`text-[11px] font-bold leading-snug mb-1 ${inCart ? 'text-primary' : 'text-foreground group-hover:text-primary'} transition-colors`}
-                               style={inCart ? undefined : { paddingRight: '0' }}>
-                            {service.name}
-                          </div>
-                          <div className={`text-[11px] font-semibold ${inCart ? 'text-primary/80' : 'text-muted-foreground'}`}>
-                            {service.price.toFixed(2)} AED
-                          </div>
-
-                          {/* Hover plus icon */}
-                          {!inCart && (
-                            <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Plus size={11} className="text-primary" />
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground italic text-center py-4">
-                  No active services found. Please add services in the Services module.
-                </p>
+                <div className="py-6 text-center text-muted-foreground text-xs italic bg-muted/20 rounded-xl border border-dashed border-border">
+                  No services found matching "{serviceSearch}". Try clearing the search.
+                </div>
               )}
 
               {/* Cart Table Grid */}
-              <div className="border border-border/80 rounded-xl overflow-hidden">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-muted/50 text-muted-foreground uppercase font-semibold border-b border-border">
+              <div className="border border-border/80 rounded-xl overflow-hidden mt-4">
+                <table className="w-full text-left">
+                  <thead>
                     <tr>
-                      <th className="px-4 py-3">Service Details</th>
-                      {isCompanySelected && <th className="px-4 py-3 w-48">Assign To</th>}
-                      <th className="px-4 py-3 text-center w-32">Qty</th>
-                      <th className="px-4 py-3 w-32">Unit Price</th>
-                      <th className="px-4 py-3 text-right">Subtotal</th>
-                      <th className="px-4 py-3 text-center w-16"></th>
+                      <th>Service Name</th>
+                      {isCompanySelected && companyEmployees.length > 0 && <th className="w-48">Person Under Company</th>}
+                      <th className="text-center w-28">Quantity</th>
+                      <th className="w-28 text-center">Unit Price</th>
+                      <th className="text-right w-28">Subtotal</th>
+                      <th className="text-center w-12"></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border/60">
+                  <tbody className="divide-y divide-border/50">
                     {cart.length === 0 ? (
                       <tr>
-                        <td colSpan={isCompanySelected ? 6 : 5} className="px-4 py-10 text-center text-muted-foreground italic">
-                          Shopping cart is empty. Tap a service card above to begin billing.
+                        <td colSpan={isCompanySelected && companyEmployees.length > 0 ? 6 : 5} className="py-8 text-center text-muted-foreground italic">
+                          Shopping cart is empty. Click any service card above to add to invoice.
                         </td>
                       </tr>
                     ) : (
                       cart.map((item, index) => (
-                        <tr key={index} className="hover:bg-muted/10">
-                          <td className="px-4 py-3">
-                            <div className="font-semibold text-foreground">{item.service.name}</div>
+                        <tr key={index} className="hover:bg-primary/5">
+                          <td>
+                            <div className="font-bold text-foreground text-xs">{item.service.name}</div>
                             <div className="text-[10px] text-muted-foreground mt-0.5">
                               Standard: {item.service.price.toFixed(2)} AED
                             </div>
                           </td>
-                          {isCompanySelected && (
-                            <td className="px-4 py-3">
+                          {isCompanySelected && companyEmployees.length > 0 && (
+                            <td>
                               <select
-                                value={item.assigned_customer_id || customerId}
+                                value={item.person_name || ''}
                                 onChange={(e) => {
                                   const updated = [...cart];
-                                  updated[index].assigned_customer_id = e.target.value;
+                                  updated[index].person_name = e.target.value || undefined;
                                   setCart(updated);
                                 }}
-                                className="w-full px-2 py-1 bg-muted/50 border border-border rounded text-xs text-foreground animate-none"
+                                className="w-full px-2 py-1 bg-muted/50 border border-border rounded text-xs font-semibold text-foreground cursor-pointer"
                               >
-                                <option value={customerId}>Company Account (Direct)</option>
+                                <option value="">🏢 General Company</option>
                                 {companyEmployees.map(emp => (
-                                  <option key={emp.id} value={emp.id}>
-                                    {emp.name}
+                                  <option key={emp.id || emp.name} value={emp.name}>
+                                    👤 {emp.name}
                                   </option>
                                 ))}
                               </select>
                             </td>
                           )}
-                          <td className="px-4 py-3">
-                            <div className="flex items-center justify-center gap-2">
+                          <td className="text-center">
+                            <div className="flex items-center justify-center gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => updateQuantity(index, -1)}
-                                className="h-6 w-6 rounded border border-border bg-muted/30 flex items-center justify-center hover:bg-secondary transition-colors"
+                                className="h-6 w-6 rounded border border-border bg-muted/50 flex items-center justify-center hover:bg-secondary transition-colors cursor-pointer"
                               >
-                                <Minus size={12} />
+                                <Minus size={11} />
                               </button>
-                              <span className="font-semibold text-sm w-6 text-center text-foreground">{item.quantity}</span>
+                              <span className="font-bold text-xs w-6 text-center text-foreground">{item.quantity}</span>
                               <button
                                 type="button"
                                 onClick={() => updateQuantity(index, 1)}
-                                className="h-6 w-6 rounded border border-border bg-muted/30 flex items-center justify-center hover:bg-secondary transition-colors"
+                                className="h-6 w-6 rounded border border-border bg-muted/50 flex items-center justify-center hover:bg-secondary transition-colors cursor-pointer"
                               >
-                                <Plus size={12} />
+                                <Plus size={11} />
                               </button>
                             </div>
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="text-center">
                             <input
                               type="number"
                               min={0}
                               value={item.unit_price}
                               onChange={(e) => updatePriceOverride(index, parseFloat(e.target.value) || 0)}
-                              className="w-20 px-2 py-1 bg-muted/50 border border-border rounded text-center text-xs text-foreground"
+                              className="w-20 px-2 py-1 bg-muted/50 border border-border rounded text-center text-xs font-bold text-foreground"
                             />
                           </td>
-                          <td className="px-4 py-3 text-right font-semibold text-foreground">
-                            {(item.unit_price * item.quantity).toFixed(2)} AED
+                          <td className="text-right font-black text-foreground text-xs">
+                            {(item.unit_price * item.quantity).toFixed(2)} <span className="text-[10px] font-normal text-muted-foreground">AED</span>
                           </td>
-                          <td className="px-4 py-3 text-center">
+                          <td className="text-center">
                             <button
                               type="button"
                               onClick={() => updateQuantity(index, -item.quantity)}
-                              className="text-muted-foreground hover:text-destructive p-1 rounded"
+                              className="text-muted-foreground hover:text-destructive p-1 rounded transition-colors cursor-pointer"
+                              title="Remove line item"
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={13} />
                             </button>
                           </td>
                         </tr>
@@ -512,12 +544,19 @@ export const CreateSale: React.FC = () => {
             </div>
           </div>
 
-          {/* RIGHT SECTION: METADATA, TOTALS & CHEKOUT (1 col) */}
+          {/* RIGHT SECTION: CUSTOMER, TOTALS & CHECKOUT (1 col) */}
           <div className="lg:col-span-1 space-y-4">
-            <div className="glass border border-border rounded-2xl p-6 space-y-6 shadow-xl">
+            <div className="glass border border-border rounded-2xl p-5 space-y-4 shadow-xl">
               
-              <div className="border-b border-border pb-3">
-                <h3 className="font-bold text-foreground text-md m-0">Billing & Destination</h3>
+              <div className="flex items-center justify-between border-b border-border/80 pb-3">
+                <h3 className="font-bold text-foreground text-sm m-0">Customer & Billing</h3>
+                <button
+                  type="button"
+                  onClick={handleSelectWalkin}
+                  className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  ⚡ Walk-in (1-Click)
+                </button>
               </div>
 
               {/* Customer Type Selector */}
@@ -525,9 +564,9 @@ export const CreateSale: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setCustomerType('existing')}
-                  className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  className={`flex-1 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
                     customerType === 'existing'
-                      ? 'bg-primary text-white shadow-sm'
+                      ? 'bg-primary text-white shadow-xs'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
@@ -536,9 +575,9 @@ export const CreateSale: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setCustomerType('new')}
-                  className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  className={`flex-1 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
                     customerType === 'new'
-                      ? 'bg-primary text-white shadow-sm'
+                      ? 'bg-primary text-white shadow-xs'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
@@ -555,34 +594,26 @@ export const CreateSale: React.FC = () => {
                   <select
                     value={customerId}
                     onChange={(e) => setCustomerId(e.target.value)}
-                    className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground text-xs"
+                    className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground text-xs font-medium"
                     required={customerType === 'existing'}
                   >
                     <option value="">-- Choose Customer --</option>
-                    {customers.map(c => {
-                      const parentCompanyName = c.company?.name;
-                      const displayLabel = c.customer_type === 'individual' && parentCompanyName
-                        ? `${c.name} (Member of ${parentCompanyName})`
-                        : c.customer_type === 'company'
-                        ? `${c.name} (Company Account)`
-                        : c.name;
-                      return (
-                        <option key={c.id} value={c.id}>
-                          {displayLabel} {c.phone ? `(${c.phone})` : ''}
-                        </option>
-                      );
-                    })}
+                    {customers.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.customer_type === 'company' ? `🏢 ${c.name} (Company)` : `👤 ${c.name}`} {c.phone ? `(${c.phone})` : ''}
+                      </option>
+                    ))}
                   </select>
 
                   {availableQuotes.length > 0 && (
-                    <div className="space-y-1.5 text-xs mt-3 bg-amber-500/5 border border-amber-500/10 p-2.5 rounded-xl">
-                      <label className="text-amber-600 font-bold flex items-center gap-1.5">
+                    <div className="space-y-1.5 text-xs mt-3 bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl">
+                      <label className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1.5">
                         <FileText size={13} /> Link Open Quotation
                       </label>
                       <select
                         value={importedQuoteId}
                         onChange={(e) => handleImportQuotation(e.target.value)}
-                        className="w-full px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-lg text-foreground text-xs font-semibold cursor-pointer"
+                        className="w-full px-2.5 py-1.5 bg-card hover:bg-muted border border-border rounded-lg text-foreground text-xs font-semibold cursor-pointer"
                       >
                         <option value="">-- Direct Sale (No Quote) --</option>
                         {availableQuotes.map(q => (
@@ -591,68 +622,68 @@ export const CreateSale: React.FC = () => {
                           </option>
                         ))}
                       </select>
-                      <p className="text-[10px] text-amber-600/70 font-medium leading-tight">
-                        Importing a quotation will auto-fill the bill items catalog cart, discount deduction, and customer details.
+                      <p className="text-[10px] text-amber-600/80 dark:text-amber-400/80 font-medium leading-tight">
+                        Importing quotation auto-fills services, discount, and customer info.
                       </p>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="space-y-3.5 border border-border/60 p-3 rounded-xl bg-muted/20">
-                  <div className="space-y-1.5 text-xs">
+                <div className="space-y-2.5 border border-border/60 p-3 rounded-xl bg-muted/20">
+                  <div className="space-y-1 text-xs">
                     <label className="text-muted-foreground font-semibold">Full Name *</label>
                     <input
                       type="text"
                       required={customerType === 'new'}
                       value={newCustomerName}
                       onChange={(e) => setNewCustomerName(e.target.value)}
-                      placeholder="Enter customer's name"
-                      className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground"
+                      placeholder="Customer or Company name"
+                      className="w-full px-3 py-1.5 bg-popover border border-border rounded-lg text-foreground text-xs"
                     />
                   </div>
-                  <div className="space-y-1.5 text-xs">
+                  <div className="space-y-1 text-xs">
                     <label className="text-muted-foreground font-semibold">Phone Number</label>
                     <input
                       type="text"
                       value={newCustomerPhone}
                       onChange={(e) => setNewCustomerPhone(e.target.value)}
-                      placeholder="E.g. +8801700000000"
-                      className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground"
+                      placeholder="+971500000000"
+                      className="w-full px-3 py-1.5 bg-popover border border-border rounded-lg text-foreground text-xs"
                     />
                   </div>
-                  <div className="space-y-1.5 text-xs">
-                    <label className="text-muted-foreground font-semibold">Email Address</label>
+                  <div className="space-y-1 text-xs">
+                    <label className="text-muted-foreground font-semibold">Email</label>
                     <input
                       type="email"
                       value={newCustomerEmail}
                       onChange={(e) => setNewCustomerEmail(e.target.value)}
                       placeholder="customer@domain.com"
-                      className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground"
+                      className="w-full px-3 py-1.5 bg-popover border border-border rounded-lg text-foreground text-xs"
                     />
                   </div>
-                  <div className="space-y-1.5 text-xs">
-                    <label className="text-muted-foreground font-semibold">Address</label>
+                  <div className="space-y-1 text-xs">
+                    <label className="text-muted-foreground font-semibold">Address / Notes</label>
                     <input
                       type="text"
                       value={newCustomerAddress}
                       onChange={(e) => setNewCustomerAddress(e.target.value)}
-                      placeholder="City, Area, Road"
-                      className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground"
+                      placeholder="Location, Office, etc."
+                      className="w-full px-3 py-1.5 bg-popover border border-border rounded-lg text-foreground text-xs"
                     />
                   </div>
                 </div>
               )}
 
-              {/* Branch Selector */}
-              <div className="space-y-1.5 text-xs">
+              {/* Destination Branch */}
+              <div className="space-y-1 text-xs">
                 <label className="text-muted-foreground font-semibold flex items-center gap-1">
-                  <Building size={13} /> Destination Branch *
+                  <Building size={13} /> Branch *
                 </label>
                 <select
                   value={branchId}
                   onChange={(e) => setBranchId(e.target.value)}
                   disabled={!isAdmin}
-                  className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground disabled:opacity-75 disabled:cursor-not-allowed"
+                  className="w-full px-3 py-1.5 bg-popover border border-border rounded-lg text-foreground text-xs font-medium disabled:opacity-75 disabled:cursor-not-allowed"
                   required
                 >
                   <option value="">-- Select Branch --</option>
@@ -662,31 +693,17 @@ export const CreateSale: React.FC = () => {
                 </select>
               </div>
 
-              {/* Order Notes */}
-              <div className="space-y-1.5 text-xs">
-                <label className="text-muted-foreground font-semibold flex items-center gap-1">
-                  <FileText size={13} /> Order Instruction / Remarks
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={2}
-                  className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-foreground resize-none"
-                  placeholder="E.g. Font style, stamp border design info..."
-                />
-              </div>
-
-              {/* Billing Totals Panel */}
-              <div className="bg-muted/25 p-4 rounded-xl border border-border/80 space-y-3.5 text-xs">
+              {/* Totals Summary Panel */}
+              <div className="bg-muted/30 p-3.5 rounded-xl border border-border space-y-2.5 text-xs">
                 <div className="flex justify-between items-center text-muted-foreground">
                   <span>Subtotal</span>
-                  <span className="font-semibold text-foreground">{subtotal.toFixed(2)} AED</span>
+                  <span className="font-bold text-foreground">{subtotal.toFixed(2)} AED</span>
                 </div>
 
-                {/* Discount input */}
-                <div className="flex justify-between items-center gap-3">
+                {/* Discount */}
+                <div className="flex justify-between items-center gap-2">
                   <span className="text-muted-foreground flex items-center gap-1">
-                    <Percent size={12} /> Apply Discount
+                    <Percent size={12} /> Discount
                   </span>
                   <div className="relative w-28">
                     <input
@@ -695,40 +712,66 @@ export const CreateSale: React.FC = () => {
                       max={subtotal}
                       value={discount}
                       onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
-                      className="w-full px-2 py-1 text-right bg-muted/50 border border-border rounded text-foreground font-semibold pr-8"
+                      className="w-full px-2 py-1 text-right bg-background border border-border rounded text-foreground font-bold pr-8 text-xs"
                     />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">AED</span>
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-semibold">AED</span>
                   </div>
                 </div>
 
-                <div className="border-t border-border/60 my-2 pt-2.5 flex justify-between items-center text-sm font-bold">
-                  <span className="text-foreground">Grand Total</span>
-                  <span className="text-primary text-md">{grandTotal.toFixed(2)} AED</span>
+                <div className="border-t border-border pt-2.5 flex justify-between items-center">
+                  <span className="font-bold text-foreground text-sm">Grand Total</span>
+                  <span className="font-black text-primary text-base">{grandTotal.toFixed(2)} AED</span>
                 </div>
               </div>
 
-              {/* Take Payment Checkbox */}
+              {/* Payment Section & Fast Cash Presets */}
               {grandTotal > 0 && (
-                <div className="space-y-3 border-t border-border/50 pt-4">
-                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold text-foreground">
+                <div className="space-y-2.5 border-t border-border pt-3">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-foreground">
                     <input
                       type="checkbox"
                       checked={hasInitialPayment}
-                      onChange={(e) => setHasInitialPayment(e.target.checked)}
-                      className="rounded border-border bg-muted/50 text-primary focus:ring-primary"
+                      onChange={(e) => {
+                        setHasInitialPayment(e.target.checked);
+                        if (e.target.checked && paymentAmount === 0) {
+                          setPaymentAmount(grandTotal);
+                        }
+                      }}
+                      className="rounded border-border text-primary focus:ring-primary"
                     />
-                    Record Downpayment Collection
+                    Collect Downpayment / Cash Now
                   </label>
 
                   {hasInitialPayment && (
-                    <div className="bg-muted/30 p-3 rounded-xl border border-border/80 space-y-3 animate-fade-in text-xs">
+                    <div className="bg-muted/20 p-3 rounded-xl border border-border space-y-2.5 text-xs">
+                      {/* Fast Amount Presets */}
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setPaymentAmount(grandTotal)}
+                          className="px-2 py-0.5 rounded bg-primary/10 text-primary font-bold text-[10px] border border-primary/20 hover:bg-primary hover:text-white transition-all cursor-pointer"
+                        >
+                          Exact (Full)
+                        </button>
+                        {[50, 100, 200, 500].filter(a => a <= grandTotal).map(amt => (
+                          <button
+                            key={amt}
+                            type="button"
+                            onClick={() => setPaymentAmount(amt)}
+                            className="px-2 py-0.5 rounded bg-muted hover:bg-secondary text-foreground font-semibold text-[10px] border border-border transition-all cursor-pointer"
+                          >
+                            {amt} AED
+                          </button>
+                        ))}
+                      </div>
+
                       <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <label className="text-muted-foreground font-semibold">Method</label>
+                        <div>
+                          <label className="text-muted-foreground font-semibold text-[11px] block mb-1">Method</label>
                           <select
                             value={paymentMethod}
                             onChange={(e) => setPaymentMethod(e.target.value as any)}
-                            className="w-full px-2 py-1 bg-popover border border-border rounded text-foreground"
+                            className="w-full px-2 py-1.5 bg-popover border border-border rounded-lg text-foreground text-xs font-medium"
                           >
                             <option value="Cash">Cash</option>
                             <option value="Card">Card</option>
@@ -736,15 +779,15 @@ export const CreateSale: React.FC = () => {
                             <option value="Bank Transfer">Bank Transfer</option>
                           </select>
                         </div>
-                        <div className="space-y-1">
-                          <label className="text-muted-foreground font-semibold">Paid Amount</label>
+                        <div>
+                          <label className="text-muted-foreground font-semibold text-[11px] block mb-1">Paid Amount</label>
                           <input
                             type="number"
                             min={1}
                             max={grandTotal}
                             value={paymentAmount}
                             onChange={(e) => setPaymentAmount(Math.min(grandTotal, parseFloat(e.target.value) || 0))}
-                            className="w-full px-2 py-1 bg-muted/50 border border-border rounded text-foreground text-right font-semibold"
+                            className="w-full px-2 py-1.5 bg-background border border-border rounded-lg text-foreground text-right font-bold text-xs"
                           />
                         </div>
                       </div>
@@ -757,9 +800,9 @@ export const CreateSale: React.FC = () => {
               <button
                 type="submit"
                 disabled={saving || cart.length === 0}
-                className="w-full bg-primary hover:bg-primary-hover disabled:opacity-50 text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 flex items-center justify-center gap-2 transition-all"
+                className="w-full bg-primary hover:bg-primary-hover disabled:opacity-50 text-white py-3 rounded-xl font-bold text-sm shadow-md shadow-primary/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
               >
-                {saving ? 'Creating Order Invoice...' : 'Finalize Sale & Checkout'}
+                {saving ? 'Processing Invoice...' : 'Finalize Sale & Checkout'}
               </button>
 
             </div>

@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../lib/db';
-import type { Customer } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronLeft, User, Building2, Phone, Mail, MapPin, FileText, Save, Link2, Plus, Trash2 } from 'lucide-react';
+import { ChevronLeft, User, Building2, Phone, Mail, MapPin, FileText, Save, Plus, Trash2 } from 'lucide-react';
 
 export const CustomerForm: React.FC = () => {
   const navigate = useNavigate();
@@ -19,24 +18,11 @@ export const CustomerForm: React.FC = () => {
     customer_type: 'individual' as 'individual' | 'company',
     company_id: '' as string | undefined
   });
-  const [companies, setCompanies] = useState<Customer[]>([]);
   const [members, setMembers] = useState<{ id?: string; name: string; phone?: string; email?: string }[]>([]);
   const [deletedMemberIds, setDeletedMemberIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-
-  useEffect(() => {
-    const loadCompanies = async () => {
-      try {
-        const all = await db.customers.getAll();
-        setCompanies(all.filter((c: any) => c.customer_type === 'company'));
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    loadCompanies();
-  }, []);
 
   useEffect(() => {
     if (isEdit && id) {
@@ -157,8 +143,8 @@ export const CustomerForm: React.FC = () => {
             </div>
             <p className="text-[11px] text-muted-foreground">
               {form.customer_type === 'company'
-                ? 'Company accounts consolidate billing across all their registered members.'
-                : 'Individual persons can optionally be linked to a company as a member.'}
+                ? 'Company accounts can have multiple people / staff members registered under the company.'
+                : 'Individual person customer profile.'}
             </p>
           </div>
 
@@ -267,23 +253,7 @@ export const CustomerForm: React.FC = () => {
             </>
           )}
 
-          {/* Individual: Link to Company */}
-          {form.customer_type === 'individual' && companies.length > 0 && (
-            <div className="space-y-1.5 text-xs p-3 bg-muted/20 border border-border/60 rounded-xl">
-              <label className="text-muted-foreground font-semibold flex items-center gap-1">
-                <Link2 size={13} /> Link to Company <span className="font-normal ml-1 text-muted-foreground">(Optional)</span>
-              </label>
-              <select value={form.company_id || ''} onChange={(e) => setForm({ ...form, company_id: e.target.value || undefined })} className="w-full px-2.5 py-1.5 bg-popover border border-border rounded-lg text-foreground text-xs" disabled={loading}>
-                <option value="">-- No company (standalone individual) --</option>
-                {companies.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              {form.company_id && (
-                <p className="text-[10px] text-primary font-medium mt-1">✓ Billing will be consolidated to the company account.</p>
-              )}
-            </div>
-          )}
+
 
           {/* General Customer Details Grid */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">

@@ -23,7 +23,10 @@ import {
   Menu,
   X,
   Calendar,
-  FileText
+  FileText,
+  Search,
+  Plus,
+  Clock
 } from 'lucide-react';
 
 import { Logo } from '../components/Logo';
@@ -208,10 +211,102 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showUserSwitcher, setShowUserSwitcher] = useState(false);
   const [showBranchSwitcher, setShowBranchSwitcher] = useState(false);
+  
+  // Command Palette State
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState('');
+  const [paletteResults, setPaletteResults] = useState<{ customers: any[]; services: any[]; sales: any[] }>({
+    customers: [],
+    services: [],
+    sales: []
+  });
+  const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+
   const navigate = useNavigate();
   const location = useLocation();
 
   const [expiryCount, setExpiryCount] = useState(0);
+
+  // Live Clock Tick
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Global Keyboard Shortcuts (F2: New Invoice, F4: Invoices, Ctrl+K: Search)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is actively typing in an input/textarea (except Ctrl+K and Escape)
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT';
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen(prev => !prev);
+      } else if (e.key === 'Escape') {
+        setCommandPaletteOpen(false);
+      } else if (!isInput) {
+        if (e.key === 'F2') {
+          e.preventDefault();
+          navigate('/sales/create');
+        } else if (e.key === 'F4') {
+          e.preventDefault();
+          navigate('/sales');
+        } else if (e.key === 'F8') {
+          e.preventDefault();
+          navigate('/customers');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navigate]);
+
+  // Command Palette Search Handler
+  useEffect(() => {
+    if (!commandPaletteOpen || !paletteQuery.trim()) {
+      setPaletteResults({ customers: [], services: [], sales: [] });
+      return;
+    }
+
+    const searchMaster = async () => {
+      try {
+        const q = paletteQuery.toLowerCase();
+        const [cList, sList, salesList] = await Promise.all([
+          db.customers.getAll(),
+          db.services.getAll(),
+          db.sales.getAll()
+        ]);
+
+        const matchedCustomers = cList.filter(c => 
+          c.name.toLowerCase().includes(q) || (c.phone && c.phone.includes(q))
+        ).slice(0, 4);
+
+        const matchedServices = sList.filter(s =>
+          s.name.toLowerCase().includes(q)
+        ).slice(0, 4);
+
+        const matchedSales = salesList.filter(s =>
+          s.invoice_no.toLowerCase().includes(q) ||
+          (s.customer && s.customer.name.toLowerCase().includes(q))
+        ).slice(0, 4);
+
+        setPaletteResults({
+          customers: matchedCustomers,
+          services: matchedServices,
+          sales: matchedSales
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    const debounce = setTimeout(searchMaster, 150);
+    return () => clearTimeout(debounce);
+  }, [paletteQuery, commandPaletteOpen]);
 
   useEffect(() => {
     const fetchDocCount = async () => {
@@ -254,6 +349,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
     : availableBranches.find(b => b.id === activeBranchId)?.name || 'Select Branch';
 
   const currentUserRoleName = allUsersList.find(u => u.id === user?.id)?.role?.name || 'User';
+
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground relative">
@@ -532,25 +628,218 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
 
       {/* ═══════ MAIN CONTENT ═══════ */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Mobile Header (Hidden on Desktop) */}
-        <header className="h-12 border-b border-border flex items-center px-4 bg-card md:hidden shrink-0">
-          <button
-            onClick={() => setMobileOpen(true)}
-            className="p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground rounded-lg transition-all"
-            title="Open Navigation"
-          >
-            <Menu size={18} />
-          </button>
-          <span className="ml-3 font-bold text-xs text-foreground tracking-wide uppercase">Azizi ERP</span>
+        {/* Top Speed Bar (Desktop + Mobile) */}
+        <header className="h-14 border-b border-border flex items-center justify-between px-4 bg-card shrink-0 shadow-2xs">
+          {/* Left section: Mobile menu & Global Quick Search button */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMobileOpen(true)}
+              className="p-2 hover:bg-muted text-muted-foreground hover:text-foreground rounded-lg transition-all md:hidden cursor-pointer"
+              title="Open Navigation"
+            >
+              <Menu size={18} />
+            </button>
+
+            {/* Quick Command Palette Button */}
+            <button
+              onClick={() => setCommandPaletteOpen(true)}
+              className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-border bg-muted/30 hover:bg-muted text-muted-foreground hover:text-foreground transition-all text-xs font-semibold w-52 sm:w-80 justify-between cursor-pointer"
+            >
+              <div className="flex items-center gap-2 truncate">
+                <Search size={14} className="text-primary shrink-0" />
+                <span className="truncate">Search customers, invoices, services...</span>
+              </div>
+              <kbd className="hidden sm:inline-flex text-[9px]">Ctrl K</kbd>
+            </button>
+          </div>
+
+          {/* Right section: Live Time & Quick Invoice button */}
+          <div className="flex items-center gap-2.5">
+            {/* Live Clock */}
+            <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/40 border border-border text-[11px] font-mono text-muted-foreground font-semibold">
+              <Clock size={12} className="text-primary" />
+              <span>{currentTime}</span>
+            </div>
+
+            {/* Branch Badge */}
+            <div className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/5 text-primary text-xs font-bold border border-primary/20">
+              <Building size={12} />
+              <span className="truncate max-w-[120px]">{activeBranchName}</span>
+            </div>
+
+            {/* Global New Invoice F2 Button */}
+            <button
+              onClick={() => navigate('/sales/create')}
+              className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold shadow-md shadow-primary/20 transition-all cursor-pointer"
+              title="Create New Invoice (Press F2)"
+            >
+              <Plus size={15} />
+              <span className="hidden sm:inline">New Invoice</span>
+              <kbd className="bg-white/20 text-white border-white/30 text-[9px] px-1 py-0.2 ml-0.5">F2</kbd>
+            </button>
+          </div>
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-3 sm:p-4 bg-background">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-5 bg-background">
           <div className="mx-auto w-full">
             {children}
           </div>
         </main>
       </div>
+
+      {/* ═══════ COMMAND PALETTE MODAL (Ctrl+K) ═══════ */}
+      {commandPaletteOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-start justify-center pt-16 px-4 bg-black/60 backdrop-blur-xs animate-fade-in"
+          onClick={() => setCommandPaletteOpen(false)}
+        >
+          <div
+            className="w-full max-w-xl bg-card border border-border rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Search Input Bar */}
+            <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border">
+              <Search size={18} className="text-primary shrink-0" />
+              <input
+                type="text"
+                autoFocus
+                placeholder="Type to search customers, services, invoices, or shortcuts..."
+                value={paletteQuery}
+                onChange={(e) => setPaletteQuery(e.target.value)}
+                className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none border-none ring-0"
+              />
+              <kbd className="text-[10px]">ESC</kbd>
+            </div>
+
+            {/* Results Area */}
+            <div className="max-h-80 overflow-y-auto p-2 space-y-3">
+              {!paletteQuery.trim() ? (
+                <div className="p-3 space-y-2 text-xs">
+                  <div className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground px-2">
+                    Quick Navigation Shortcuts
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      onClick={() => { navigate('/sales/create'); setCommandPaletteOpen(false); }}
+                      className="flex items-center justify-between p-2 rounded-xl bg-muted/40 hover:bg-primary hover:text-white transition-all text-left text-xs font-semibold cursor-pointer group"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Receipt size={14} className="text-primary group-hover:text-white" />
+                        Create Invoice
+                      </span>
+                      <kbd className="group-hover:bg-white/20 group-hover:text-white">F2</kbd>
+                    </button>
+                    <button
+                      onClick={() => { navigate('/sales'); setCommandPaletteOpen(false); }}
+                      className="flex items-center justify-between p-2 rounded-xl bg-muted/40 hover:bg-primary hover:text-white transition-all text-left text-xs font-semibold cursor-pointer group"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Receipt size={14} className="text-primary group-hover:text-white" />
+                        Invoices List
+                      </span>
+                      <kbd className="group-hover:bg-white/20 group-hover:text-white">F4</kbd>
+                    </button>
+                    <button
+                      onClick={() => { navigate('/customers'); setCommandPaletteOpen(false); }}
+                      className="flex items-center justify-between p-2 rounded-xl bg-muted/40 hover:bg-primary hover:text-white transition-all text-left text-xs font-semibold cursor-pointer group"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Users size={14} className="text-primary group-hover:text-white" />
+                        Customers Directory
+                      </span>
+                      <kbd className="group-hover:bg-white/20 group-hover:text-white">F8</kbd>
+                    </button>
+                    <button
+                      onClick={() => { navigate('/quotations/create'); setCommandPaletteOpen(false); }}
+                      className="flex items-center justify-between p-2 rounded-xl bg-muted/40 hover:bg-primary hover:text-white transition-all text-left text-xs font-semibold cursor-pointer group"
+                    >
+                      <span className="flex items-center gap-2">
+                        <FileText size={14} className="text-primary group-hover:text-white" />
+                        Create Quotation
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Matching Customers */}
+                  {paletteResults.customers.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground px-2">Customers</div>
+                      {paletteResults.customers.map(c => (
+                        <button
+                          key={c.id}
+                          onClick={() => { navigate('/customers'); setCommandPaletteOpen(false); }}
+                          className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-primary/10 hover:text-primary transition-all text-left text-xs cursor-pointer"
+                        >
+                          <div>
+                            <div className="font-bold text-foreground">{c.name}</div>
+                            <div className="text-[10px] text-muted-foreground">{c.phone || c.email || 'Customer'}</div>
+                          </div>
+                          <span className="text-[10px] font-bold text-primary">Open →</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Matching Services */}
+                  {paletteResults.services.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground px-2">Services Catalog</div>
+                      {paletteResults.services.map(s => (
+                        <button
+                          key={s.id}
+                          onClick={() => { navigate('/sales/create'); setCommandPaletteOpen(false); }}
+                          className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-primary/10 hover:text-primary transition-all text-left text-xs cursor-pointer"
+                        >
+                          <div>
+                            <div className="font-bold text-foreground">{s.name}</div>
+                            <div className="text-[10px] text-muted-foreground">{s.price.toFixed(2)} AED</div>
+                          </div>
+                          <span className="text-[10px] font-bold text-primary">Add to Bill →</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Matching Invoices */}
+                  {paletteResults.sales.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground px-2">Invoices</div>
+                      {paletteResults.sales.map(sale => (
+                        <button
+                          key={sale.id}
+                          onClick={() => { navigate('/sales'); setCommandPaletteOpen(false); }}
+                          className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-primary/10 hover:text-primary transition-all text-left text-xs cursor-pointer"
+                        >
+                          <div>
+                            <div className="font-bold text-foreground">Invoice #{sale.invoice_no}</div>
+                            <div className="text-[10px] text-muted-foreground">{sale.customer?.name || 'Walk-in'} • {sale.grand_total.toFixed(2)} AED</div>
+                          </div>
+                          <span className="text-[10px] font-bold text-primary">View →</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {paletteResults.customers.length === 0 && paletteResults.services.length === 0 && paletteResults.sales.length === 0 && (
+                    <div className="py-8 text-center text-xs text-muted-foreground italic">
+                      No records matched "{paletteQuery}".
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Palette Footer */}
+            <div className="px-4 py-2 border-t border-border bg-muted/20 flex items-center justify-between text-[10px] text-muted-foreground">
+              <span>Quick shortcuts enabled for rush hour</span>
+              <span>Press <kbd className="text-[9px]">F2</kbd> anywhere for New Invoice</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

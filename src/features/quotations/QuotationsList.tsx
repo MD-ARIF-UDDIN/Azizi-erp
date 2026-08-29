@@ -79,7 +79,6 @@ export const QuotationsList: React.FC = () => {
   const [newStatus, setNewStatus] = useState<'Draft' | 'Sent' | 'Accepted' | 'Rejected' | 'Expired' | 'Converted'>('Draft');
   const [remarks, setRemarks] = useState('');
   const [historyLogModalOpen, setHistoryLogModalOpen] = useState(false);
-  const [viewHistoryQuoteId, setViewHistoryQuoteId] = useState<string | null>(null);
   const [viewHistoryQuoteNo, setViewHistoryQuoteNo] = useState<string>('');
 
   const fetchQuotations = async () => {
@@ -142,7 +141,6 @@ export const QuotationsList: React.FC = () => {
       setLoading(true);
       const hist = await db.quotations.getStatusHistory(qId);
       setStatusHistory(hist);
-      setViewHistoryQuoteId(qId);
       setViewHistoryQuoteNo(qNo);
       setHistoryLogModalOpen(true);
     } catch (err) {
@@ -832,7 +830,7 @@ export const QuotationsList: React.FC = () => {
             <div className="glass border border-border rounded-2xl p-6 w-full max-w-lg bg-white shadow-2xl relative">
               {/* Close Button */}
               <button
-                onClick={() => { setHistoryLogModalOpen(false); setViewHistoryQuoteId(null); }}
+                onClick={() => setHistoryLogModalOpen(false)}
                 className="absolute right-4 top-4 p-2 text-muted-foreground hover:text-foreground bg-muted/40 rounded-full transition-colors cursor-pointer"
               >
                 <X size={16} />
@@ -881,7 +879,7 @@ export const QuotationsList: React.FC = () => {
 
               <div className="flex justify-end pt-4 border-t border-border mt-6">
                 <button
-                  onClick={() => { setHistoryLogModalOpen(false); setViewHistoryQuoteId(null); }}
+                  onClick={() => setHistoryLogModalOpen(false)}
                   className="px-4 py-2 bg-secondary hover:bg-muted text-foreground text-xs font-bold rounded-xl transition-all cursor-pointer"
                 >
                   Close Logs

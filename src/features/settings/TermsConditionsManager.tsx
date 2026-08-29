@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../lib/db';
 import type { TermsConditions } from '../../types/database';
 import {
-  Plus,
   Trash2,
   Edit2,
   FileText

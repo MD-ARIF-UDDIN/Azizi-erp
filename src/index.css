@@ -176,42 +176,78 @@ select option {
     }
 }
 
-/* ── Modern & Simplified Table UI ── */
+/* ── Modern, Simple & Understandable Table UI with Clear Column Separation ── */
+table,
 .glass table {
   border-collapse: separate;
   border-spacing: 0;
   width: 100%;
 }
+table thead th,
 .glass table thead th {
-  background-color: hsl(var(--secondary) / 0.25) !important;
+  background-color: hsl(var(--secondary) / 0.6) !important;
   color: hsl(var(--muted-foreground)) !important;
-  font-size: 9px !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.06em !important;
-  text-transform: uppercase !important;
-  border-bottom: 1.2px solid hsl(var(--border) / 0.7) !important;
-  padding-top: 0.4rem !important;
-  padding-bottom: 0.4rem !important;
-  padding-left: 1.25rem !important;
-  padding-right: 1.25rem !important;
-}
-.glass table tbody tr {
-  transition: background-color 0.15s ease;
-}
-.glass table tbody td {
-  padding-top: 0.35rem !important;
-  padding-bottom: 0.35rem !important;
-  padding-left: 1.25rem !important;
-  padding-right: 1.25rem !important;
   font-size: 11px !important;
-  vertical-align: middle;
-  border-bottom: 1px solid hsl(var(--border) / 0.45) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  border-bottom: 1px solid hsl(var(--border)) !important;
+  border-right: 1px solid hsl(var(--border) / 0.8) !important;
+  padding-top: 0.75rem !important;
+  padding-bottom: 0.75rem !important;
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+  white-space: nowrap;
 }
+table thead th:last-child,
+.glass table thead th:last-child {
+  border-right: none !important;
+}
+
+table tbody tr,
+.glass table tbody tr {
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+table tbody td,
+.glass table tbody td {
+  padding-top: 0.75rem !important;
+  padding-bottom: 0.75rem !important;
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+  vertical-align: middle;
+  border-bottom: 1px solid hsl(var(--border) / 0.6) !important;
+  border-right: 1px solid hsl(var(--border) / 0.5) !important;
+}
+table tbody td:last-child,
+.glass table tbody td:last-child {
+  border-right: none !important;
+}
+table tbody tr:last-child td,
 .glass table tbody tr:last-child td {
   border-bottom: none !important;
 }
+table tbody tr:hover,
 .glass table tbody tr:hover {
-  background-color: color-mix(in srgb, hsl(var(--primary)) 3%, transparent) !important;
+  background-color: hsl(var(--primary) / 0.04) !important;
+}
+
+/* ── Keyboard shortcut badge styling ── */
+kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.15rem 0.4rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: hsl(var(--muted-foreground));
+  background-color: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+  border-radius: 4px;
+  box-shadow: 0 1px 0 1px rgba(0, 0, 0, 0.04);
 }
 
 /* ── Global Micro-interactions ── */
@@ -219,11 +255,12 @@ button, select, input, textarea {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 button:active:not(:disabled) {
-  transform: scale(0.96);
+  transform: scale(0.97);
 }
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: hsl(var(--primary));
   box-shadow: 0 0 0 2px hsl(var(--primary) / 0.15);
 }
+
 

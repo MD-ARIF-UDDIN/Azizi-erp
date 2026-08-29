@@ -70,6 +70,7 @@ export const SalesList: React.FC = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('');
+  const [quickFilter, setQuickFilter] = useState<'all' | 'today' | 'unpaid' | 'completed'>('all');
   const [sortField, setSortField] = useState<'created_at' | 'grand_total'>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
@@ -99,6 +100,20 @@ export const SalesList: React.FC = () => {
   const [payTxnNo, setPayTxnNo] = useState('');
   const [payNotes, setPayNotes] = useState('');
   const [paySaving, setPaySaving] = useState(false);
+
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  // Shift & Overview Metrics
+  const todaySales = sales.filter(s => s.created_at?.startsWith(todayStr));
+  const todayTotalAmount = todaySales.reduce((sum, s) => sum + (s.grand_total || 0), 0);
+  const todayPaidAmount = todaySales.reduce((sum, s) => {
+    const paid = (s.payments || []).reduce((pSum: number, p: any) => pSum + (p.amount || 0), 0);
+    return sum + paid;
+  }, 0);
+  const totalUnpaidDues = sales.reduce((sum, s) => {
+    const paid = (s.payments || []).reduce((pSum: number, p: any) => pSum + (p.amount || 0), 0);
+    return sum + Math.max(0, (s.grand_total || 0) - paid);
+  }, 0);
 
   const fetchSales = async () => {
     setLoading(true);
@@ -179,8 +194,6 @@ export const SalesList: React.FC = () => {
       console.error(err);
     }
   };
-
-
 
   const handlePrint = () => {
     window.print();
@@ -278,7 +291,17 @@ export const SalesList: React.FC = () => {
     const matchesStatus = statusFilter ? s.order_status_id === statusFilter : true;
     const matchesPayment = paymentFilter ? s.payment_status === paymentFilter : true;
 
-    return matchesSearch && matchesStatus && matchesPayment;
+    // Quick filter check
+    let matchesQuick = true;
+    if (quickFilter === 'today') {
+      matchesQuick = s.created_at?.startsWith(todayStr);
+    } else if (quickFilter === 'unpaid') {
+      matchesQuick = s.payment_status !== 'Paid';
+    } else if (quickFilter === 'completed') {
+      matchesQuick = s.order_status?.name?.toLowerCase().includes('complete');
+    }
+
+    return matchesSearch && matchesStatus && matchesPayment && matchesQuick;
   }).sort((a, b) => {
     let multiplier = sortOrder === 'desc' ? -1 : 1;
     if (sortField === 'created_at') {
@@ -290,92 +313,185 @@ export const SalesList: React.FC = () => {
 
   return (
     <PermissionGuard permission="Sales.View" fallback="ui">
-      <div className="space-y-6 print:p-0 print:bg-white print:text-black">
+      <div className="space-y-5 print:p-0 print:bg-white print:text-black">
         
-        {/* HEADER */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
+        {/* HEADER & SHIFT METRICS */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
           <div>
-            <div className="text-xs font-bold text-primary uppercase tracking-wider mb-0.5">Invoices</div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground m-0">List</h1>
+            <div className="text-xs font-bold text-primary uppercase tracking-wider mb-0.5">Invoices & Billing</div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground m-0">Invoices Hub</h1>
           </div>
           {hasPermission('Sales.Create') && (
             <button
               onClick={() => navigate('/sales/create')}
-              className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2.5 rounded-lg text-xs font-semibold shadow-md transition-all self-start sm:self-auto"
+              className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md shadow-primary/20 transition-all self-start sm:self-auto cursor-pointer"
             >
-              <Plus size={14} />
-              Billing Checkout
+              <Plus size={16} />
+              <span>Create New Invoice</span>
+              <kbd className="bg-white/20 text-white border-white/30 text-[9px] px-1 py-0.5">F2</kbd>
             </button>
           )}
         </div>
 
-        {/* TOOLBAR FILTERS */}
-        <div className="flex flex-col lg:flex-row gap-3 bg-muted/30 p-3 rounded-xl border border-border print:hidden">
-          {/* Search */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
-            <input
-              type="text"
-              placeholder="Search by invoice no, customer name..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
-            />
+        {/* SHIFT SUMMARY CARDS */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 print:hidden">
+          <div className="glass p-3.5 rounded-xl border border-border/80 flex items-center justify-between">
+            <div>
+              <div className="text-[11px] font-semibold text-muted-foreground uppercase">Today's Invoices</div>
+              <div className="text-xl font-bold text-foreground mt-0.5">{todaySales.length}</div>
+            </div>
+            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+              #
+            </div>
           </div>
-
-          <div className="flex flex-wrap sm:flex-nowrap gap-2">
-            {/* Status Filter */}
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 bg-popover border border-border rounded-lg text-xs text-foreground"
-            >
-              <option value="">All Job Statuses</option>
-              {statuses.map(st => (
-                <option key={st.id} value={st.id}>{st.name}</option>
-              ))}
-            </select>
-
-            {/* Payment Filter */}
-            <select
-              value={paymentFilter}
-              onChange={(e) => setPaymentFilter(e.target.value)}
-              className="px-3 py-2 bg-popover border border-border rounded-lg text-xs text-foreground"
-            >
-              <option value="">All Payment Statuses</option>
-              <option value="Paid">Paid</option>
-              <option value="Partially Paid">Partially Paid</option>
-              <option value="Unpaid">Unpaid</option>
-            </select>
-
-            {/* Sort Field */}
-            <select
-              value={`${sortField}-${sortOrder}`}
-              onChange={(e) => {
-                const [field, order] = e.target.value.split('-') as [any, any];
-                setSortField(field);
-                setSortOrder(order);
-              }}
-              className="px-3 py-2 bg-popover border border-border rounded-lg text-xs text-foreground"
-            >
-              <option value="created_at-desc">Newest First</option>
-              <option value="created_at-asc">Oldest First</option>
-              <option value="grand_total-desc">Highest Bill</option>
-              <option value="grand_total-asc">Lowest Bill</option>
-            </select>
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                exportSales(filteredSales);
-              }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-border text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all w-full sm:w-auto justify-center cursor-pointer"
-            >
-              <Download size={14} />
-              Export Excel
-            </button>
+          <div className="glass p-3.5 rounded-xl border border-border/80 flex items-center justify-between">
+            <div>
+              <div className="text-[11px] font-semibold text-muted-foreground uppercase">Today's Total</div>
+              <div className="text-xl font-bold text-foreground mt-0.5">{todayTotalAmount.toFixed(2)} <span className="text-xs font-normal text-muted-foreground">AED</span></div>
+            </div>
+            <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 font-bold text-xs">
+              AED
+            </div>
+          </div>
+          <div className="glass p-3.5 rounded-xl border border-border/80 flex items-center justify-between">
+            <div>
+              <div className="text-[11px] font-semibold text-muted-foreground uppercase">Today Collected</div>
+              <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">{todayPaidAmount.toFixed(2)} <span className="text-xs font-normal text-muted-foreground">AED</span></div>
+            </div>
+            <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-xs">
+              ✓
+            </div>
+          </div>
+          <div className="glass p-3.5 rounded-xl border border-border/80 flex items-center justify-between">
+            <div>
+              <div className="text-[11px] font-semibold text-muted-foreground uppercase">Outstanding Dues</div>
+              <div className="text-xl font-bold text-rose-600 dark:text-rose-400 mt-0.5">{totalUnpaidDues.toFixed(2)} <span className="text-xs font-normal text-muted-foreground">AED</span></div>
+            </div>
+            <div className="w-9 h-9 rounded-lg bg-rose-500/10 flex items-center justify-center text-rose-600 dark:text-rose-400 font-bold text-xs">
+              !
+            </div>
           </div>
         </div>
+
+        {/* TOOLBAR & FAST FILTER CHIPS */}
+        <div className="bg-card p-3 rounded-xl border border-border space-y-2.5 print:hidden shadow-sm">
+          {/* Quick Filter Buttons */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            <button
+              onClick={() => setQuickFilter('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                quickFilter === 'all'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted'
+              }`}
+            >
+              All Invoices ({sales.length})
+            </button>
+            <button
+              onClick={() => setQuickFilter('today')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                quickFilter === 'today'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted'
+              }`}
+            >
+              <span>⚡ Today's Shift</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/20">{todaySales.length}</span>
+            </button>
+            <button
+              onClick={() => setQuickFilter('unpaid')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                quickFilter === 'unpaid'
+                  ? 'bg-rose-500 text-white shadow-sm'
+                  : 'bg-muted/50 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10'
+              }`}
+            >
+              <span>⚠️ Unpaid & Dues</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/20">
+                {sales.filter(s => s.payment_status !== 'Paid').length}
+              </span>
+            </button>
+            <button
+              onClick={() => setQuickFilter('completed')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                quickFilter === 'completed'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-muted/50 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10'
+              }`}
+            >
+              <span>✅ Completed</span>
+            </button>
+          </div>
+
+          <div className="flex flex-col lg:flex-row gap-2.5 pt-1 border-t border-border/60">
+            {/* Search */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={15} />
+              <input
+                type="text"
+                placeholder="Search invoice #, customer name, phone..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 rounded-lg border border-border bg-background text-xs focus:outline-none focus:ring-2 focus:ring-primary/40 text-foreground"
+              />
+            </div>
+
+            <div className="flex flex-wrap sm:flex-nowrap gap-2">
+              {/* Status Filter */}
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-2.5 py-2 bg-popover border border-border rounded-lg text-xs font-medium text-foreground"
+              >
+                <option value="">All Job Statuses</option>
+                {statuses.map(st => (
+                  <option key={st.id} value={st.id}>{st.name}</option>
+                ))}
+              </select>
+
+              {/* Payment Filter */}
+              <select
+                value={paymentFilter}
+                onChange={(e) => setPaymentFilter(e.target.value)}
+                className="px-2.5 py-2 bg-popover border border-border rounded-lg text-xs font-medium text-foreground"
+              >
+                <option value="">All Payments</option>
+                <option value="Paid">Paid</option>
+                <option value="Partially Paid">Partially Paid</option>
+                <option value="Unpaid">Unpaid</option>
+              </select>
+
+              {/* Sort Field */}
+              <select
+                value={`${sortField}-${sortOrder}`}
+                onChange={(e) => {
+                  const [field, order] = e.target.value.split('-') as [any, any];
+                  setSortField(field);
+                  setSortOrder(order);
+                }}
+                className="px-2.5 py-2 bg-popover border border-border rounded-lg text-xs font-medium text-foreground"
+              >
+                <option value="created_at-desc">Newest First</option>
+                <option value="created_at-asc">Oldest First</option>
+                <option value="grand_total-desc">Highest Bill</option>
+                <option value="grand_total-asc">Lowest Bill</option>
+              </select>
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  exportSales(filteredSales);
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border border-border text-emerald-500 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all w-full sm:w-auto justify-center cursor-pointer"
+                title="Export list to Excel"
+              >
+                <Download size={14} />
+                <span>Excel</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
 
         {/* MAIN FULL VIEW */}
         <div className="w-full">
@@ -390,115 +506,164 @@ export const SalesList: React.FC = () => {
             ) : (
               <div className="glass border border-border rounded-2xl overflow-hidden shadow-xl">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-secondary/40 border-b border-border text-muted-foreground text-xs uppercase font-semibold">
+                  <table className="w-full text-left">
+                    <thead>
                       <tr>
-                        <th className="px-4 py-4 text-center w-12">SL</th>
-                        <th className="px-5 py-4">Invoice No & Date</th>
-                        <th className="px-5 py-4">Quotation Ref</th>
-                        <th className="px-5 py-4">Customer</th>
-                        <th className="px-5 py-4">Job Status</th>
-                        <th className="px-5 py-4">Payment</th>
-                        <th className="px-5 py-4 text-right">Bill Amount</th>
-                        <th className="px-5 py-4 text-center w-36">Actions</th>
+                        <th className="text-center w-12">#</th>
+                        <th>Invoice & Time</th>
+                        <th>Customer</th>
+                        <th>Job Status</th>
+                        <th>Payment Status</th>
+                        <th className="text-right">Bill Total</th>
+                        <th className="text-center w-44">Quick Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border/60">
+                    <tbody className="divide-y divide-border/50">
                       {filteredSales.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">
-                            No invoices matched selection filters.
+                          <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                            <div className="max-w-xs mx-auto space-y-1">
+                              <div className="font-bold text-foreground">No matching invoices found</div>
+                              <div className="text-xs">Try adjusting your search query or quick filter chips above.</div>
+                            </div>
                           </td>
                         </tr>
                       ) : (
                         filteredSales.map((s, idx) => {
                           const isSelected = selectedSaleId === s.id;
+                          const totalPaid = (s.payments || []).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+                          const remainingDue = Math.max(0, (s.grand_total || 0) - totalPaid);
+
                           return (
                             <tr
                               key={s.id}
-                              className={`hover:bg-muted/25 transition-colors ${
-                                isSelected ? 'bg-secondary/25 font-medium' : ''
+                              className={`transition-colors cursor-pointer ${
+                                isSelected ? 'bg-primary/5 font-medium' : ''
                               }`}
+                              onClick={() => handleOpenDetail(s.id)}
                             >
-                              <td className="px-4 py-4 text-center text-muted-foreground font-semibold">
+                              {/* Serial */}
+                              <td className="text-center text-muted-foreground font-bold text-xs">
                                 {idx + 1}
                               </td>
-                              <td className="px-5 py-4">
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary/10 border border-primary/20 text-primary font-mono font-bold text-[11px] tracking-wide">
-                                  # {s.invoice_no}
-                                </span>
-                                <div className="text-[10px] text-muted-foreground mt-1.5">
-                                  {new Date(s.created_at).toLocaleString()} • {s.branch?.name}
+
+                              {/* Invoice & Time */}
+                              <td>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono font-bold text-primary text-xs px-2 py-0.5 rounded bg-primary/10 border border-primary/20">
+                                    #{s.invoice_no}
+                                  </span>
+                                  {(s as any).quotation_id && (
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                      Quote
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1.5">
+                                  <span>{new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                  <span>•</span>
+                                  <span>{new Date(s.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
+                                  {s.branch?.name && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="truncate max-w-[90px]">{s.branch.name}</span>
+                                    </>
+                                  )}
                                 </div>
                               </td>
-                              <td className="px-5 py-4">
-                                {(s as any).quotation_id ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                                    Linked
-                                  </span>
-                                ) : (
-                                  <span className="text-muted-foreground text-[10px]">—</span>
-                                )}
+
+                              {/* Customer */}
+                              <td>
+                                <div className="font-bold text-foreground text-xs leading-tight">
+                                  {s.person_name ? (
+                                    <span>{s.person_name}</span>
+                                  ) : s.customer ? (
+                                    <span>{s.customer.name}</span>
+                                  ) : (
+                                    <span className="text-muted-foreground font-normal italic">Walk-in Customer</span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1.5">
+                                  {s.person_phone || s.customer?.phone ? (
+                                    <span>{s.person_phone || s.customer?.phone}</span>
+                                  ) : null}
+                                  {s.customer?.company && (
+                                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-500 font-semibold border border-blue-500/20">
+                                      {s.customer.company.name}
+                                    </span>
+                                  )}
+                                </div>
                               </td>
-                              <td className="px-5 py-4">
-                                {s.customer ? (
-                                  <>
-                                    <div className="text-foreground font-medium flex flex-wrap items-center gap-1.5">
-                                      {s.person_name ? (
-                                        <>
-                                          <span>{s.person_name}</span>
-                                          <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded font-semibold">
-                                            Company: {s.customer.name}
-                                          </span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <span>{s.customer.name}</span>
-                                          {s.customer.company && (
-                                            <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded font-semibold">
-                                              Billed to: {s.customer.company.name}
-                                            </span>
-                                          )}
-                                        </>
-                                      )}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground mt-0.5">{s.person_phone || s.customer.phone || 'No phone'}</div>
-                                  </>
-                                ) : (
-                                  <div className="text-foreground font-medium">Walk-in Customer</div>
-                                )}
-                              </td>
-                              <td className="px-5 py-4">
+
+                              {/* Job Status */}
+                              <td>
                                 <span
-                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-0.8 rounded-full text-[11px] font-bold border"
                                   style={{
-                                    borderColor: `${s.order_status?.color}25`,
-                                    color: s.order_status?.color,
-                                    backgroundColor: `${s.order_status?.color}10`
+                                    borderColor: `${s.order_status?.color || '#10b981'}30`,
+                                    color: s.order_status?.color || '#10b981',
+                                    backgroundColor: `${s.order_status?.color || '#10b981'}12`
                                   }}
                                 >
-                                  {s.order_status?.name}
+                                  <span
+                                    className="w-1.5 h-1.5 rounded-full"
+                                    style={{ backgroundColor: s.order_status?.color || '#10b981' }}
+                                  />
+                                  {s.order_status?.name || 'Processing'}
                                 </span>
                               </td>
-                              <td className="px-5 py-4">
-                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
-                                  s.payment_status === 'Paid' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                                  s.payment_status === 'Partially Paid' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-                                  'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                                }`}>
-                                  {s.payment_status}
-                                </span>
+
+                              {/* Payment Status & Due */}
+                              <td>
+                                {s.payment_status === 'Paid' ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.8 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+                                    ✓ Paid Full
+                                  </span>
+                                ) : s.payment_status === 'Partially Paid' ? (
+                                  <div>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25">
+                                      Partial
+                                    </span>
+                                    <div className="text-[11px] font-bold text-amber-600 dark:text-amber-400 mt-0.5">
+                                      Due: {remainingDue.toFixed(2)} AED
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25">
+                                      Unpaid
+                                    </span>
+                                    <div className="text-[11px] font-bold text-rose-600 dark:text-rose-400 mt-0.5">
+                                      Due: {remainingDue.toFixed(2)} AED
+                                    </div>
+                                  </div>
+                                )}
                               </td>
-                              <td className="px-5 py-4 text-right font-bold text-foreground">
-                                 {s.grand_total.toFixed(2)} AED
+
+                              {/* Grand Total */}
+                              <td className="text-right font-black text-foreground text-sm">
+                                {s.grand_total.toFixed(2)} <span className="text-[10px] font-semibold text-muted-foreground">AED</span>
                               </td>
-                              <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex items-center justify-center gap-1.5">
+
+                              {/* Quick Actions */}
+                              <td onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-center gap-1">
+                                  {remainingDue > 0 && (
+                                    <button
+                                      onClick={() => handleOpenPayModal(s.id)}
+                                      className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer shadow-xs"
+                                      title="Collect Payment"
+                                    >
+                                      <CreditCard size={11} />
+                                      <span>Pay</span>
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => handleOpenDetail(s.id)}
-                                    className="px-2.5 py-1.5 bg-secondary hover:bg-secondary-foreground/10 text-foreground text-xs font-bold rounded-lg transition-all cursor-pointer"
+                                    className="p-1.5 bg-muted hover:bg-secondary text-muted-foreground hover:text-foreground rounded-md transition-all cursor-pointer"
+                                    title="View Full Details"
                                   >
-                                    Details
+                                    <Clock size={14} />
                                   </button>
                                   <button
                                     onClick={async () => {
@@ -509,34 +674,27 @@ export const SalesList: React.FC = () => {
                                         window.print();
                                       }, 400);
                                     }}
-                                    className="p-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-white rounded-lg transition-all inline-flex items-center justify-center align-middle cursor-pointer"
+                                    className="p-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-white rounded-md transition-all cursor-pointer"
                                     title="Print Invoice"
                                   >
-                                    <Printer size={13} />
+                                    <Printer size={14} />
                                   </button>
                                   <button
                                     onClick={async () => {
                                       const detail = await db.sales.getById(s.id);
                                       handleWhatsAppShare(detail);
                                     }}
-                                    className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white rounded-lg transition-all inline-flex items-center justify-center align-middle cursor-pointer"
-                                    title="Share Invoice Details on WhatsApp"
+                                    className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-600 dark:text-emerald-400 hover:text-white rounded-md transition-all cursor-pointer"
+                                    title="Send WhatsApp Receipt"
                                   >
-                                    <MessageSquare size={13} />
+                                    <MessageSquare size={14} />
                                   </button>
                                   <button
                                     onClick={() => handleOpenEditItems(s.id)}
-                                    className="p-1.5 bg-violet-500/10 hover:bg-violet-500 text-violet-500 hover:text-white rounded-lg transition-all inline-flex items-center justify-center align-middle cursor-pointer"
+                                    className="p-1.5 bg-muted hover:bg-secondary text-muted-foreground hover:text-foreground rounded-md transition-all cursor-pointer"
                                     title="Edit Invoice Items"
                                   >
-                                    <Pencil size={13} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleOpenPayModal(s.id)}
-                                    className="p-1.5 bg-emerald-600/10 hover:bg-emerald-600 text-emerald-600 hover:text-white rounded-lg transition-all inline-flex items-center justify-center align-middle cursor-pointer"
-                                    title="Collect Payment / View Payment History"
-                                  >
-                                    <CreditCard size={13} />
+                                    <Pencil size={14} />
                                   </button>
                                 </div>
                               </td>
@@ -692,7 +850,14 @@ export const SalesList: React.FC = () => {
                                   rows.push(
                                     <tr key={item.id} className="h-8 hover:bg-gray-50/50">
                                       <td className="px-3 py-1.5 text-center border-r border-gray-300 text-black font-semibold">{index + 1}</td>
-                                      <td className="px-3 py-1.5 border-r border-gray-300 text-black font-bold text-left">{item.service?.name}</td>
+                                      <td className="px-3 py-1.5 border-r border-gray-300 text-black font-bold text-left">
+                                        {item.service?.name}
+                                        {item.person_name ? (
+                                          <span className="ml-1.5 font-normal text-[11px] text-gray-700 italic">
+                                            (For: {item.person_name})
+                                          </span>
+                                        ) : null}
+                                      </td>
                                       <td className="px-3 py-1.5 text-center border-r border-gray-300 text-black">{item.quantity}</td>
                                       <td className="px-3 py-1.5 text-right border-r border-gray-300 text-black">{item.unit_price.toFixed(2)}</td>
                                       <td className="px-3 py-1.5 text-right text-black font-bold">{item.subtotal.toFixed(2)}</td>

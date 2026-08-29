@@ -133,9 +133,7 @@ const SEED_USERS = (roles: Role[], branches: Branch[]): User[] => [
 ];
 
 const SEED_CUSTOMERS = (): Customer[] => [
-  { id: 'c1-cust', name: 'Md. Karim Ullah', phone: '+8801555112233', email: 'karim@gmail.com', address: 'Motijheel, Dhaka', notes: 'Frequent buyer for legal documents typing.', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'c2-cust', name: 'Farzana Chowdhury', phone: '+8801999223344', email: 'farzana@yahoo.com', address: 'Halishahar, Chittagong', notes: 'Corporate client ordering stamps in bulk.', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'c3-cust', name: 'Walk-in Customer', phone: '+880000000000', email: 'walkin@azizi.com', address: 'N/A', notes: 'Generic customer for quick retail checkout.', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'c1-cust', name: 'Walk-in Customer', phone: '+971500000000', email: 'walkin@azizi.ae', address: 'Musaffah, Abu Dhabi', notes: 'General counter walk-in customer', customer_type: 'individual', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
 ];
 
 const SEED_CATEGORIES = (): ServiceCategory[] => [
@@ -894,6 +892,16 @@ export const db = {
       saveAll();
       logAudit(getActiveUserSession().id, 'DELETE_SOFT', 'customers', id, old, updated);
       return delay(true);
+    },
+    deleteAll: async () => {
+      if (isSupabaseConfigured && supabase) {
+        const { error } = await supabase.from('customers').update({ is_deleted: true }).neq('id', '00000000-0000-0000-0000-000000000000');
+        if (error) throw error;
+        return true;
+      }
+      _customers = [];
+      saveAll();
+      return delay(true);
     }
   },
 
@@ -1192,7 +1200,7 @@ export const db = {
       branch_id: string;
       discount: number;
       notes?: string;
-      items: Array<{ service_id: string; quantity: number; unit_price: number }>;
+      items: Array<{ service_id: string; quantity: number; unit_price: number; person_name?: string }>;
       initialPayment?: { amount: number; payment_method: Payment['payment_method'] };
       person_name?: string;
       person_phone?: string;
@@ -1252,7 +1260,8 @@ export const db = {
           service_id: item.service_id,
           quantity: item.quantity,
           unit_price: item.unit_price,
-          subtotal: item.unit_price * item.quantity
+          subtotal: item.unit_price * item.quantity,
+          person_name: item.person_name || undefined
         }));
         const { error: itemsErr } = await supabase.from('sale_items').insert(itemsPayload);
         if (itemsErr) throw itemsErr;
@@ -1311,6 +1320,7 @@ export const db = {
         quantity: item.quantity,
         unit_price: item.unit_price,
         subtotal: item.unit_price * item.quantity,
+        person_name: item.person_name || undefined,
         created_at: now.toISOString(),
         updated_at: now.toISOString()
       }));

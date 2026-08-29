@@ -132,6 +132,8 @@ export interface SaleItem {
   quantity: number;
   unit_price: number;
   subtotal: number;
+  person_name?: string;
+  service?: Service;
   created_at: string;
   updated_at: string;
 }

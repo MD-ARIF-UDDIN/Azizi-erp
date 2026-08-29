@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../lib/db';
-import type { Customer, ClientDocument, Service } from '../../types/database';
+import type { Customer, ClientDocument, Service, Payment } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
 import { useNavigate } from 'react-router-dom';
@@ -25,6 +25,7 @@ import {
   CreditCard,
   MessageSquare,
   User,
+  Users,
   Building2,
   Download,
   Pencil
@@ -80,6 +81,7 @@ interface QsCartItem {
   service: Service;
   quantity: number;
   unit_price: number;
+  person_name?: string;
 }
 
 export const CustomerList: React.FC = () => {
@@ -91,6 +93,7 @@ export const CustomerList: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   const [selectedCustDocs, setSelectedCustDocs] = useState<ClientDocument[]>([]);
+  const [custDetailTab, setCustDetailTab] = useState<'invoices' | 'documents' | 'members' | 'info'>('invoices');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDueOnly, setFilterDueOnly] = useState(false);
@@ -99,7 +102,11 @@ export const CustomerList: React.FC = () => {
 
   // --- Quick Sale State ---
   const [qsCustomer, setQsCustomer] = useState<any | null>(null);
+  const [qsPersonName, setQsPersonName] = useState('');
   const [qsServices, setQsServices] = useState<Service[]>([]);
+  const [qsCategories, setQsCategories] = useState<any[]>([]);
+  const [qsSearch, setQsSearch] = useState('');
+  const [qsCategory, setQsCategory] = useState('all');
   const [qsCart, setQsCart] = useState<QsCartItem[]>([]);
   const [qsDiscount, setQsDiscount] = useState(0);
   const [qsNotes, setQsNotes] = useState('');
@@ -129,6 +136,119 @@ export const CustomerList: React.FC = () => {
   const [addQty, setAddQty] = useState(1);
   const [addPrice, setAddPrice] = useState(0);
   const [editSaving, setEditSaving] = useState(false);
+
+  // --- Create/Edit Customer Modal State ---
+  const [customerModalOpen, setCustomerModalOpen] = useState(false);
+  const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
+  const [customerForm, setCustomerForm] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    address: '',
+    notes: '',
+    customer_type: 'individual' as 'individual' | 'company'
+  });
+  const [peopleUnderCompany, setPeopleUnderCompany] = useState<{ id?: string; name: string; phone?: string; email?: string }[]>([]);
+  const [newPersonName, setNewPersonName] = useState('');
+  const [newPersonPhone, setNewPersonPhone] = useState('');
+  const [newPersonEmail, setNewPersonEmail] = useState('');
+  const [customerModalSaving, setCustomerModalSaving] = useState(false);
+  const [customerModalError, setCustomerModalError] = useState('');
+
+  const openCreateCustomerModal = () => {
+    setEditingCustomerId(null);
+    setCustomerForm({
+      name: '',
+      phone: '',
+      email: '',
+      address: '',
+      notes: '',
+      customer_type: 'individual'
+    });
+    setPeopleUnderCompany([]);
+    setNewPersonName('');
+    setNewPersonPhone('');
+    setNewPersonEmail('');
+    setCustomerModalError('');
+    setCustomerModalOpen(true);
+  };
+
+  const openEditCustomerModal = (cust: any) => {
+    setEditingCustomerId(cust.id);
+    setCustomerForm({
+      name: cust.name || '',
+      phone: cust.phone || '',
+      email: cust.email || '',
+      address: cust.address || '',
+      notes: cust.notes || '',
+      customer_type: cust.customer_type || 'individual'
+    });
+    setPeopleUnderCompany(Array.isArray(cust.members) ? cust.members : []);
+    setNewPersonName('');
+    setNewPersonPhone('');
+    setNewPersonEmail('');
+    setCustomerModalError('');
+    setCustomerModalOpen(true);
+  };
+
+  const handleAddPerson = () => {
+    if (!newPersonName.trim()) return;
+    setPeopleUnderCompany(prev => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        name: newPersonName.trim(),
+        phone: newPersonPhone.trim() || undefined,
+        email: newPersonEmail.trim() || undefined
+      }
+    ]);
+    setNewPersonName('');
+    setNewPersonPhone('');
+    setNewPersonEmail('');
+  };
+
+  const handleRemovePerson = (idx: number) => {
+    setPeopleUnderCompany(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleSaveCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customerForm.name.trim()) {
+      setCustomerModalError(customerForm.customer_type === 'company' ? 'Company name is required.' : 'Person full name is required.');
+      return;
+    }
+
+    setCustomerModalSaving(true);
+    setCustomerModalError('');
+    try {
+      const payload: any = {
+        name: customerForm.name.trim(),
+        phone: customerForm.phone.trim() || null,
+        email: customerForm.email.trim() || null,
+        address: customerForm.address.trim() || null,
+        notes: customerForm.notes.trim() || null,
+        customer_type: customerForm.customer_type,
+        members: customerForm.customer_type === 'company' ? peopleUnderCompany : []
+      };
+
+      if (editingCustomerId) {
+        await db.customers.update(editingCustomerId, payload);
+      } else {
+        await db.customers.create(payload);
+      }
+
+      setCustomerModalOpen(false);
+      await fetchCustomers();
+      if (selectedCustomer && editingCustomerId && selectedCustomer.id === editingCustomerId) {
+        const refreshed = await db.customers.getById(editingCustomerId);
+        setSelectedCustomer(refreshed);
+      }
+    } catch (err: any) {
+      setCustomerModalError(err.message || 'Failed to save customer.');
+    } finally {
+      setCustomerModalSaving(false);
+    }
+  };
 
   const handleOpenEditItems = async (saleId: string) => {
     try {
@@ -221,6 +341,7 @@ export const CustomerList: React.FC = () => {
 
   const handleOpenDetail = async (cust: Customer) => {
     setLoading(true);
+    setCustDetailTab('invoices');
     try {
       const detailed = await db.customers.getById(cust.id);
       setSelectedCustomer(detailed);
@@ -260,10 +381,17 @@ export const CustomerList: React.FC = () => {
   };
 
   // --- Quick Sale Handlers ---
-  const openQuickSale = async (cust: any) => {
-    const services = await db.services.getAll();
+  const openQuickSale = async (cust: any, preselectedPersonName?: string) => {
+    const [services, cats] = await Promise.all([
+      db.services.getAll(),
+      db.serviceCategories.getAll()
+    ]);
     setQsServices(services.filter(s => s.status === 'Active'));
+    setQsCategories(cats);
+    setQsSearch('');
+    setQsCategory('all');
     setQsCustomer(cust);
+    setQsPersonName(preselectedPersonName || '');
     setQsCart([]);
     setQsDiscount(0);
     setQsNotes('');
@@ -274,13 +402,14 @@ export const CustomerList: React.FC = () => {
   };
 
   const qsAddService = (service: Service) => {
-    const idx = qsCart.findIndex(i => i.service.id === service.id);
+    const assignedPerson = qsPersonName || undefined;
+    const idx = qsCart.findIndex(i => i.service.id === service.id && i.person_name === assignedPerson);
     if (idx !== -1) {
       const updated = [...qsCart];
       updated[idx].quantity += 1;
       setQsCart(updated);
     } else {
-      setQsCart([...qsCart, { service, quantity: 1, unit_price: service.price }]);
+      setQsCart([...qsCart, { service, quantity: 1, unit_price: service.price, person_name: assignedPerson }]);
     }
   };
 
@@ -293,7 +422,7 @@ export const CustomerList: React.FC = () => {
   };
 
   const qsSubmit = async () => {
-    if (qsCart.length === 0) { setQsError('Add at least one service.'); return; }
+    if (qsCart.length === 0) { setQsError('Please add at least one service to the invoice.'); return; }
     const branchId = user?.branch_id;
     if (!branchId) { setQsError('No branch assigned to your account.'); return; }
     setQsSaving(true);
@@ -301,15 +430,27 @@ export const CustomerList: React.FC = () => {
     try {
       const subtotal = qsCart.reduce((s, i) => s + i.unit_price * i.quantity, 0);
       const grandTotal = Math.max(0, subtotal - qsDiscount);
+
+      let initialPaymentPayload: { amount: number; payment_method: Payment['payment_method'] } | undefined = undefined;
+      if (qsHasPayment && qsPayAmount > 0 && grandTotal > 0) {
+        initialPaymentPayload = {
+          amount: Math.min(grandTotal, qsPayAmount),
+          payment_method: qsPayMethod
+        };
+      }
+
       const createdSale = await db.sales.create({
         customer_id: qsCustomer?.id,
         branch_id: branchId,
         discount: qsDiscount,
         notes: qsNotes || undefined,
-        items: qsCart.map(i => ({ service_id: i.service.id, quantity: i.quantity, unit_price: i.unit_price })),
-        initialPayment: qsHasPayment && qsPayAmount > 0
-          ? { amount: Math.min(qsPayAmount, grandTotal), payment_method: qsPayMethod }
-          : undefined
+        items: qsCart.map(i => ({ 
+          service_id: i.service.id, 
+          quantity: i.quantity, 
+          unit_price: i.unit_price,
+          person_name: i.person_name || undefined
+        })),
+        initialPayment: initialPaymentPayload
       });
       // Print immediately
       await handlePrintSale(createdSale.id);
@@ -444,15 +585,15 @@ export const CustomerList: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="text-xs font-bold text-primary uppercase tracking-wider mb-0.5">eCustomers</div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground m-0">List</h1>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground m-0">Directory</h1>
             </div>
-             {hasPermission('Customer.Create') && (
+            {hasPermission('Customer.Create') && (
               <button
-                onClick={() => navigate('/customers/create')}
-                className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2.5 rounded-lg text-xs font-semibold shadow-md transition-all self-start sm:self-auto"
+                onClick={openCreateCustomerModal}
+                className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md shadow-primary/20 transition-all cursor-pointer self-start sm:self-auto"
               >
                 <Plus size={14} />
-                Register Customer
+                <span>Register Customer</span>
               </button>
             )}
           </div>
@@ -472,7 +613,7 @@ export const CustomerList: React.FC = () => {
             
             <button
               onClick={() => setFilterDueOnly(!filterDueOnly)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-all w-full sm:w-auto justify-center ${
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-all w-full sm:w-auto justify-center cursor-pointer ${
                 filterDueOnly
                   ? 'bg-amber-500/10 text-amber-400 border-amber-500/30 font-semibold'
                   : 'border-border text-muted-foreground hover:bg-secondary/40'
@@ -503,692 +644,1099 @@ export const CustomerList: React.FC = () => {
           ) : (
             <div className="glass border border-border rounded-2xl overflow-hidden shadow-xl">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-secondary/40 border-b border-border text-muted-foreground text-xs uppercase font-semibold">
+                <table className="w-full text-left">
+                  <thead>
                     <tr>
-                      <th className="px-4 py-4 text-center w-12">SL</th>
-                      <th className="px-6 py-4">Customer Details</th>
-                      <th className="px-6 py-4">Dues Balance</th>
-                      <th className="px-6 py-4">Document Expiry</th>
-                      <th className="px-6 py-4">Orders</th>
-                      <th className="px-6 py-4 text-center w-52">Actions</th>
+                      <th className="text-center w-12">#</th>
+                      <th>Customer & Contact</th>
+                      <th>Account Type</th>
+                      <th>Outstanding Due</th>
+                      <th>Active Documents</th>
+                      <th className="text-center">Invoices</th>
+                      <th className="text-center w-48">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border/60">
+                  <tbody className="divide-y divide-border/50">
                     {filteredCustomers.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
-                          No customers found. Register one or change filters.
+                        <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                          <div className="max-w-xs mx-auto space-y-1">
+                            <div className="font-bold text-foreground">No customers found</div>
+                            <div className="text-xs">Click "Register Customer" to add a new person or company.</div>
+                          </div>
                         </td>
                       </tr>
                     ) : (
                       filteredCustomers.map((c: any, idx) => {
                         const anyDocExpiringSoon = c.documents?.some((doc: any) => getDaysRemaining(doc.expiry_date) <= 7);
+                        const isSelected = selectedCustomer?.id === c.id;
+
                         return (
                           <tr
                             key={c.id}
                             onClick={() => handleOpenDetail(c)}
-                            className={`hover:bg-muted/25 transition-colors cursor-pointer ${
-                              selectedCustomer?.id === c.id ? 'bg-secondary/25 font-semibold' : ''
+                            className={`transition-colors cursor-pointer ${
+                              isSelected ? 'bg-primary/5 font-semibold' : ''
                             } ${
-                              anyDocExpiringSoon ? 'bg-rose-500/10 border-l-4 border-l-rose-500 hover:bg-rose-500/20' : ''
+                              anyDocExpiringSoon ? 'bg-rose-500/5 hover:bg-rose-500/10' : ''
                             }`}
                           >
-                          <td className="px-4 py-4 text-center text-muted-foreground font-semibold">
-                            {idx + 1}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="font-semibold text-foreground">{c.name}</div>
-                            {c.customer_type === 'company' ? (
-                              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                                <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded border border-primary/20">
-                                  Company Account
-                                </span>
-                                {c.members && c.members.length > 0 && (
-                                  <span className="text-muted-foreground text-[10px] bg-blue-500/5 text-blue-400 border border-blue-500/10 px-1.5 py-0.5 rounded">
-                                    {c.members.length} member{c.members.length !== 1 ? 's' : ''}
+                            {/* Serial */}
+                            <td className="text-center text-muted-foreground font-bold text-xs">
+                              {idx + 1}
+                            </td>
+
+                            {/* Customer Details */}
+                            <td>
+                              <div className="font-bold text-foreground text-xs flex items-center gap-1.5">
+                                {c.customer_type === 'company' ? (
+                                  <Building2 size={14} className="text-primary shrink-0" />
+                                ) : (
+                                  <User size={14} className="text-primary shrink-0" />
+                                )}
+                                <span>{c.name}</span>
+                              </div>
+                              <div className="text-[11px] text-muted-foreground flex items-center gap-3 mt-1">
+                                {c.phone && (
+                                  <span className="flex items-center gap-1">
+                                    <Phone size={11} className="text-primary" /> {c.phone}
+                                  </span>
+                                )}
+                                {c.email && (
+                                  <span className="flex items-center gap-1">
+                                    <Mail size={11} /> {c.email}
                                   </span>
                                 )}
                               </div>
-                            ) : c.customer_type === 'individual' && c.company_id ? (
-                              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                                <span className="bg-blue-500/10 text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-500/20">
-                                  Member of {c.company?.name || 'Company'}
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                                <span className="bg-zinc-500/10 text-zinc-400 text-[10px] font-bold px-2 py-0.5 rounded border border-zinc-500/20">
-                                  Individual Person
-                                </span>
-                              </div>
-                            )}
-                            <div className="text-xs text-muted-foreground flex items-center gap-3 mt-1.5">
-                              {c.phone && <span className="flex items-center gap-1"><Phone size={12} /> {c.phone}</span>}
-                              {c.email && <span className="flex items-center gap-1"><Mail size={12} /> {c.email}</span>}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            {c.customer_type === 'individual' && c.company_id ? (
-                              <span className="inline-flex items-center gap-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-0.5 rounded-full text-xs font-semibold" title={`Billed to parent account: ${c.company?.name}`}>
-                                Billed to Company
-                              </span>
-                            ) : c.due > 0 ? (
-                              <span className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-0.5 rounded-full text-xs font-semibold">
-                                {c.due.toFixed(2)} AED
-                              </span>
-                            ) : (
-                              <span className="text-emerald-400 text-xs font-medium flex items-center gap-1">
-                                Clear
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">
-                            {(() => {
-                              const docs = c.documents || [];
-                              if (docs.length === 0) {
-                                  return <span className="text-muted-foreground text-xs italic">No documents</span>;
-                              }
-                              
-                              const displayDocs = docs.slice(0, 3);
-                              const hasMore = docs.length > 3;
-                              
-                              return (
-                                <div className="flex flex-wrap gap-1 items-center">
-                                  {displayDocs.map((doc: any) => {
-                                    const daysLeft = getDaysRemaining(doc.expiry_date);
-                                    return (
-                                      <span
-                                        key={doc.id}
-                                        className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border ${
-                                          daysLeft < 0 ? 'bg-rose-500/15 text-rose-400 border-rose-500/20' :
-                                          daysLeft <= 7 ? 'bg-rose-500/25 text-rose-350 border-rose-500/30 font-bold' :
-                                          daysLeft <= 30 ? 'bg-amber-500/15 text-amber-400 border-amber-500/20' :
-                                          'bg-emerald-500/15 text-emerald-400 border-emerald-500/20'
-                                        }`}
-                                        title={`${doc.document_type} - Expires ${doc.expiry_date}`}
-                                      >
-                                        {doc.document_type}: {daysLeft < 0 ? 'Exp' : `${daysLeft}d`}
-                                      </span>
-                                    );
-                                  })}
-                                  {hasMore && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleOpenDetail(c);
-                                      }}
-                                      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary/20 text-primary border border-primary/30 hover:bg-primary hover:text-white transition-all cursor-pointer"
-                                    >
-                                      +{docs.length - 3} more
-                                    </button>
+                            </td>
+
+                            {/* Account Type */}
+                            <td>
+                              {c.customer_type === 'company' ? (
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded border border-primary/20 inline-flex items-center gap-1">
+                                    <Building2 size={11} /> Company
+                                  </span>
+                                  {c.members && c.members.length > 0 && (
+                                    <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded font-semibold">
+                                      👥 {c.members.length} {c.members.length === 1 ? 'person' : 'people'}
+                                    </span>
                                   )}
                                 </div>
-                              );
-                            })()}
-                          </td>
-                          <td className="px-6 py-4 text-muted-foreground font-semibold">
-                            {c.sales_count} Invoice{c.sales_count !== 1 ? 's' : ''}
-                            {c.customer_type === 'company' && c.sales_count > 0 && (
-                              <span className="block text-[10px] text-primary/80 font-semibold mt-0.5">
-                                (Consolidated)
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 text-center" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                onClick={() => handleOpenDetail(c)}
-                                className="px-2.5 py-1.5 bg-secondary hover:bg-secondary-foreground/10 text-foreground text-xs font-bold rounded-lg transition-all"
-                              >
-                                Details
-                              </button>
-                              {hasPermission('Sales.Create') && (
-                                <button
-                                  title="Quick Sale"
-                                  onClick={() => openQuickSale(c)}
-                                  className="p-1.5 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-white transition-all"
-                                >
-                                  <Zap size={13} />
-                                </button>
+                              ) : (
+                                <span className="bg-muted text-muted-foreground text-[10px] font-bold px-2 py-0.5 rounded border border-border inline-flex items-center gap-1">
+                                  <User size={11} /> Person
+                                </span>
                               )}
-                              {hasPermission('Payments.Create') && c.due > 0 && (
-                                <button
-                                  title="Quick Payment"
-                                  onClick={() => openQuickPayment(c)}
-                                  className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white transition-all"
-                                >
-                                  <CreditCard size={13} />
-                                </button>
+                            </td>
+
+                            {/* Outstanding Due */}
+                            <td>
+                              {c.due > 0 ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25">
+                                    {c.due.toFixed(2)} AED
+                                  </span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openQuickPayment(c);
+                                    }}
+                                    className="px-1.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold transition-all cursor-pointer shadow-xs"
+                                    title="Collect Due Payment"
+                                  >
+                                    Pay
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1">
+                                  ✓ Clear (0.00)
+                                </span>
                               )}
-                              {hasPermission('Sales.View') && c.sales_count > 0 && (
+                            </td>
+
+                            {/* Document Expiry */}
+                            <td>
+                              {(() => {
+                                const docs = c.documents || [];
+                                if (docs.length === 0) {
+                                  return <span className="text-muted-foreground text-[11px] italic">None</span>;
+                                }
+                                
+                                const displayDocs = docs.slice(0, 2);
+                                const hasMore = docs.length > 2;
+                                
+                                return (
+                                  <div className="flex flex-wrap gap-1 items-center">
+                                    {displayDocs.map((doc: any) => {
+                                      const daysLeft = getDaysRemaining(doc.expiry_date);
+                                      return (
+                                        <span
+                                          key={doc.id}
+                                          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                            daysLeft < 0 ? 'bg-rose-500/15 text-rose-500 border-rose-500/30' :
+                                            daysLeft <= 7 ? 'bg-rose-500/20 text-rose-600 border-rose-500/40' :
+                                            daysLeft <= 30 ? 'bg-amber-500/15 text-amber-600 border-amber-500/30' :
+                                            'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
+                                          }`}
+                                          title={`${doc.document_type} - Expires ${doc.expiry_date}`}
+                                        >
+                                          {doc.document_type}: {daysLeft < 0 ? 'Expired' : `${daysLeft}d`}
+                                        </span>
+                                      );
+                                    })}
+                                    {hasMore && (
+                                      <span className="text-[10px] font-bold text-muted-foreground">
+                                        +{docs.length - 2}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </td>
+
+                            {/* Orders */}
+                            <td className="text-center font-bold text-xs text-foreground">
+                              {c.sales_count}
+                            </td>
+
+                            {/* Actions */}
+                            <td onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-center gap-1.5">
+                                {hasPermission('Sales.Create') && (
+                                  <button
+                                    title="Quick Bill / New Invoice"
+                                    onClick={() => openQuickSale(c)}
+                                    className="p-1.5 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-white transition-all cursor-pointer"
+                                  >
+                                    <ShoppingCart size={14} />
+                                  </button>
+                                )}
                                 <button
-                                  title="View & Print Invoices"
                                   onClick={() => handleOpenDetail(c)}
-                                  className="p-1.5 rounded-lg bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
-                                  disabled={isPrinting}
+                                  className="p-1.5 rounded-lg bg-secondary hover:bg-secondary-foreground/10 text-foreground transition-all cursor-pointer"
+                                  title="Customer Details & Documents"
                                 >
-                                  <Printer size={13} />
+                                  <History size={14} />
                                 </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
+                                {hasPermission('Customer.Update') && (
+                                  <button
+                                    onClick={() => openEditCustomerModal(c)}
+                                    className="p-1.5 rounded-lg bg-secondary hover:bg-secondary-foreground/10 text-foreground transition-all cursor-pointer"
+                                    title="Edit Profile"
+                                  >
+                                    <Pencil size={14} />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
           )}
-        </div>        {/* CUSTOMER PROFILE DETAIL PANEL (Pops up in a modal overlay) */}
+        </div>        {/* CUSTOMER PROFILE DETAIL PANEL (Structured & Understandable Modal) */}
         {selectedCustomer && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-            <div className="glass border border-border rounded-2xl p-6 space-y-6 shadow-2xl relative bg-background w-full max-w-2xl max-h-[90vh] overflow-y-auto my-8">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/70 backdrop-blur-xs overflow-y-auto animate-fade-in">
+            <div className="glass border border-border rounded-2xl shadow-2xl relative bg-card w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col my-4 animate-scale-in">
               
-              {/* Close Button */}
-              <button
-                onClick={() => setSelectedCustomer(null)}
-                className="absolute right-4 top-4 p-2 text-muted-foreground hover:text-foreground bg-muted/40 rounded-full transition-colors"
-              >
-                <X size={16} />
-              </button>
-
-              {/* Detail Header */}
-              <div className="flex items-start justify-between border-b border-border pb-4">
-                <div>
-                  <h2 className="font-bold text-foreground text-lg m-0">
-                    {selectedCustomer.customer_type === 'company' && selectedCustomer.company_name
-                      ? selectedCustomer.company_name
-                      : selectedCustomer.name}
-                  </h2>
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className="text-[10px] text-muted-foreground font-mono bg-muted px-2 py-0.5 rounded border border-border">
-                      ID: #{selectedCustomer.id.slice(0, 8)}
-                    </span>
-                    {selectedCustomer.customer_type === 'company' ? (
-                      <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded border border-primary/20">
-                        Company Account
+              {/* 1. MODAL HEADER BANNER */}
+              <div className="p-5 border-b border-border bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="font-bold text-foreground text-lg sm:text-xl m-0 flex items-center gap-2">
+                      {selectedCustomer.customer_type === 'company' ? (
+                        <Building2 size={20} className="text-primary shrink-0" />
+                      ) : (
+                        <User size={20} className="text-primary shrink-0" />
+                      )}
+                      <span>
+                        {selectedCustomer.customer_type === 'company' && selectedCustomer.company_name
+                          ? selectedCustomer.company_name
+                          : selectedCustomer.name}
                       </span>
-                    ) : selectedCustomer.customer_type === 'individual' && selectedCustomer.company_id ? (
-                      <span className="bg-blue-500/10 text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-500/20">
-                        Company Member
+                    </h2>
+                    
+                    {/* Account Type Badge */}
+                    {selectedCustomer.customer_type === 'company' ? (
+                      <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded border border-primary/20 inline-flex items-center gap-1">
+                        <Building2 size={11} /> Company Account
                       </span>
                     ) : (
-                      <span className="bg-zinc-500/10 text-zinc-400 text-[10px] font-bold px-2 py-0.5 rounded border border-zinc-500/20">
-                        Individual Client
+                      <span className="bg-muted text-muted-foreground text-[10px] font-bold px-2 py-0.5 rounded border border-border inline-flex items-center gap-1">
+                        <User size={11} /> Person
                       </span>
+                    )}
+                  </div>
+
+                  {/* Direct Contact Bar */}
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground pt-1">
+                    {selectedCustomer.phone && (
+                      <div className="flex items-center gap-1.5">
+                        <Phone size={12} className="text-primary" />
+                        <span className="font-medium text-foreground">{selectedCustomer.phone}</span>
+                        <a
+                          href={`https://wa.me/${selectedCustomer.phone.replace(/\D/g, '')}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
+                        >
+                          WhatsApp
+                        </a>
+                      </div>
+                    )}
+                    {selectedCustomer.email && (
+                      <div className="flex items-center gap-1">
+                        <Mail size={12} />
+                        <span>{selectedCustomer.email}</span>
+                      </div>
+                    )}
+                    {selectedCustomer.address && (
+                      <div className="flex items-center gap-1">
+                        <MapPin size={12} />
+                        <span className="truncate max-w-[200px]">{selectedCustomer.address}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Top Actions & Close */}
+                <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                  {hasPermission('Sales.Create') && (
+                    <button
+                      onClick={() => {
+                        const targetId = selectedCustomer.id;
+                        setSelectedCustomer(null);
+                        navigate(`/sales/create?customer_id=${targetId}`);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs rounded-xl font-bold shadow-xs transition-all cursor-pointer"
+                    >
+                      <ShoppingCart size={13} />
+                      <span>New Invoice</span>
+                    </button>
+                  )}
+                  {hasPermission('Customer.Update') && (
+                    <button
+                      onClick={() => openEditCustomerModal(selectedCustomer)}
+                      className="p-2 border border-border bg-muted/40 hover:bg-secondary rounded-xl text-muted-foreground hover:text-foreground text-xs font-semibold transition-all cursor-pointer"
+                      title="Edit Customer Profile"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setSelectedCustomer(null)}
+                    className="p-2 text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-secondary rounded-xl transition-all cursor-pointer"
+                    title="Close"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+
+              {/* 2. OVERVIEW KPI TILES */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-5 border-b border-border shrink-0 bg-background">
+                {/* Tile 1: Outstanding Balance */}
+                <div className="p-3.5 rounded-xl border border-border bg-muted/20 flex flex-col justify-between">
+                  <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    Outstanding Balance
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    {selectedCustomer.due > 0 ? (
+                      <div>
+                        <div className="text-lg font-black text-rose-600 dark:text-rose-400">
+                          {selectedCustomer.due.toFixed(2)} <span className="text-xs font-normal">AED</span>
+                        </div>
+                        <span className="text-[10px] font-semibold text-rose-500">Unpaid Balance Due</span>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="text-lg font-black text-emerald-600 dark:text-emerald-400">
+                          0.00 <span className="text-xs font-normal">AED</span>
+                        </div>
+                        <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">✓ Account Clear</span>
+                      </div>
+                    )}
+                    {selectedCustomer.due > 0 && hasPermission('Payments.Create') && (
+                      <button
+                        onClick={() => {
+                          const targetCust = selectedCustomer;
+                          setSelectedCustomer(null);
+                          openQuickPayment(targetCust);
+                        }}
+                        className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg shadow-xs transition-all cursor-pointer flex items-center gap-1"
+                      >
+                        <CreditCard size={12} />
+                        <span>Pay</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Tile 2: Total Billing Ledger */}
+                <div className="p-3.5 rounded-xl border border-border bg-muted/20 flex flex-col justify-between">
+                  <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    Total Invoices & Billing
+                  </div>
+                  <div className="mt-1">
+                    <div className="text-lg font-black text-foreground">
+                      {(selectedCustomer.sales || []).reduce((sum: number, s: any) => sum + (s.grand_total || 0), 0).toFixed(2)}{' '}
+                      <span className="text-xs font-normal text-muted-foreground">AED</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground font-semibold">
+                      Across {(selectedCustomer.sales || []).length} recorded invoice{(selectedCustomer.sales || []).length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Tile 3: Tracked Visas & Docs */}
+                <div className="p-3.5 rounded-xl border border-border bg-muted/20 flex flex-col justify-between">
+                  <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    Tracked Documents
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <div>
+                      <div className="text-lg font-black text-foreground">
+                        {selectedCustDocs.length}
+                      </div>
+                      <span className="text-[10px] text-muted-foreground font-semibold">
+                        {selectedCustDocs.filter(d => getDaysRemaining(d.expiry_date) <= 30).length > 0 ? (
+                          <span className="text-amber-500 font-bold">
+                            ⚠️ {selectedCustDocs.filter(d => getDaysRemaining(d.expiry_date) <= 30).length} expiring soon
+                          </span>
+                        ) : (
+                          'Active valid records'
+                        )}
+                      </span>
+                    </div>
+                    <Calendar size={18} className="text-primary opacity-60" />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. STRUCTURED NAVIGATION TABS */}
+              <div className="flex items-center gap-2 px-5 pt-3 border-b border-border bg-muted/10 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setCustDetailTab('invoices')}
+                  className={`pb-2.5 px-2 text-xs font-bold transition-all border-b-2 cursor-pointer flex items-center gap-1.5 ${
+                    custDetailTab === 'invoices'
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <History size={14} />
+                  <span>Invoices History</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-muted font-mono">
+                    {(selectedCustomer.sales || []).length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCustDetailTab('documents')}
+                  className={`pb-2.5 px-2 text-xs font-bold transition-all border-b-2 cursor-pointer flex items-center gap-1.5 ${
+                    custDetailTab === 'documents'
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Calendar size={14} />
+                  <span>Visas & Documents</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-muted font-mono">
+                    {selectedCustDocs.length}
+                  </span>
+                </button>
+
+                {selectedCustomer.customer_type === 'company' && (
+                  <button
+                    type="button"
+                    onClick={() => setCustDetailTab('members')}
+                    className={`pb-2.5 px-2 text-xs font-bold transition-all border-b-2 cursor-pointer flex items-center gap-1.5 ${
+                      custDetailTab === 'members'
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Users size={14} />
+                    <span>People Under Company</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-muted font-mono">
+                      {(selectedCustomer.members || []).length}
+                    </span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setCustDetailTab('info')}
+                  className={`pb-2.5 px-2 text-xs font-bold transition-all border-b-2 cursor-pointer flex items-center gap-1.5 ${
+                    custDetailTab === 'info'
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <FileText size={14} />
+                  <span>Profile Info & Notes</span>
+                </button>
+              </div>
+
+              {/* 4. TAB CONTENTS AREA (Scrollable) */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                
+                {/* TAB 1: INVOICES & LEDGER */}
+                {custDetailTab === 'invoices' && (
+                  <div className="space-y-3">
+                    {(!selectedCustomer.sales || selectedCustomer.sales.length === 0) ? (
+                      <div className="text-center text-xs text-muted-foreground py-8 bg-muted/20 rounded-xl border border-dashed border-border">
+                        No invoices recorded for this customer yet.
+                      </div>
+                    ) : (
+                      <div className="border border-border rounded-xl overflow-hidden shadow-xs">
+                        <table className="w-full text-left">
+                          <thead>
+                            <tr>
+                              <th>Invoice #</th>
+                              <th>Date</th>
+                              <th>Payment</th>
+                              <th className="text-right">Total</th>
+                              <th className="text-center w-28">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/50">
+                            {selectedCustomer.sales.map((s: any) => (
+                              <tr key={s.id} className="hover:bg-primary/5">
+                                <td>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono font-bold text-primary text-xs px-2 py-0.5 rounded bg-primary/10 border border-primary/20">
+                                      #{s.invoice_no}
+                                    </span>
+                                    {selectedCustomer.customer_type === 'company' && s.person_name && (
+                                      <span className="text-[10px] bg-blue-500/10 text-blue-500 px-1.5 py-0.2 rounded font-semibold">
+                                        {s.person_name}
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="text-xs text-muted-foreground">
+                                  {new Date(s.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </td>
+                                <td>
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    s.payment_status === 'Paid'
+                                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25'
+                                      : s.payment_status === 'Partially Paid'
+                                      ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25'
+                                      : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25'
+                                  }`}>
+                                    {s.payment_status}
+                                  </span>
+                                </td>
+                                <td className="text-right font-black text-xs text-foreground">
+                                  {s.grand_total.toFixed(2)} <span className="text-[9px] font-normal text-muted-foreground">AED</span>
+                                </td>
+                                <td className="text-center">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      title="Print Invoice"
+                                      onClick={() => handlePrintSale(s.id)}
+                                      disabled={isPrinting}
+                                      className="p-1.5 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-white transition-all cursor-pointer disabled:opacity-50"
+                                    >
+                                      <Printer size={13} />
+                                    </button>
+                                    <button
+                                      title="Send WhatsApp Receipt"
+                                      onClick={async () => {
+                                        const detail = await db.sales.getById(s.id);
+                                        handleWhatsAppShare(detail);
+                                      }}
+                                      className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 text-emerald-600 dark:text-emerald-400 hover:text-white transition-all cursor-pointer"
+                                    >
+                                      <MessageSquare size={13} />
+                                    </button>
+                                    {hasPermission('Sales.Update') && (
+                                      <button
+                                        title="Edit Invoice Items"
+                                        onClick={() => handleOpenEditItems(s.id)}
+                                        className="p-1.5 rounded-lg bg-muted hover:bg-secondary text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                                      >
+                                        <Pencil size={13} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 2: VISAS & DOCUMENTS */}
+                {custDetailTab === 'documents' && (
+                  <div className="space-y-3">
+                    {selectedCustDocs.length === 0 ? (
+                      <div className="text-center text-xs text-muted-foreground py-8 bg-muted/20 rounded-xl border border-dashed border-border">
+                        No client documents or visas currently tracked for this profile.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {selectedCustDocs.map(d => {
+                          const daysLeft = getDaysRemaining(d.expiry_date);
+                          const isExpired = daysLeft < 0;
+                          const isUrgent = daysLeft >= 0 && daysLeft <= 30;
+
+                          return (
+                            <div
+                              key={d.id}
+                              className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between text-xs ${
+                                isExpired
+                                  ? 'bg-rose-500/5 border-rose-500/30'
+                                  : isUrgent
+                                  ? 'bg-amber-500/5 border-amber-500/30'
+                                  : 'bg-muted/20 border-border'
+                              }`}
+                            >
+                              <div>
+                                <div className="flex items-center justify-between font-bold">
+                                  <span className="text-foreground text-sm">{d.document_type}</span>
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                      isExpired
+                                        ? 'bg-rose-500/20 text-rose-600 border-rose-500/30'
+                                        : isUrgent
+                                        ? 'bg-amber-500/20 text-amber-600 border-amber-500/30'
+                                        : 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
+                                    }`}
+                                  >
+                                    {isExpired ? 'Expired' : `${daysLeft} days left`}
+                                  </span>
+                                </div>
+
+                                {d.document_number && (
+                                  <div className="font-mono text-[11px] text-muted-foreground mt-1">
+                                    Doc #: {d.document_number}
+                                  </div>
+                                )}
+
+                                <div className="mt-2 text-xs flex items-center justify-between text-muted-foreground">
+                                  <span>Expires on:</span>
+                                  <span className="font-bold text-foreground">
+                                    {new Date(d.expiry_date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                                  </span>
+                                </div>
+
+                                {d.notes && (
+                                  <div className="mt-2 text-[11px] bg-muted/40 p-2 rounded-lg text-foreground border border-border/40 italic">
+                                    "{d.notes}"
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 3: PEOPLE UNDER COMPANY */}
+                {custDetailTab === 'members' && selectedCustomer.customer_type === 'company' && (
+                  <div className="space-y-3">
+                    {(!selectedCustomer.members || selectedCustomer.members.length === 0) ? (
+                      <div className="text-center text-xs text-muted-foreground py-8 bg-muted/20 rounded-xl border border-dashed border-border">
+                        No people added under this company yet. Click Edit to add contacts or staff.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {selectedCustomer.members.map((member: any) => (
+                          <div
+                            key={member.id}
+                            className="p-3.5 rounded-xl border border-border bg-muted/20 flex flex-col justify-between text-xs space-y-2"
+                          >
+                            <div>
+                              <div className="font-bold text-foreground text-sm flex items-center gap-1.5">
+                                <User size={14} className="text-primary" />
+                                <span>{member.name}</span>
+                              </div>
+                              <div className="text-[11px] text-muted-foreground mt-1 space-y-0.5">
+                                {member.phone && <div>📞 {member.phone}</div>}
+                                {member.email && <div>✉️ {member.email}</div>}
+                              </div>
+                            </div>
+                            <div className="pt-2 border-t border-border/60 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const cust = selectedCustomer;
+                                  setSelectedCustomer(null);
+                                  openQuickSale(cust, member.name);
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-white rounded-lg font-bold text-[11px] transition-all cursor-pointer shadow-xs"
+                                title="Create invoice for this person"
+                              >
+                                <ShoppingCart size={12} />
+                                <span>Create Invoice for {member.name}</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 4: PROFILE INFO & NOTES */}
+                {custDetailTab === 'info' && (
+                  <div className="space-y-4 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-1">
+                        <div className="text-muted-foreground font-semibold flex items-center gap-1">
+                          <MapPin size={13} className="text-primary" /> Billing Address
+                        </div>
+                        <div className="text-foreground font-medium pt-1">
+                          {selectedCustomer.address || 'No billing address specified.'}
+                        </div>
+                      </div>
+
+                      <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-1">
+                        <div className="text-muted-foreground font-semibold flex items-center gap-1">
+                          <FileText size={13} className="text-primary" /> Administrative Notes
+                        </div>
+                        <div className="text-foreground italic pt-1">
+                          {selectedCustomer.notes || 'No administrative notes recorded.'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Danger Zone: Delete */}
+                    {hasPermission('Customer.Delete') && (
+                      <div className="p-4 rounded-xl border border-destructive/20 bg-destructive/5 flex items-center justify-between">
+                        <div>
+                          <div className="font-bold text-destructive text-xs">Delete Customer Profile</div>
+                          <div className="text-[11px] text-muted-foreground mt-0.5">
+                            Soft-deletes this customer account. Existing invoice history is preserved.
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(selectedCustomer.id)}
+                          className="px-3 py-1.5 bg-destructive hover:bg-destructive/90 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0"
+                        >
+                          Delete Profile
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              </div>
+
+            </div>
+          </div>
+      )}
+
+      {/* QUICK SALE MODAL (RUSH-HOUR OPTIMIZED POS) */}
+      {qsCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-md print:hidden overflow-hidden">
+          <div className="bg-card border border-border rounded-2xl shadow-2xl relative w-full max-w-5xl h-[94vh] max-h-[850px] overflow-hidden flex flex-col my-auto animate-in fade-in zoom-in-95 duration-150">
+
+            {/* TOP HEADER */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-muted/30 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-xl text-primary flex items-center justify-center">
+                  <Zap size={18} className="animate-pulse" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-primary">Fast Billing</span>
+                    <span className="text-muted-foreground">•</span>
+                    <span className="font-bold text-foreground text-sm flex items-center gap-1.5">
+                      {qsCustomer.customer_type === 'company' ? '🏢' : '👤'} {qsCustomer.name}
+                    </span>
+                    {qsCustomer.phone && (
+                      <span className="text-xs text-muted-foreground">({qsCustomer.phone})</span>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Due Alert Panel */}
-              {selectedCustomer.due > 0 ? (
-                <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs p-4 rounded-xl flex items-start gap-2.5">
-                  <AlertTriangle className="flex-shrink-0 mt-0.5" size={16} />
-                  <div>
-                    <div className="font-bold">Outstanding Due Alert</div>
-                    <div className="mt-0.5">
-                      This customer has an unpaid balance of{' '}
-                      <strong className="text-foreground font-extrabold">{selectedCustomer.due.toFixed(2)} AED</strong>.
-                      {selectedCustomer.customer_type === 'company' && (
-                        <span className="block text-[10px] text-muted-foreground mt-0.5 font-normal">
-                          (Consolidated across all company member accounts)
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ) : selectedCustomer.customer_type === 'individual' && selectedCustomer.company ? (
-                <div className="bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs p-4 rounded-xl flex items-start gap-2.5">
-                  <Building2 className="flex-shrink-0 mt-0.5 text-blue-400" size={16} />
-                  <div>
-                    <div className="font-bold">Billed to Company Account</div>
-                    <div className="mt-0.5">
-                       All billing is routed to company:{' '}
-                       <strong className="text-foreground font-extrabold">
-                         {selectedCustomer.company.name}
-                       </strong>.
-                    </div>
-                    <div className="mt-1 text-muted-foreground text-[10px]">
-                      The company's total outstanding balance is{' '}
-                      <strong className="text-foreground font-semibold">
-                        {selectedCustomer.company.due.toFixed(2)} AED
-                      </strong>.
-                    </div>
-                  </div>
-                </div>
-              ) : null}
+              <button
+                type="button"
+                onClick={() => setQsCustomer(null)}
+                className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-lg transition-colors cursor-pointer"
+                title="Close (Esc)"
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-              {/* Information Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div className="flex items-start gap-2.5 p-3 rounded-xl border border-border/60 bg-muted/15">
-                  <MapPin className="text-primary flex-shrink-0 mt-0.5" size={14} />
-                  <div>
-                    <div className="text-muted-foreground font-semibold">Billing Address</div>
-                    <div className="text-foreground mt-0.5">{selectedCustomer.address || 'No billing address provided.'}</div>
-                  </div>
-                </div>
+            {/* MAIN 2-COLUMN WORKSPACE */}
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
 
-                <div className="flex items-start gap-2.5 p-3 rounded-xl border border-border/60 bg-muted/15">
-                  <FileText className="text-primary flex-shrink-0 mt-0.5" size={14} />
-                  <div>
-                    <div className="text-muted-foreground font-semibold">Staff Notes</div>
-                    <div className="text-foreground mt-0.5 italic">{selectedCustomer.notes || 'No administrative notes.'}</div>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Company Employees List */}
-              {selectedCustomer.customer_type === 'company' && selectedCustomer.members && selectedCustomer.members.length > 0 && (
-                <div className="space-y-2.5 pt-4 border-t border-border/60 text-xs">
-                  <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                    <User size={14} className="text-primary" />
-                    Company Members / Employees ({selectedCustomer.members.length})
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedCustomer.members.map((emp: any, index: number) => (
-                      <div
-                        key={emp.id || index}
-                        className="px-2.5 py-1 rounded-lg border border-border/60 bg-muted/20 text-foreground text-[11px] font-semibold flex items-center gap-1.5"
+              {/* LEFT COLUMN: FAST SERVICE PICKER */}
+              <div className="w-full md:w-7/12 flex flex-col border-r border-border/60 overflow-hidden bg-muted/5">
+                
+                {/* Search & Category Header */}
+                <div className="p-3.5 border-b border-border/60 space-y-2 bg-card/50 flex-shrink-0">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      value={qsSearch}
+                      onChange={e => setQsSearch(e.target.value)}
+                      placeholder="Search services (e.g. visa, medical, emirates id)..."
+                      className="w-full pl-9 pr-8 py-2 bg-muted/40 border border-border rounded-xl text-xs text-foreground placeholder:text-muted-foreground focus:ring-1 focus:ring-primary outline-none"
+                    />
+                    {qsSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setQsSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
                       >
-                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                        {emp.name} {emp.phone ? `(${emp.phone})` : ''} {emp.email ? `• ${emp.email}` : ''}
-                      </div>
-                    ))}
+                        ✕
+                      </button>
+                    )}
                   </div>
+
+                  {/* Category Pills */}
+                  {qsCategories.length > 0 && (
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => setQsCategory('all')}
+                        className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                          qsCategory === 'all'
+                            ? 'bg-primary text-white shadow-xs'
+                            : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        All Services
+                      </button>
+                      {qsCategories.map(cat => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setQsCategory(cat.id)}
+                          className={`px-2.5 py-1 rounded-lg font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                            qsCategory === cat.id
+                              ? 'bg-primary text-white shadow-xs'
+                              : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {cat.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
 
-              {/* Action Buttons */}
-              <div className="flex gap-2 pt-2 border-t border-border/60">
-                {hasPermission('Sales.Create') && (
-                  <button
-                    onClick={() => navigate(`/sales/create?customer_id=${selectedCustomer.id}`)}
-                    className="flex-1 py-2 flex items-center justify-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-xs rounded-lg font-semibold shadow-md transition-colors"
-                  >
-                    <ShoppingCart size={13} />
-                    New Sale
-                  </button>
-                )}
-                {hasPermission('Customer.Update') && (
-                  <button
-                    onClick={() => navigate(`/customers/edit/${selectedCustomer.id}`)}
-                    className="flex-1 py-2 text-center border border-border text-xs rounded-lg font-semibold hover:text-foreground transition-colors"
-                  >
-                    Edit Profile
-                  </button>
-                )}
-                {hasPermission('Customer.Delete') && (
-                  <button
-                    onClick={() => handleDelete(selectedCustomer.id)}
-                    className="py-2 px-3 bg-destructive/10 text-destructive text-xs rounded-lg font-semibold hover:bg-destructive/20 transition-colors"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </div>
+                {/* Service Cards Grid */}
+                <div className="flex-1 overflow-y-auto p-3.5">
+                  {(() => {
+                    const filtered = qsServices.filter(s => {
+                      const matchesCat = qsCategory === 'all' || s.category_id === qsCategory;
+                      const catName = (s as any).category?.name || '';
+                      const q = qsSearch.trim().toLowerCase();
+                      const matchesSearch = !q || s.name.toLowerCase().includes(q) || catName.toLowerCase().includes(q);
+                      return matchesCat && matchesSearch;
+                    });
 
-              {/* CLIENT DOCUMENTS EXPIRES */}
-              <div className="space-y-3 pt-4 border-t border-border/60">
-                <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                  <Calendar size={14} className="text-primary" />
-                  Tracked Visas & Documents
-                </h3>
-
-                {selectedCustDocs.length === 0 ? (
-                  <div className="text-center text-xs text-muted-foreground py-4 bg-muted/20 rounded-xl border border-dashed border-border">
-                    No documents currently tracked.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {selectedCustDocs.map(d => {
-                      const expiry = new Date(d.expiry_date);
-                      const today = new Date();
-                      expiry.setHours(0,0,0,0);
-                      today.setHours(0,0,0,0);
-                      const diff = expiry.getTime() - today.getTime();
-                      const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-                      const isUrgent = days <= 60;
-
+                    if (filtered.length === 0) {
                       return (
-                        <div key={d.id} className="p-3 rounded-xl border border-border bg-muted/25 flex flex-col justify-between text-xs">
-                          <div>
-                            <div className="flex items-center justify-between font-bold">
-                              <span className="text-foreground">{d.document_type}</span>
-                              {d.document_number && <span className="font-mono text-[10px] text-muted-foreground">{d.document_number}</span>}
-                            </div>
-                            <div className="mt-1.5 text-muted-foreground flex justify-between">
-                              <span>Expires:</span>
-                              <span className={`font-semibold ${isUrgent ? 'text-amber-500' : 'text-foreground'}`}>
-                                {d.expiry_date} ({days < 0 ? 'Expired' : `${days}d left`})
-                              </span>
-                            </div>
-                            {d.notes && <div className="mt-1.5 text-[10px] italic text-muted-foreground">"{d.notes}"</div>}
-                          </div>
+                        <div className="py-12 text-center text-muted-foreground text-xs italic">
+                          No services found matching "{qsSearch}".
                         </div>
                       );
-                    })}
-                  </div>
-                )}
+                    }
+
+                    return (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                        {filtered.map(service => {
+                          const inCartItems = qsCart.filter(i => i.service.id === service.id);
+                          const totalQty = inCartItems.reduce((sum, i) => sum + i.quantity, 0);
+
+                          return (
+                            <button
+                              key={service.id}
+                              type="button"
+                              onClick={() => qsAddService(service)}
+                              className={`relative text-left p-3 rounded-xl border transition-all duration-150 group cursor-pointer flex flex-col justify-between ${
+                                totalQty > 0
+                                  ? 'border-primary bg-primary/10 shadow-sm'
+                                  : 'border-border bg-card hover:border-primary/50 hover:bg-muted/30 shadow-xs'
+                              }`}
+                            >
+                              {totalQty > 0 && (
+                                <span className="absolute top-2 right-2 bg-primary text-white text-[11px] font-black rounded-full min-w-[20px] h-[20px] flex items-center justify-center px-1 leading-none shadow-xs">
+                                  {totalQty}
+                                </span>
+                              )}
+                              <div className="pr-4">
+                                <div className="text-xs font-bold text-foreground leading-snug line-clamp-2">
+                                  {service.name}
+                                </div>
+                              </div>
+                              <div className="mt-2.5 flex items-center justify-between">
+                                <span className="text-xs font-black text-primary">
+                                  {service.price.toFixed(2)} <span className="text-[10px] font-normal text-muted-foreground">AED</span>
+                                </span>
+                                <span className="w-5 h-5 rounded-md bg-primary/10 text-primary flex items-center justify-center opacity-75 group-hover:opacity-100 transition-opacity">
+                                  <Plus size={12} />
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+
               </div>
 
-              {/* TRANSACTION LEDGER HISTORY */}
-              <div className="space-y-3 pt-4 border-t border-border/60">
-                <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                  <History size={14} className="text-primary" />
-                  {selectedCustomer.customer_type === 'company' ? 'Consolidated Invoice History Ledger' : 'Invoice History Ledger'}
-                </h3>
+              {/* RIGHT COLUMN: INVOICE CART & 1-CLICK CHECKOUT */}
+              <div className="w-full md:w-5/12 flex flex-col overflow-hidden bg-card">
                 
-                <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
-                  {selectedCustomer.sales?.length === 0 ? (
-                    <div className="text-center text-xs text-muted-foreground py-4 bg-muted/20 rounded-xl border border-dashed border-border">
-                      No invoices recorded.
+                {/* Cart Header */}
+                <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-muted/20 flex-shrink-0">
+                  <div className="flex items-center gap-2">
+                    <ShoppingCart size={15} className="text-primary" />
+                    <span className="font-bold text-xs text-foreground">Invoice Items</span>
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-primary text-white">
+                      {qsCart.reduce((sum, i) => sum + i.quantity, 0)}
+                    </span>
+                  </div>
+                  {qsCart.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setQsCart([])}
+                      className="text-[11px] text-muted-foreground hover:text-destructive font-semibold transition-colors cursor-pointer"
+                    >
+                      Clear All
+                    </button>
+                  )}
+                </div>
+
+                {/* Cart Items List */}
+                <div className="flex-1 overflow-y-auto p-3.5 space-y-2">
+                  {qsCart.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center py-12 text-muted-foreground text-center">
+                      <ShoppingCart size={32} className="opacity-20 mb-2" />
+                      <p className="text-xs font-medium">Cart is empty.</p>
+                      <p className="text-[11px] opacity-75">Click any service on the left to add.</p>
                     </div>
                   ) : (
-                    selectedCustomer.sales?.map((s: any) => (
+                    qsCart.map((item, idx) => (
                       <div
-                        key={s.id}
-                        className="bg-muted/25 border border-border/80 p-3 rounded-xl flex items-center justify-between gap-3 text-xs"
+                        key={`${item.service.id}-${item.person_name || 'gen'}-${idx}`}
+                        className="p-2.5 rounded-xl border border-border/80 bg-muted/20 hover:bg-muted/30 transition-colors space-y-2"
                       >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 border border-primary/20 text-primary font-mono font-bold text-[10px] tracking-wide">
-                              # {s.invoice_no}
-                            </span>
-                            {/* Employee attribution for company sales */}
-                            {selectedCustomer.customer_type === 'company' && s.customer_id !== selectedCustomer.id && s.customer && (
-                              <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded font-semibold">
-                                Member: {s.customer.name}
-                              </span>
-                            )}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-bold text-xs text-foreground truncate">{item.service.name}</div>
+                            <div className="text-[11px] text-muted-foreground">{item.unit_price.toFixed(2)} AED each</div>
                           </div>
-                          <div className="text-[10px] text-muted-foreground mt-1">
-                            {new Date(s.created_at).toLocaleDateString()} • {s.branch?.name}
+                          <div className="text-right">
+                            <div className="font-black text-xs text-foreground">
+                              {(item.unit_price * item.quantity).toFixed(2)} AED
+                            </div>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                          <div className="text-right space-y-1.5">
-                            <div className="font-bold text-foreground">{s.grand_total.toFixed(2)} AED</div>
-                            <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-semibold ${
-                              s.payment_status === 'Paid' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                              s.payment_status === 'Partially Paid' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-                              'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                            }`}>
-                              {s.payment_status}
-                            </span>
-                          </div>
-                          {hasPermission('Sales.View') && (
-                            <button
-                              title="Print Invoice"
-                              onClick={() => handlePrintSale(s.id)}
-                              disabled={isPrinting}
-                              className="p-2 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-white transition-all flex-shrink-0 disabled:opacity-50"
-                            >
-                              {isPrinting ? (
-                                <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                              ) : (
-                                <Printer size={13} />
-                              )}
-                            </button>
-                          )}
-                          {hasPermission('Sales.View') && (
-                            <button
-                              title="Share Invoice Details on WhatsApp"
-                              onClick={async () => {
-                                  const detail = await db.sales.getById(s.id);
-                                  handleWhatsAppShare(detail);
+                        {/* Person Selection (If Company) + Stepper */}
+                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40">
+                          {qsCustomer.customer_type === 'company' && qsCustomer.members && qsCustomer.members.length > 0 ? (
+                            <select
+                              value={item.person_name || ''}
+                              onChange={e => {
+                                const updated = [...qsCart];
+                                updated[idx].person_name = e.target.value || undefined;
+                                setQsCart(updated);
                               }}
-                              className="p-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white transition-all flex-shrink-0"
+                              className="text-[11px] font-semibold bg-card border border-border rounded-lg px-2 py-1 text-foreground max-w-[140px] truncate outline-none cursor-pointer"
                             >
-                              <MessageSquare size={13} />
-                            </button>
+                              <option value="">🏢 General</option>
+                              {qsCustomer.members.map((m: any) => (
+                                <option key={m.id || m.name} value={m.name}>
+                                  👤 {m.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="text-[11px] text-muted-foreground font-medium">Standard Item</span>
                           )}
-                          {hasPermission('Sales.Update') && (
+
+                          {/* Stepper Quantity */}
+                          <div className="flex items-center gap-1.5">
                             <button
-                              title="Edit Invoice Items"
-                              onClick={() => handleOpenEditItems(s.id)}
-                              className="p-2 rounded-lg bg-violet-500/10 hover:bg-violet-500 text-violet-500 hover:text-white transition-all flex-shrink-0"
+                              type="button"
+                              onClick={() => qsUpdateQty(idx, -1)}
+                              className="w-6 h-6 rounded-md border border-border bg-card flex items-center justify-center hover:bg-secondary text-foreground transition-colors cursor-pointer"
                             >
-                              <Pencil size={13} />
+                              <Minus size={11} />
                             </button>
-                          )}
+                            <span className="font-black text-xs w-5 text-center text-foreground">{item.quantity}</span>
+                            <button
+                              type="button"
+                              onClick={() => qsUpdateQty(idx, 1)}
+                              className="w-6 h-6 rounded-md border border-border bg-card flex items-center justify-center hover:bg-secondary text-foreground transition-colors cursor-pointer"
+                            >
+                              <Plus size={11} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => qsUpdateQty(idx, -item.quantity)}
+                              className="text-muted-foreground hover:text-destructive p-1 rounded transition-colors ml-1 cursor-pointer"
+                              title="Delete Item"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))
                   )}
                 </div>
-              </div>
 
-            </div>
-          </div>
-        )}
-      </div>
+                {/* BOTTOM SUMMARY & 1-CLICK PAY (PINNED) */}
+                <div className="border-t border-border p-4 bg-muted/20 space-y-3 flex-shrink-0">
+                  
+                  {/* Subtotal and Discount */}
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between items-center text-muted-foreground font-medium">
+                      <span>Subtotal</span>
+                      <span className="font-bold text-foreground">{qsSubtotal.toFixed(2)} AED</span>
+                    </div>
 
-      {/* QUICK SALE MODAL */}
-      {qsCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm print:hidden overflow-y-auto">
-          <div className="glass border border-border rounded-2xl shadow-2xl relative w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col my-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground font-medium flex items-center gap-1">
+                        <Percent size={11} /> Discount
+                      </span>
+                      <div className="relative w-24">
+                        <input
+                          type="number"
+                          min={0}
+                          max={qsSubtotal}
+                          value={qsDiscount || ''}
+                          onChange={e => setQsDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
+                          placeholder="0"
+                          className="w-full px-2 py-0.8 text-right bg-card border border-border rounded-lg text-foreground font-bold text-xs pr-7 outline-none"
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-semibold">AED</span>
+                      </div>
+                    </div>
 
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-muted/20 flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-primary/10 rounded-lg">
-                  <Zap size={16} className="text-primary" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-primary uppercase tracking-wider">Quick Sale</div>
-                  <div className="font-bold text-foreground text-sm">{qsCustomer.name}</div>
-                </div>
-              </div>
-              <button
-                onClick={() => setQsCustomer(null)}
-                className="p-2 text-muted-foreground hover:text-foreground bg-muted/40 rounded-full transition-colors"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
-
-              {/* LEFT: Service Cards + Cart */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-5 border-r border-border/60">
-
-                {/* Service Cards */}
-                <div>
-                  <p className="text-xs text-muted-foreground font-semibold mb-3">Tap a service to add it to the bill:</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {qsServices.map(service => {
-                      const cartItem = qsCart.find(i => i.service.id === service.id);
-                      const inCart = !!cartItem;
-                      return (
-                        <button
-                          key={service.id}
-                          type="button"
-                          onClick={() => qsAddService(service)}
-                          style={inCart ? { background: 'color-mix(in srgb, var(--color-primary) 8%, transparent)' } : undefined}
-                          className={`relative text-left p-3 rounded-xl border transition-all duration-150 group cursor-pointer ${
-                            inCart
-                              ? 'border-primary/50 shadow-sm'
-                              : 'border-border bg-muted/20 hover:border-primary/40 hover:bg-muted/40'
-                          }`}
-                        >
-                          {inCart && (
-                            <span className="absolute top-1.5 right-1.5 bg-primary text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 leading-none">
-                              {cartItem.quantity}
-                            </span>
-                          )}
-                          <div className={`text-[11px] font-bold leading-snug mb-1 pr-5 ${inCart ? 'text-primary' : 'text-foreground group-hover:text-primary'} transition-colors`}>
-                            {service.name}
-                          </div>
-                          <div className={`text-[11px] font-semibold ${inCart ? 'text-primary/80' : 'text-muted-foreground'}`}>
-                            {service.price.toFixed(2)} AED
-                          </div>
-                          {!inCart && (
-                            <div className="absolute bottom-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Plus size={11} className="text-primary" />
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Cart Table */}
-                <div className="border border-border/80 rounded-xl overflow-hidden">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-muted/50 text-muted-foreground uppercase font-semibold border-b border-border">
-                      <tr>
-                        <th className="px-3 py-2.5">Service</th>
-                        <th className="px-3 py-2.5 text-center w-28">Qty</th>
-                        <th className="px-3 py-2.5 text-right">Amount</th>
-                        <th className="px-3 py-2.5 w-10"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
-                      {qsCart.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground italic">
-                            No items yet — tap a service card above.
-                          </td>
-                        </tr>
-                      ) : (
-                        qsCart.map((item, idx) => (
-                          <tr key={item.service.id} className="hover:bg-muted/10">
-                            <td className="px-3 py-2.5">
-                              <div className="font-semibold text-foreground">{item.service.name}</div>
-                              <div className="text-[10px] text-muted-foreground">{item.unit_price.toFixed(2)} AED each</div>
-                            </td>
-                            <td className="px-3 py-2.5">
-                              <div className="flex items-center justify-center gap-1.5">
-                                <button type="button" onClick={() => qsUpdateQty(idx, -1)} className="h-6 w-6 rounded border border-border bg-muted/30 flex items-center justify-center hover:bg-secondary transition-colors"><Minus size={10} /></button>
-                                <span className="font-semibold text-sm w-5 text-center text-foreground">{item.quantity}</span>
-                                <button type="button" onClick={() => qsUpdateQty(idx, 1)} className="h-6 w-6 rounded border border-border bg-muted/30 flex items-center justify-center hover:bg-secondary transition-colors"><Plus size={10} /></button>
-                              </div>
-                            </td>
-                            <td className="px-3 py-2.5 text-right font-semibold text-foreground">
-                              {(item.unit_price * item.quantity).toFixed(2)} AED
-                            </td>
-                            <td className="px-3 py-2.5 text-center">
-                              <button type="button" onClick={() => qsUpdateQty(idx, -item.quantity)} className="text-muted-foreground hover:text-destructive p-1 rounded"><Trash2 size={12} /></button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-              </div>
-
-              {/* RIGHT: Totals + Payment + Submit */}
-              <div className="w-full lg:w-72 flex-shrink-0 p-5 space-y-4 overflow-y-auto bg-muted/10">
-
-                {/* Notes */}
-                <div className="space-y-1 text-xs">
-                  <label className="text-muted-foreground font-semibold flex items-center gap-1"><FileText size={12} /> Remarks</label>
-                  <textarea
-                    value={qsNotes}
-                    onChange={e => setQsNotes(e.target.value)}
-                    rows={2}
-                    className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-foreground resize-none text-xs"
-                    placeholder="Font style, notes..."
-                  />
-                </div>
-
-                {/* Totals */}
-                <div className="bg-muted/25 p-4 rounded-xl border border-border/80 space-y-3 text-xs">
-                  <div className="flex justify-between items-center text-muted-foreground">
-                    <span>Subtotal</span>
-                    <span className="font-semibold text-foreground">{qsSubtotal.toFixed(2)} AED</span>
-                  </div>
-                  <div className="flex justify-between items-center gap-3">
-                    <span className="text-muted-foreground flex items-center gap-1"><Percent size={11} /> Discount</span>
-                    <div className="relative w-24">
-                      <input
-                        type="number"
-                        min={0}
-                        max={qsSubtotal}
-                        value={qsDiscount}
-                        onChange={e => setQsDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
-                        className="w-full px-2 py-1 text-right bg-muted/50 border border-border rounded text-foreground font-semibold pr-7"
-                      />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">AED</span>
+                    <div className="pt-2 border-t border-border flex justify-between items-baseline">
+                      <span className="text-xs font-bold text-foreground">Grand Total</span>
+                      <span className="text-lg font-black text-primary">
+                        {qsGrandTotal.toFixed(2)} <span className="text-xs font-bold">AED</span>
+                      </span>
                     </div>
                   </div>
-                  <div className="border-t border-border/60 pt-2.5 flex justify-between items-center text-sm font-bold">
-                    <span className="text-foreground">Grand Total</span>
-                    <span className="text-primary">{qsGrandTotal.toFixed(2)} AED</span>
-                  </div>
+
+                  {/* TAKE PAYMENT (MINIMALIST & SIMPLE) */}
+                  {qsGrandTotal > 0 && (
+                    <div className="pt-2 border-t border-border space-y-2">
+                      {!qsHasPayment ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQsHasPayment(true);
+                            setQsPayAmount(qsGrandTotal);
+                          }}
+                          className="w-full py-2 bg-muted hover:bg-secondary text-foreground font-bold rounded-xl text-xs transition-colors cursor-pointer border border-border"
+                        >
+                          + Add Payment
+                        </button>
+                      ) : (
+                        <div className="space-y-2 bg-muted/40 p-3 rounded-xl border border-border">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-foreground">Payment</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setQsHasPayment(false);
+                                setQsPayAmount(0);
+                              }}
+                              className="text-muted-foreground hover:text-destructive text-[11px] font-semibold cursor-pointer"
+                            >
+                              Cancel (Unpaid)
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <div className="relative flex-1">
+                              <input
+                                type="number"
+                                min={1}
+                                max={qsGrandTotal}
+                                value={qsPayAmount || ''}
+                                onChange={e => setQsPayAmount(Math.max(0, parseFloat(e.target.value) || 0))}
+                                placeholder="Amount"
+                                className="w-full px-2.5 py-1.5 bg-card border border-border rounded-lg text-foreground font-bold text-xs text-right pr-9 outline-none focus:ring-1 focus:ring-primary"
+                              />
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-semibold">AED</span>
+                            </div>
+                            <select
+                              value={qsPayMethod}
+                              onChange={e => setQsPayMethod(e.target.value as any)}
+                              className="px-2.5 py-1.5 bg-card border border-border rounded-lg text-foreground font-semibold text-xs outline-none cursor-pointer"
+                            >
+                              <option value="Cash">Cash</option>
+                              <option value="Card">Card</option>
+                              <option value="Bank Transfer">Bank Transfer</option>
+                            </select>
+                          </div>
+
+                          {qsGrandTotal - (qsPayAmount || 0) > 0 && (
+                            <div className="text-[11px] text-amber-600 dark:text-amber-400 font-bold text-right">
+                              Due: {Math.max(0, qsGrandTotal - (qsPayAmount || 0)).toFixed(2)} AED
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {qsError && (
+                    <div className="text-destructive text-xs bg-destructive/10 border border-destructive/20 rounded-lg p-2 font-semibold">
+                      {qsError}
+                    </div>
+                  )}
+
+                  {/* ACTION SUBMIT BUTTON */}
+                  <button
+                    type="button"
+                    onClick={qsSubmit}
+                    disabled={qsSaving || qsCart.length === 0}
+                    className="w-full bg-primary hover:bg-primary-hover disabled:opacity-50 text-white py-2.5 rounded-xl font-black text-xs sm:text-sm shadow-md shadow-primary/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    {qsSaving ? (
+                      <>
+                        <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Processing Invoice...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Printer size={15} />
+                        <span>Finalize & Print Invoice</span>
+                      </>
+                    )}
+                  </button>
+
                 </div>
 
-                {/* Payment toggle */}
-                {qsGrandTotal > 0 && (
-                  <div className="space-y-3">
-                    <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold text-foreground">
-                      <input
-                        type="checkbox"
-                        checked={qsHasPayment}
-                        onChange={e => { setQsHasPayment(e.target.checked); if (e.target.checked) setQsPayAmount(qsGrandTotal); }}
-                        className="rounded border-border text-primary focus:ring-primary"
-                      />
-                      Record Payment Now
-                    </label>
-                    {qsHasPayment && (
-                      <div className="bg-muted/30 p-3 rounded-xl border border-border/80 space-y-2 text-xs">
-                        <div className="space-y-1">
-                          <label className="text-muted-foreground font-semibold">Method</label>
-                          <select value={qsPayMethod} onChange={e => setQsPayMethod(e.target.value as any)} className="w-full px-2 py-1.5 bg-popover border border-border rounded text-foreground text-xs">
-                            <option value="Cash">Cash</option>
-                            <option value="Card">Card</option>
-                            <option value="Mobile Banking">Mobile Banking</option>
-                            <option value="Bank Transfer">Bank Transfer</option>
-                          </select>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-muted-foreground font-semibold">Amount Paid (AED)</label>
-                          <input
-                            type="number"
-                            min={1}
-                            max={qsGrandTotal}
-                            value={qsPayAmount}
-                            onChange={e => setQsPayAmount(Math.min(qsGrandTotal, parseFloat(e.target.value) || 0))}
-                            className="w-full px-2 py-1.5 bg-muted/50 border border-border rounded text-foreground text-right font-semibold"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {qsError && (
-                  <div className="text-destructive text-xs bg-destructive/10 border border-destructive/20 rounded-lg p-3 font-medium">
-                    {qsError}
-                  </div>
-                )}
-
-                {/* Submit */}
-                <button
-                  type="button"
-                  onClick={qsSubmit}
-                  disabled={qsSaving || qsCart.length === 0}
-                  className="w-full bg-primary hover:bg-primary-hover disabled:opacity-50 text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 flex items-center justify-center gap-2 transition-all"
-                >
-                  {qsSaving ? (
-                    <><span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Creating...</>
-                  ) : (
-                    <><Printer size={15} /> Finalize & Print Invoice</>
-                  )}
-                </button>
-
               </div>
+
             </div>
+
           </div>
         </div>
       )}
@@ -1452,6 +2000,275 @@ export const CustomerList: React.FC = () => {
         </div>
       )}
 
+      {/* REGISTER / EDIT CUSTOMER MODAL (Simple, Clean & Fast) */}
+      {customerModalOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-5 bg-black/70 backdrop-blur-xs animate-fade-in">
+          <div className="glass border border-border rounded-2xl shadow-2xl relative bg-card w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh] animate-scale-in">
+            
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-border bg-muted/20 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                  {customerForm.customer_type === 'company' ? <Building2 size={18} /> : <User size={18} />}
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-foreground m-0">
+                    {editingCustomerId ? 'Edit Customer Profile' : 'Register New Customer'}
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground m-0">
+                    {customerForm.customer_type === 'company' ? 'Company profile with employees/people' : 'Single person customer record'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCustomerModalOpen(false)}
+                className="p-1.5 text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-secondary rounded-xl transition-all cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSaveCustomer} className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
+              
+              {/* Account Type Toggle */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Account Type</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCustomerForm(prev => ({ ...prev, customer_type: 'individual' }))}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      customerForm.customer_type === 'individual'
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border bg-muted/20 text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <User size={14} />
+                    <span>Person (Individual)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomerForm(prev => ({ ...prev, customer_type: 'company' }))}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      customerForm.customer_type === 'company'
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border bg-muted/20 text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Building2 size={14} />
+                    <span>Company</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Name & Phone */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    {customerForm.customer_type === 'company' ? 'Company Name *' : 'Full Name *'}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      value={customerForm.name}
+                      onChange={(e) => setCustomerForm(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder={customerForm.customer_type === 'company' ? 'e.g. Al Hilal Contracting LLC' : 'e.g. Mohammed Salem'}
+                      className="w-full pl-8 pr-3 py-2 bg-muted/30 border border-border rounded-xl text-xs font-semibold text-foreground focus:ring-2 focus:ring-primary/40 outline-none"
+                    />
+                    <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      {customerForm.customer_type === 'company' ? <Building2 size={13} /> : <User size={13} />}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    {customerForm.customer_type === 'company' ? 'Company Phone / Landline' : 'Phone / WhatsApp'}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={customerForm.phone}
+                      onChange={(e) => setCustomerForm(prev => ({ ...prev, phone: e.target.value }))}
+                      placeholder="+971 50 123 4567"
+                      className="w-full pl-8 pr-3 py-2 bg-muted/30 border border-border rounded-xl text-xs font-semibold text-foreground focus:ring-2 focus:ring-primary/40 outline-none"
+                    />
+                    <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      <Phone size={13} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Email & Location */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Email Address</label>
+                  <div className="relative">
+                    <input
+                      type="email"
+                      value={customerForm.email}
+                      onChange={(e) => setCustomerForm(prev => ({ ...prev, email: e.target.value }))}
+                      placeholder="info@company.ae"
+                      className="w-full pl-8 pr-3 py-2 bg-muted/30 border border-border rounded-xl text-xs font-semibold text-foreground focus:ring-2 focus:ring-primary/40 outline-none"
+                    />
+                    <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      <Mail size={13} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Office / Location Address</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={customerForm.address}
+                      onChange={(e) => setCustomerForm(prev => ({ ...prev, address: e.target.value }))}
+                      placeholder="Musaffah M37, Abu Dhabi"
+                      className="w-full pl-8 pr-3 py-2 bg-muted/30 border border-border rounded-xl text-xs font-semibold text-foreground focus:ring-2 focus:ring-primary/40 outline-none"
+                    />
+                    <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
+                      <MapPin size={13} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* PEOPLE UNDER COMPANY (Only for Company Account) */}
+              {customerForm.customer_type === 'company' && (
+                <div className="space-y-3 p-4 rounded-xl border border-primary/20 bg-primary/5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Users size={15} className="text-primary" />
+                      <span className="text-xs font-bold text-foreground">People Under This Company ({peopleUnderCompany.length})</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">Add staff / employees</span>
+                  </div>
+
+                  {/* List of Added People */}
+                  {peopleUnderCompany.length > 0 ? (
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                      {peopleUnderCompany.map((person, index) => (
+                        <div
+                          key={person.id || index}
+                          className="flex items-center justify-between p-2 rounded-lg bg-card border border-border text-xs"
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="font-bold text-foreground">{person.name}</span>
+                            {person.phone && <span className="text-muted-foreground text-[11px]">• {person.phone}</span>}
+                            {person.email && <span className="text-muted-foreground text-[11px] truncate">• {person.email}</span>}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePerson(index)}
+                            className="text-destructive/70 hover:text-destructive p-1 rounded hover:bg-destructive/10 transition-colors cursor-pointer shrink-0"
+                            title="Remove person"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground italic text-center py-2 bg-card/60 rounded-lg border border-dashed border-border/80">
+                      No people added under this company yet. Add below:
+                    </p>
+                  )}
+
+                  {/* Add Person Inline Inputs */}
+                  <div className="p-3 rounded-lg bg-card border border-border space-y-2">
+                    <div className="text-[11px] font-bold text-foreground">Add Person / Contact:</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Person Name *"
+                        value={newPersonName}
+                        onChange={(e) => setNewPersonName(e.target.value)}
+                        className="px-2.5 py-1.5 bg-muted/40 border border-border rounded-lg text-xs font-medium text-foreground focus:ring-1 focus:ring-primary outline-none"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Phone / WhatsApp"
+                        value={newPersonPhone}
+                        onChange={(e) => setNewPersonPhone(e.target.value)}
+                        className="px-2.5 py-1.5 bg-muted/40 border border-border rounded-lg text-xs font-medium text-foreground focus:ring-1 focus:ring-primary outline-none"
+                      />
+                      <input
+                        type="email"
+                        placeholder="Email"
+                        value={newPersonEmail}
+                        onChange={(e) => setNewPersonEmail(e.target.value)}
+                        className="px-2.5 py-1.5 bg-muted/40 border border-border rounded-lg text-xs font-medium text-foreground focus:ring-1 focus:ring-primary outline-none"
+                      />
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleAddPerson}
+                        disabled={!newPersonName.trim()}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
+                      >
+                        <Plus size={13} />
+                        <span>Add Person</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Notes */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Staff Notes / Remarks</label>
+                <textarea
+                  rows={2}
+                  value={customerForm.notes}
+                  onChange={(e) => setCustomerForm(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Optional internal remarks..."
+                  className="w-full px-3 py-2 bg-muted/30 border border-border rounded-xl text-xs font-medium text-foreground focus:ring-2 focus:ring-primary/40 outline-none resize-none"
+                />
+              </div>
+
+              {customerModalError && (
+                <div className="text-destructive text-xs bg-destructive/10 border border-destructive/20 rounded-xl p-3 font-medium">
+                  {customerModalError}
+                </div>
+              )}
+
+              {/* Modal Footer */}
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-border shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setCustomerModalOpen(false)}
+                  className="px-4 py-2 border border-border rounded-xl text-xs font-bold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={customerModalSaving}
+                  className="px-5 py-2 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-primary/20 transition-all cursor-pointer flex items-center gap-2"
+                >
+                  {customerModalSaving ? (
+                    <>
+                      <span className="inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : editingCustomerId ? (
+                    'Save Changes'
+                  ) : (
+                    'Register Customer'
+                  )}
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* HIDDEN PRINT-ONLY INVOICE — rendered when printSaleData is set */}
       {printSaleData && (
@@ -1529,7 +2346,14 @@ export const CustomerList: React.FC = () => {
                     rows.push(
                       <tr key={item.id} className="h-8">
                         <td className="px-3 py-1.5 text-center border-r border-gray-300 font-semibold">{index + 1}</td>
-                        <td className="px-3 py-1.5 border-r border-gray-300 font-bold">{item.service?.name}</td>
+                        <td className="px-3 py-1.5 border-r border-gray-300 font-bold">
+                          {item.service?.name}
+                          {item.person_name ? (
+                            <span className="ml-1.5 font-normal text-[11px] text-gray-700 italic">
+                              (For: {item.person_name})
+                            </span>
+                          ) : null}
+                        </td>
                         <td className="px-3 py-1.5 text-center border-r border-gray-300">{item.quantity}</td>
                         <td className="px-3 py-1.5 text-right border-r border-gray-300">{item.unit_price.toFixed(2)}</td>
                         <td className="px-3 py-1.5 text-right font-bold">{item.subtotal.toFixed(2)}</td>
@@ -1613,6 +2437,7 @@ export const CustomerList: React.FC = () => {
           </div>
         </div>
       )}
+      </div>
     </PermissionGuard>
   );
 };

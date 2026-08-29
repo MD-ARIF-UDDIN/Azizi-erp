@@ -18,3 +18,7 @@ ALTER TABLE public.sales
   ADD COLUMN IF NOT EXISTS person_phone TEXT;
 ALTER TABLE public.sales
   ADD COLUMN IF NOT EXISTS person_email TEXT;
+
+-- Add person_name attribute to sale_items table
+ALTER TABLE public.sale_items
+  ADD COLUMN IF NOT EXISTS person_name TEXT;
