@@ -849,12 +849,20 @@ export const db = {
         .reduce((sum: number, p: Payment) => sum + p.amount, 0);
       const due = Math.max(0, totalPurchased - totalPaid);
 
-      const historySales = salesList.map(s => ({
-        ...s,
-        customer: _customers.find(c => c.id === s.customer_id),
-        branch: branchesList.find(b => b.id === s.branch_id),
-        status: statusesList.find(st => st.id === s.order_status_id)
-      }));
+      const historySales = salesList.map(s => {
+        const salePayments = paymentsList.filter(p => p.sale_id === s.id);
+        const salePaidAmount = salePayments.reduce((sum: number, p: Payment) => sum + p.amount, 0);
+        const remaining = Math.max(0, s.grand_total - salePaidAmount);
+        return {
+          ...s,
+          payments: salePayments,
+          total_paid: salePaidAmount,
+          remaining,
+          customer: _customers.find(c => c.id === s.customer_id) || customerRecord,
+          branch: branchesList.find(b => b.id === s.branch_id),
+          status: statusesList.find(st => st.id === s.order_status_id)
+        };
+      });
 
       return {
         ...customerRecord,

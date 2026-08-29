@@ -709,6 +709,7 @@ export const CustomerList: React.FC = () => {
                       <th className="text-center w-12">#</th>
                       <th>Customer & Contact</th>
                       <th>Account Type</th>
+                      <th>Grand Total</th>
                       <th>Total Paid</th>
                       <th>Outstanding Due</th>
                       <th>Active Documents</th>
@@ -719,7 +720,7 @@ export const CustomerList: React.FC = () => {
                   <tbody className="divide-y divide-border/50">
                     {filteredCustomers.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                        <td colSpan={9} className="py-12 text-center text-muted-foreground">
                           <div className="max-w-xs mx-auto space-y-1">
                             <div className="font-bold text-foreground">No customers found</div>
                             <div className="text-xs">Click "Register Customer" to add a new person or company.</div>
@@ -788,6 +789,13 @@ export const CustomerList: React.FC = () => {
                                   <User size={11} /> Person
                                 </span>
                               )}
+                            </td>
+
+                            {/* Grand Total */}
+                            <td>
+                              <span className="font-bold text-xs text-foreground">
+                                {(c.total_purchased || 0).toFixed(2)} AED
+                              </span>
                             </td>
 
                             {/* Total Paid */}
@@ -1009,16 +1017,7 @@ export const CustomerList: React.FC = () => {
               {(() => {
                 const totalBilling = (selectedCustomer.sales || []).reduce((sum: number, s: any) => sum + (s.grand_total || 0), 0);
                 const outstandingDue = Number(selectedCustomer.due) || 0;
-                
-                // Calculate paid amount from payments if available, else derive from billing - due
-                const paymentsSum = (selectedCustomer.sales || []).reduce((sum: number, s: any) => {
-                  const salePayments = (s.payments || []).reduce((pSum: number, p: any) => pSum + (p.amount || 0), 0);
-                  if (salePayments > 0) return sum + salePayments;
-                  if (s.payment_status === 'Paid') return sum + (s.grand_total || 0);
-                  if (s.payment_status === 'Partially Paid') return sum + Math.max(0, (s.grand_total || 0) - (s.remaining || 0));
-                  return sum;
-                }, 0);
-                const totalPaid = paymentsSum > 0 ? paymentsSum : Math.max(0, totalBilling - outstandingDue);
+                const totalPaid = Math.max(0, totalBilling - outstandingDue);
 
                 return (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-5 border-b border-border shrink-0 bg-background">
