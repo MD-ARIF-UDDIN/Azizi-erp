@@ -713,13 +713,16 @@ export const db = {
       });
     },
     create: async (data: Omit<User, 'id' | 'is_deleted' | 'created_at' | 'updated_at'>) => {
+      const userPassword = data.password || 'password';
       if (isSupabaseConfigured && supabase) {
-        const { data: created, error } = await supabase.from('users').insert([data]).select().single();
+        const payload = { ...data, password: userPassword };
+        const { data: created, error } = await supabase.from('users').insert([payload]).select().single();
         if (error) throw error;
         return created as User;
       }
       const newUser: User = {
         ...data,
+        password: userPassword,
         id: generateUUID(),
         is_deleted: false,
         created_at: new Date().toISOString(),
@@ -732,14 +735,17 @@ export const db = {
     },
     update: async (id: string, data: Partial<Omit<User, 'id' | 'created_at' | 'updated_at'>>) => {
       if (isSupabaseConfigured && supabase) {
-        const { data: updated, error } = await supabase.from('users').update(data).eq('id', id).select().single();
+        const updatePayload: any = { ...data };
+        if (!updatePayload.password) delete updatePayload.password;
+        const { data: updated, error } = await supabase.from('users').update(updatePayload).eq('id', id).select().single();
         if (error) throw error;
         return updated as User;
       }
       const index = _users.findIndex(u => u.id === id);
       if (index === -1) throw new Error('User not found');
       const old = _users[index];
-      const updated = { ...old, ...data, updated_at: new Date().toISOString() };
+      const updatedPassword = data.password ? data.password : old.password;
+      const updated = { ...old, ...data, password: updatedPassword, updated_at: new Date().toISOString() };
       _users[index] = updated;
       saveAll();
       logAudit(getActiveUserSession().id, 'UPDATE', 'users', id, old, updated);
@@ -794,6 +800,8 @@ export const db = {
         return {
           ...c,
           due,
+          total_paid: totalPaid,
+          total_purchased: totalPurchased,
           sales_count: customerSales.length
         };
       });
@@ -851,6 +859,8 @@ export const db = {
       return {
         ...customerRecord,
         due,
+        total_paid: totalPaid,
+        total_purchased: totalPurchased,
         sales: historySales,
         sales_count: salesList.length
       };

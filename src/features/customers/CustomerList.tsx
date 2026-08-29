@@ -709,6 +709,7 @@ export const CustomerList: React.FC = () => {
                       <th className="text-center w-12">#</th>
                       <th>Customer & Contact</th>
                       <th>Account Type</th>
+                      <th>Total Paid</th>
                       <th>Outstanding Due</th>
                       <th>Active Documents</th>
                       <th className="text-center">Invoices</th>
@@ -718,7 +719,7 @@ export const CustomerList: React.FC = () => {
                   <tbody className="divide-y divide-border/50">
                     {filteredCustomers.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                        <td colSpan={8} className="py-12 text-center text-muted-foreground">
                           <div className="max-w-xs mx-auto space-y-1">
                             <div className="font-bold text-foreground">No customers found</div>
                             <div className="text-xs">Click "Register Customer" to add a new person or company.</div>
@@ -787,6 +788,13 @@ export const CustomerList: React.FC = () => {
                                   <User size={11} /> Person
                                 </span>
                               )}
+                            </td>
+
+                            {/* Total Paid */}
+                            <td>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                {(c.total_paid || 0).toFixed(2)} AED
+                              </span>
                             </td>
 
                             {/* Outstanding Due */}

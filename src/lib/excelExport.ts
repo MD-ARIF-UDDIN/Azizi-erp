@@ -44,6 +44,7 @@ export const exportCustomers = (customers: any[]) => {
     'Email',
     'Address',
     'Notes',
+    'Total Paid (AED)',
     'Outstanding Due (AED)',
     'Total Orders',
     'Registered Date'
@@ -58,6 +59,7 @@ export const exportCustomers = (customers: any[]) => {
     c.email || '',
     c.address || '',
     c.notes || '',
+    Number((c.total_paid || 0).toFixed(2)),
     Number((c.due || 0).toFixed(2)),
     c.sales_count || 0,
     formatDate(c.created_at)

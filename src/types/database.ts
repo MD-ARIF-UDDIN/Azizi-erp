@@ -66,6 +66,9 @@ export interface Customer {
   company_id?: string;
   company?: Customer;
   due?: number;
+  total_paid?: number;
+  total_purchased?: number;
+  sales_count?: number;
   members?: { id?: string; name: string; phone?: string; email?: string }[];
 }
 

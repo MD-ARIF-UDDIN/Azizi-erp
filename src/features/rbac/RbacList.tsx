@@ -17,7 +17,10 @@ import {
   CheckSquare,
   Square,
   X,
-  Download
+  Download,
+  Eye,
+  EyeOff,
+  KeyRound
 } from 'lucide-react';
 
 export const RbacList: React.FC = () => {
@@ -35,6 +38,7 @@ export const RbacList: React.FC = () => {
   // Modal / Form States
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const [userForm, setUserForm] = useState({
     name: '',
     email: '',
@@ -42,7 +46,8 @@ export const RbacList: React.FC = () => {
     role_id: '',
     branch_id: '',
     status: 'Active' as User['status'],
-    permissions: [] as string[]
+    permissions: [] as string[],
+    password: ''
   });
 
   const [showBranchModal, setShowBranchModal] = useState(false);
@@ -102,6 +107,11 @@ export const RbacList: React.FC = () => {
       return;
     }
 
+    if (!editingUser && (!userForm.password || userForm.password.length < 4)) {
+      setErrorMsg('Please provide a login password (at least 4 characters).');
+      return;
+    }
+
     try {
       if (editingUser) {
         await db.users.update(editingUser.id, userForm);
@@ -110,7 +120,7 @@ export const RbacList: React.FC = () => {
       }
       setShowUserModal(false);
       setEditingUser(null);
-      setUserForm({ name: '', email: '', phone: '', role_id: '', branch_id: '', status: 'Active', permissions: [] });
+      setUserForm({ name: '', email: '', phone: '', role_id: '', branch_id: '', status: 'Active', permissions: [], password: '' });
       setErrorMsg('');
       await fetchData();
       reloadSession();
@@ -300,7 +310,8 @@ export const RbacList: React.FC = () => {
                       <button
                         onClick={() => {
                           setEditingUser(null);
-                          setUserForm({ name: '', email: '', phone: '', role_id: roles[0]?.id || '', branch_id: branches[0]?.id || '', status: 'Active', permissions: [] });
+                          setShowPassword(false);
+                          setUserForm({ name: '', email: '', phone: '', role_id: roles[0]?.id || '', branch_id: branches[0]?.id || '', status: 'Active', permissions: [], password: '' });
                           setShowUserModal(true);
                         }}
                         className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all w-full sm:w-auto justify-center"
@@ -364,6 +375,7 @@ export const RbacList: React.FC = () => {
                                   <button
                                     onClick={() => {
                                       setEditingUser(u);
+                                      setShowPassword(false);
                                       setUserForm({
                                         name: u.name,
                                         email: u.email,
@@ -371,7 +383,8 @@ export const RbacList: React.FC = () => {
                                         role_id: u.role_id,
                                         branch_id: u.branch_id,
                                         status: u.status,
-                                        permissions: u.permissions || []
+                                        permissions: u.permissions || [],
+                                        password: ''
                                       });
                                       setShowUserModal(true);
                                     }}
@@ -626,6 +639,50 @@ export const RbacList: React.FC = () => {
                       className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-foreground"
                     />
                   </div>
+                </div>
+
+                {/* Password Field with Show/Hide and Generator */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-muted-foreground font-semibold flex items-center gap-1.5">
+                      <KeyRound size={12} className="text-primary" />
+                      <span>{editingUser ? 'Change Password (Optional)' : 'Login Password *'}</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const randomPass = 'Azizi@' + Math.floor(1000 + Math.random() * 9000);
+                        setUserForm(prev => ({ ...prev, password: randomPass }));
+                        setShowPassword(true);
+                      }}
+                      className="text-[10px] text-primary hover:underline font-semibold cursor-pointer"
+                    >
+                      ⚡ Auto Generate
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required={!editingUser}
+                      placeholder={editingUser ? 'Leave blank to keep existing password' : 'Enter login password (min 4 chars)'}
+                      value={userForm.password}
+                      onChange={(e) => setUserForm(prev => ({ ...prev, password: e.target.value }))}
+                      className="w-full pl-3 pr-10 py-2 bg-muted/50 border border-border rounded-lg text-foreground font-mono text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer p-1"
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                  {editingUser && (
+                    <p className="text-[10px] text-muted-foreground italic">
+                      Leave blank if you don't want to change this employee's current password.
+                    </p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
