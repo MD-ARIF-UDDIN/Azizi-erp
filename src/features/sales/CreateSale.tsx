@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../lib/db';
 import type { Service, Customer } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  ShoppingCart,
+  ReceiptText,
+  Search,
+  X,
   Plus,
   Minus,
   Trash2,
@@ -36,6 +38,10 @@ export const CreateSale: React.FC = () => {
   // Catalog Search & Category Filter
   const [serviceSearch, setServiceSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [highlightIndex, setHighlightIndex] = useState(0);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Form States
   const [customerType, setCustomerType] = useState<'existing' | 'new'>('existing');
@@ -128,6 +134,28 @@ export const CreateSale: React.FC = () => {
     init();
   }, [user, availableBranches, searchParams]);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setIsSearchOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        setIsSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
   const handleSelectWalkin = () => {
     const walkin = customers.find(c => c.name.toLowerCase().includes('walk-in') || c.name.toLowerCase().includes('walkin'));
     if (walkin) {
@@ -158,6 +186,33 @@ export const CreateSale: React.FC = () => {
         unit_price: service.price, 
         person_name: selectedPersonName || undefined 
       }]);
+    }
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isSearchOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      setIsSearchOpen(true);
+      return;
+    }
+    if (filteredCatalogServices.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightIndex(prev => (prev + 1) % filteredCatalogServices.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightIndex(prev => (prev - 1 + filteredCatalogServices.length) % filteredCatalogServices.length);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const targetService = filteredCatalogServices[highlightIndex] || filteredCatalogServices[0];
+      if (targetService) {
+        addServiceToCart(targetService);
+        setServiceSearch('');
+        setIsSearchOpen(false);
+      }
+    } else if (e.key === 'Escape') {
+      setIsSearchOpen(false);
+      searchInputRef.current?.blur();
     }
   };
 
@@ -321,135 +376,207 @@ export const CreateSale: React.FC = () => {
 
         <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           
-          {/* LEFT SECTION: CATALOG & CART (2 cols) */}
+          {/* LEFT SECTION: SERVICES SEARCH & INVOICE ITEMS (2 cols) */}
           <div className="lg:col-span-2 space-y-4">
             <div className="glass border border-border rounded-2xl p-5 space-y-4 shadow-xl">
               
-              {/* CATALOG HEADER & SEARCH */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/80 pb-3.5">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
-                    <ShoppingCart size={18} />
+              {/* HEADER WITH STATS */}
+              <div className="flex items-center justify-between border-b border-border/80 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
+                    <ReceiptText size={18} />
                   </div>
                   <div>
-                    <h2 className="font-bold text-foreground text-base m-0">Services Catalog</h2>
-                    <div className="text-[11px] text-muted-foreground">Click any service card to add directly to the bill</div>
+                    <h2 className="font-bold text-foreground text-base m-0">Invoice Line Items</h2>
+                    <div className="text-[11px] text-muted-foreground">Search and add typing, visa, or document services</div>
                   </div>
                 </div>
-
-                {/* Instant Search Bar */}
-                <div className="relative w-full sm:w-64">
-                  <input
-                    type="text"
-                    placeholder="Search services (e.g. Visa, Stamp)..."
-                    value={serviceSearch}
-                    onChange={(e) => setServiceSearch(e.target.value)}
-                    className="w-full pl-8 pr-7 py-1.5 bg-muted/40 border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:ring-1 focus:ring-primary"
-                  />
-                  <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
-                    🔍
+                {cart.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
+                      {cart.length} {cart.length === 1 ? 'item' : 'items'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCart([])}
+                      className="text-xs text-muted-foreground hover:text-destructive px-2 py-1 rounded-lg hover:bg-muted transition-colors cursor-pointer"
+                    >
+                      Clear All
+                    </button>
                   </div>
-                  {serviceSearch && (
-                    <button
-                      type="button"
-                      onClick={() => setServiceSearch('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
 
-              {/* Category Filter Pills */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                <button
-                  type="button"
-                  onClick={() => setSelectedCategory('all')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                    selectedCategory === 'all'
-                      ? 'bg-primary text-white shadow-xs'
-                      : 'bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted'
-                  }`}
-                >
-                  All ({services.length})
-                </button>
-                {categories.map(cat => {
-                  const count = services.filter(s => s.category_id === cat.id).length;
-                  if (count === 0) return null;
-                  return (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => setSelectedCategory(cat.id)}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                        selectedCategory === cat.id
-                          ? 'bg-primary text-white shadow-xs'
-                          : 'bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted'
-                      }`}
-                    >
-                      {cat.name} ({count})
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Service Cards Grid — tap to add */}
-              {filteredCatalogServices.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 max-h-56 overflow-y-auto pr-1">
-                  {filteredCatalogServices.map(service => {
-                    const cartItem = cart.find(item => item.service.id === service.id);
-                    const inCart = !!cartItem;
-                    return (
+              {/* SEARCH-WISE SERVICE SELECTOR */}
+              <div ref={searchContainerRef} className="relative space-y-2.5">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      placeholder="Type to search service (e.g. Visa, Emirates ID, Stamp, MOHRE...)"
+                      value={serviceSearch}
+                      onFocus={() => setIsSearchOpen(true)}
+                      onChange={(e) => {
+                        setServiceSearch(e.target.value);
+                        setIsSearchOpen(true);
+                        setHighlightIndex(0);
+                      }}
+                      onKeyDown={handleSearchKeyDown}
+                      className="w-full pl-10 pr-10 py-2.5 bg-background border-2 border-border focus:border-primary rounded-xl text-sm font-medium text-foreground placeholder:text-muted-foreground shadow-xs transition-all outline-none"
+                    />
+                    {serviceSearch ? (
                       <button
-                        key={service.id}
                         type="button"
-                        onClick={() => addServiceToCart(service)}
-                        style={inCart ? { background: 'hsl(var(--primary) / 0.1)' } : undefined}
-                        className={`
-                          relative text-left p-2.5 rounded-xl border transition-all duration-150 group cursor-pointer flex flex-col justify-between min-h-[70px]
-                          ${inCart
-                            ? 'border-primary/60 shadow-xs'
-                            : 'border-border bg-muted/20 hover:border-primary/50 hover:bg-muted/50 hover:shadow-xs'
-                          }
-                        `}
+                        onClick={() => {
+                          setServiceSearch('');
+                          searchInputRef.current?.focus();
+                        }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
                       >
-                        {/* Quantity badge when in cart */}
-                        {inCart && (
-                          <span className="absolute top-1.5 right-1.5 bg-primary text-white text-[10px] font-black rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 leading-none shadow-xs">
-                            {cartItem.quantity}
-                          </span>
-                        )}
-
-                        <div className={`text-xs font-bold leading-tight line-clamp-2 ${inCart ? 'text-primary' : 'text-foreground group-hover:text-primary'} transition-colors`}>
-                          {service.name}
-                        </div>
-                        <div className="mt-1 flex items-center justify-between">
-                          <span className={`text-xs font-bold ${inCart ? 'text-primary' : 'text-foreground'}`}>
-                            {service.price.toFixed(2)} <span className="text-[9px] font-normal text-muted-foreground">AED</span>
-                          </span>
-                          {!inCart && (
-                            <span className="text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity font-bold">
-                              + Add
-                            </span>
-                          )}
-                        </div>
+                        <X size={14} />
                       </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="py-6 text-center text-muted-foreground text-xs italic bg-muted/20 rounded-xl border border-dashed border-border">
-                  No services found matching "{serviceSearch}". Try clearing the search.
-                </div>
-              )}
+                    ) : (
+                      <kbd className="hidden sm:inline-flex absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
+                        /
+                      </kbd>
+                    )}
+                  </div>
 
-              {/* Cart Table Grid */}
+                  {/* Category Filter Dropdown */}
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="px-3 py-2 bg-muted/40 border border-border rounded-xl text-xs font-semibold text-foreground cursor-pointer shrink-0 max-w-[160px]"
+                  >
+                    <option value="all">All Categories ({services.length})</option>
+                    {categories.map(cat => {
+                      const count = services.filter(s => s.category_id === cat.id).length;
+                      if (count === 0) return null;
+                      return (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name} ({count})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {/* SEARCH RESULTS DROPDOWN */}
+                {isSearchOpen && (
+                  <div className="absolute z-50 left-0 right-0 top-full mt-1.5 bg-card/95 backdrop-blur-xl border border-border rounded-2xl shadow-2xl overflow-hidden max-h-80 overflow-y-auto">
+                    {filteredCatalogServices.length > 0 ? (
+                      <div className="divide-y divide-border/60">
+                        <div className="px-3.5 py-1.5 bg-muted/50 text-[11px] font-semibold text-muted-foreground flex justify-between items-center">
+                          <span>{filteredCatalogServices.length} matching services</span>
+                          <span className="text-[10px]">Use ↑↓ to navigate • ↵ Enter to add</span>
+                        </div>
+                        {filteredCatalogServices.map((service, idx) => {
+                          const cartItem = cart.find(item => item.service.id === service.id && item.person_name === (selectedPersonName || undefined));
+                          const inCart = !!cartItem;
+                          const isHighlighted = idx === highlightIndex;
+                          const catName = categories.find(c => c.id === service.category_id)?.name || (service as any).category?.name || '';
+
+                          return (
+                            <div
+                              key={service.id}
+                              onMouseEnter={() => setHighlightIndex(idx)}
+                              onClick={() => {
+                                addServiceToCart(service);
+                                setServiceSearch('');
+                                setIsSearchOpen(false);
+                                searchInputRef.current?.focus();
+                              }}
+                              className={`px-4 py-3 flex items-center justify-between gap-3 cursor-pointer transition-colors ${
+                                isHighlighted ? 'bg-primary/10' : 'hover:bg-muted/50'
+                              }`}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <span className="font-bold text-xs text-foreground truncate">{service.name}</span>
+                                  {catName && (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-muted text-muted-foreground border border-border shrink-0">
+                                      {catName}
+                                    </span>
+                                  )}
+                                  {inCart && (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-primary/15 text-primary border border-primary/30 shrink-0">
+                                      {cartItem.quantity} in bill
+                                    </span>
+                                  )}
+                                </div>
+                                {service.description && (
+                                  <div className="text-[11px] text-muted-foreground truncate">{service.description}</div>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-3 shrink-0">
+                                <div className="text-right">
+                                  <span className="font-extrabold text-foreground text-sm">{service.price.toFixed(2)}</span>
+                                  <span className="text-[10px] text-muted-foreground font-medium ml-1">AED</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                                    isHighlighted || inCart
+                                      ? 'bg-primary text-white shadow-xs'
+                                      : 'bg-muted/70 text-foreground hover:bg-primary hover:text-white'
+                                  }`}
+                                >
+                                  <Plus size={13} />
+                                  <span>Add</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-6 text-center text-muted-foreground text-xs">
+                        <div className="mb-1 text-sm font-semibold text-foreground">No services found</div>
+                        <div>No service matches "<span className="text-primary font-bold">{serviceSearch}</span>". Try another keyword.</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* QUICK ADD FREQUENT CHIPS */}
+                {!serviceSearch && services.length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                    <span className="text-[11px] font-bold text-muted-foreground mr-1">
+                      Quick Add:
+                    </span>
+                    {services.slice(0, 5).map(service => {
+                      const inCart = cart.some(i => i.service.id === service.id);
+                      return (
+                        <button
+                          key={service.id}
+                          type="button"
+                          onClick={() => addServiceToCart(service)}
+                          className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+                            inCart
+                              ? 'border-primary/40 bg-primary/10 text-primary font-semibold'
+                              : 'border-border bg-muted/30 hover:bg-muted hover:border-primary/40 text-foreground'
+                          }`}
+                        >
+                          <span>{service.name}</span>
+                          <span className="text-[10px] opacity-75 font-bold">({service.price.toFixed(0)} AED)</span>
+                          <Plus size={11} className="text-primary" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* INVOICE LINE ITEMS TABLE */}
               <div className="border border-border/80 rounded-xl overflow-hidden mt-4">
                 <table className="w-full text-left">
                   <thead>
                     <tr>
-                      <th>Service Name</th>
+                      <th className="w-10 text-center">#</th>
+                      <th>Service Details</th>
                       {isCompanySelected && companyEmployees.length > 0 && <th className="w-48">Person Under Company</th>}
                       <th className="text-center w-28">Quantity</th>
                       <th className="w-28 text-center">Unit Price</th>
@@ -460,13 +587,22 @@ export const CreateSale: React.FC = () => {
                   <tbody className="divide-y divide-border/50">
                     {cart.length === 0 ? (
                       <tr>
-                        <td colSpan={isCompanySelected && companyEmployees.length > 0 ? 6 : 5} className="py-8 text-center text-muted-foreground italic">
-                          Shopping cart is empty. Click any service card above to add to invoice.
+                        <td colSpan={isCompanySelected && companyEmployees.length > 0 ? 7 : 6} className="py-12 text-center text-muted-foreground italic">
+                          <div className="max-w-xs mx-auto space-y-2">
+                            <div className="p-3 rounded-full bg-muted/60 w-fit mx-auto text-muted-foreground">
+                              <Search size={22} />
+                            </div>
+                            <div className="text-xs font-semibold text-foreground">No services added yet</div>
+                            <div className="text-[11px] text-muted-foreground">Use the search bar above or click a Quick Add tag to add services to this invoice.</div>
+                          </div>
                         </td>
                       </tr>
                     ) : (
                       cart.map((item, index) => (
                         <tr key={index} className="hover:bg-primary/5">
+                          <td className="text-center font-bold text-xs text-muted-foreground">
+                            {index + 1}
+                          </td>
                           <td>
                             <div className="font-bold text-foreground text-xs">{item.service.name}</div>
                             <div className="text-[10px] text-muted-foreground mt-0.5">

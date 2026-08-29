@@ -9,6 +9,7 @@ import {
   Plus,
   Search,
   Printer,
+  ReceiptText,
   Activity,
   Clock,
   X,
@@ -720,37 +721,76 @@ export const SalesList: React.FC = () => {
               : [selectedSaleDetails];
 
             return (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm print:p-0 print:bg-white overflow-y-auto">
-                <div className="glass border border-border rounded-2xl p-6 shadow-2xl relative bg-white print:border-none print:shadow-none print:p-0 print:static print-invoice-sheet w-full max-w-4xl max-h-[90vh] overflow-y-auto my-8">
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-md print:p-0 print:bg-white print:static overflow-y-auto">
+                <div className="relative w-full max-w-4xl max-h-[94vh] overflow-y-auto print:max-h-none print:overflow-visible my-auto space-y-4 print:space-y-0 print:my-0 print:w-full">
                   
-                  {/* Close Button */}
-                  <button
-                    onClick={() => { setSelectedSaleDetails(null); setSelectedSaleId(null); }}
-                    className="absolute right-4 top-4 p-2 text-muted-foreground hover:text-foreground print:hidden bg-muted/40 rounded-full transition-colors cursor-pointer"
-                  >
-                    <X size={16} />
-                  </button>
+                  {/* TOP CONTROL TOOLBAR (Hidden in Print / PDF) */}
+                  <div className="sticky top-0 z-20 flex items-center justify-between p-3.5 bg-card/95 backdrop-blur-md border border-border rounded-2xl shadow-xl print:hidden">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                        <ReceiptText size={18} />
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs text-foreground">Invoice Document Preview</div>
+                        <div className="text-[11px] text-muted-foreground">Invoice #{mainSale.invoice_no} • {new Date(mainSale.created_at).toLocaleDateString()}</div>
+                      </div>
+                    </div>
 
-                  <div className="space-y-8 print:space-y-0">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handlePrint}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold shadow-md shadow-primary/20 transition-all cursor-pointer"
+                      >
+                        <Printer size={14} />
+                        <span>Print / Save PDF</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleWhatsAppShare(mainSale)}
+                        className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
+                      >
+                        <MessageSquare size={14} />
+                        <span className="hidden sm:inline">WhatsApp</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedSaleDetails(null); setSelectedSaleId(null); }}
+                        className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-xl transition-colors cursor-pointer"
+                        title="Close (Esc)"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* PRINTABLE INVOICE PAPER SHEET */}
+                  <div className="print-invoice-sheet bg-white text-black p-6 sm:p-8 rounded-2xl shadow-2xl border border-border/80 print:border-none print:shadow-none print:p-0 print:rounded-none space-y-8 print:space-y-0">
                     {salesListForPrint.map((saleItem, idx) => (
                       <div 
                         key={saleItem.id}
                         className={`w-full ${idx > 0 ? 'print:page-break-before-always mt-8 print:mt-0 pt-8 print:pt-0 border-t border-dashed border-gray-300 print:border-none' : ''}`}
                       >
-                        {/* Print Invoice branding header */}
-                        <div className="text-center space-y-1 pb-4 border-b border-gray-300">
-                          <div className="text-xl font-bold text-[#000ba0] font-serif tracking-wide italic">
-                            مكتب عزيزي للكتابة وعمل الأختام ذ.م.م - فرع ١
+                        {/* Print Invoice branding header with raw logo */}
+                        <div className="flex items-center justify-between pb-3 border-b border-gray-300 gap-3">
+                          <img src="/logo.png" alt="AZIZI Logo" className="w-14 h-14 object-contain shrink-0" />
+                          <div className="text-center flex-1 space-y-0.5">
+                            <div className="text-lg font-bold text-[#000ba0] font-serif tracking-wide italic">
+                              مكتب عزيزي للكتابة وعمل الأختام ذ.م.م - فرع ١
+                            </div>
+                            <div className="text-base font-black text-[#f28f00] tracking-wide italic uppercase">
+                              AZIZI TYPING &amp; STAMP MAKING Br. 1
+                            </div>
+                            <div className="text-xs text-black font-bold">
+                              Mobile: 0542797933 • Email: azizitypingbr@gmail.com
+                            </div>
+                            <div className="text-[11px] text-gray-700 font-semibold">
+                              Abu Dhabi, Musaffah M37, Near Irani Masjid
+                            </div>
                           </div>
-                          <div className="text-lg font-black text-[#f28f00] tracking-wide italic uppercase">
-                            AZIZI TYPING & STAMP MAKING Br. 1
-                          </div>
-                          <div className="text-xs text-black font-bold">
-                            Mobile: 0542797933 • Email: azizitypingbr@gmail.com
-                          </div>
-                          <div className="text-[11px] text-gray-700 font-semibold">
-                            Abu Dhabi, Musaffah M37, Near Irani Masjid
-                          </div>
+                          <div className="w-14 shrink-0" />
                         </div>
 
                         {/* Blue Banner Header */}
@@ -762,7 +802,7 @@ export const SalesList: React.FC = () => {
                         </div>
 
                         {/* Customer & Date Metadata Grid Table */}
-                        <table className="w-full border-collapse border border-gray-300 text-xs my-3 bg-white">
+                        <table className="w-full border-collapse border border-gray-300 text-xs my-3 bg-white text-black">
                           <tbody>
                             <tr>
                               <td className="bg-[#f28f00] text-white font-bold px-3 py-2 border border-gray-300 w-1/4 uppercase tracking-wider">
@@ -774,7 +814,7 @@ export const SalesList: React.FC = () => {
                                   if (saleItem.person_name) {
                                     return (
                                       <div className="flex flex-col">
-                                        <span className="font-extrabold text-foreground">{saleItem.person_name}</span>
+                                        <span className="font-extrabold text-black">{saleItem.person_name}</span>
                                         <span className="text-xs text-[#000ba0] font-semibold mt-0.5">
                                           Company Account: {saleItem.customer.name} (Consolidated Billing)
                                         </span>
@@ -785,14 +825,14 @@ export const SalesList: React.FC = () => {
                                   if (parentName) {
                                     return (
                                       <div className="flex flex-col">
-                                        <span className="font-extrabold text-foreground">{saleItem.customer.name}</span>
+                                        <span className="font-extrabold text-black">{saleItem.customer.name}</span>
                                         <span className="text-xs text-[#000ba0] font-semibold mt-0.5">
                                           Company Account: {parentName} (Consolidated Billing)
                                         </span>
                                       </div>
                                     );
                                   }
-                                  return saleItem.customer.name;
+                                  return <span className="text-black">{saleItem.customer.name}</span>;
                                 })()}
                               </td>
                             </tr>
@@ -814,7 +854,7 @@ export const SalesList: React.FC = () => {
                               <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4">
                                 Invoice No:
                               </td>
-                              <td className="px-3 py-2 border border-gray-300 text-primary font-bold w-1/4">
+                              <td className="px-3 py-2 border border-gray-300 text-[#000ba0] font-bold w-1/4">
                                 {saleItem.invoice_no}
                               </td>
                               <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4 text-center">
@@ -902,7 +942,7 @@ export const SalesList: React.FC = () => {
                           {/* Left Column: Remarks/Comments */}
                           <div className="border border-gray-300 rounded-sm flex flex-col bg-white">
                             <div className="bg-gray-100 border-b border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700">
-                              Remarks & Internal Notes
+                              Remarks &amp; Internal Notes
                             </div>
                             <div className="p-3 text-xs text-black font-semibold whitespace-pre-wrap flex-1 italic">
                               {saleItem.notes || 'Document completed successfully. Thank you for choosing AZIZI!'}
@@ -928,9 +968,9 @@ export const SalesList: React.FC = () => {
                                   const maxPayRows = 4;
                                   const rows: React.ReactNode[] = [];
 
-                                  payments.forEach((p: any, idx: number) => {
+                                  payments.forEach((p: any, pIdx: number) => {
                                     rows.push(
-                                      <tr key={p.id || idx} className="h-7">
+                                      <tr key={p.id || pIdx} className="h-7">
                                         <td className="px-3 py-1 border-r border-gray-300 text-black">
                                           {new Date(p.payment_date).toLocaleDateString()}
                                         </td>
@@ -995,82 +1035,71 @@ export const SalesList: React.FC = () => {
                     ))}
                   </div>
 
-                  {/* Action Buttons (Hidden on print) */}
-                  <div className="flex flex-col gap-2 pt-3 border-t border-gray-300 print:hidden text-xs">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handlePrint}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg border border-border font-semibold text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-all cursor-pointer"
-                      >
-                        <Printer size={14} />
-                        Print Receipts
-                      </button>
-                      <button
-                        onClick={() => handleWhatsAppShare(mainSale)}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-md transition-colors cursor-pointer"
-                      >
-                        <MessageSquare size={14} />
-                        WhatsApp Share
-                      </button>
+                  {/* BOTTOM WORKFLOW & ACTIONS PANEL (Hidden on Print / PDF) */}
+                  <div className="p-4 bg-card border border-border rounded-2xl shadow-xl space-y-4 print:hidden">
+                    {/* Action buttons */}
+                    <div className="flex flex-wrap gap-2 text-xs">
                       {hasPermission('Sales.Update') && (
                         <button
+                          type="button"
                           onClick={() => {
                             setNewStatusId(mainSale.order_status_id);
                             setStatusModalOpen(true);
                           }}
-                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold shadow-md transition-colors cursor-pointer"
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold shadow-md transition-colors cursor-pointer"
                         >
                           <Activity size={14} />
-                          Update Job Status
+                          <span>Update Job Status</span>
                         </button>
                       )}
+
+                      {/* Due collection button */}
+                      {(() => {
+                        const totalPaid = mainSale.payments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0;
+                        const due = mainSale.grand_total - totalPaid;
+                        return due > 0 && hasPermission('Payments.Create') ? (
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/payments/create?sale_id=${mainSale.id}`)}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-bold transition-colors cursor-pointer"
+                          >
+                            <CreditCard size={14} />
+                            <span>Collect Due ({due.toFixed(2)} AED)</span>
+                          </button>
+                        ) : null;
+                      })()}
                     </div>
 
-                    {/* Due collection button */}
-                    {(() => {
-                      const totalPaid = mainSale.payments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0;
-                      const due = mainSale.grand_total - totalPaid;
-                      return due > 0 && hasPermission('Payments.Create') ? (
-                        <button
-                          onClick={() => navigate(`/payments/create?sale_id=${mainSale.id}`)}
-                          className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-black font-bold transition-colors cursor-pointer"
-                        >
-                          <CreditCard size={14} />
-                          Collect Remaining due ({due.toFixed(2)} AED)
-                        </button>
-                      ) : null;
-                    })()}
-                  </div>
-
-                  {/* Job Status Workflow history timeline */}
-                  <div className="space-y-3 pt-3 border-t border-border/40 print:hidden">
-                    <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                      <Clock size={14} className="text-primary" />
-                      Job Status Workflow Timeline (Invoice #{mainSale.invoice_no})
-                    </h4>
-                    
-                    <div className="relative pl-4 border-l border-border/80 space-y-4">
-                      {mainSale.history?.map((h: any) => (
-                        <div key={h.id} className="relative text-[11px] text-muted-foreground">
-                          {/* Bullet */}
-                          <div
-                            className="absolute -left-[21px] top-1 h-2 w-2 rounded-full border bg-background"
-                            style={{ borderColor: h.new_status?.color || '#a78bfa' }}
-                          />
-                          <div className="flex items-center justify-between">
-                            <span className="font-semibold text-foreground">
-                              {h.new_status?.name}
-                            </span>
-                            <span className="text-[9px] text-muted-foreground/80">
-                              {new Date(h.created_at).toLocaleDateString()} {new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
+                    {/* Job Status Workflow history timeline */}
+                    <div className="space-y-3 pt-3 border-t border-border/60">
+                      <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                        <Clock size={14} className="text-primary" />
+                        Job Status Workflow Timeline (Invoice #{mainSale.invoice_no})
+                      </h4>
+                      
+                      <div className="relative pl-4 border-l border-border/80 space-y-3">
+                        {mainSale.history?.map((h: any) => (
+                          <div key={h.id} className="relative text-[11px] text-muted-foreground">
+                            <div
+                              className="absolute -left-[21px] top-1 h-2 w-2 rounded-full border bg-background"
+                              style={{ borderColor: h.new_status?.color || '#a78bfa' }}
+                            />
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-foreground">
+                                {h.new_status?.name}
+                              </span>
+                              <span className="text-[9px] text-muted-foreground/80">
+                                {new Date(h.created_at).toLocaleDateString()} {new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <p className="mt-0.5">{h.remarks || 'No remarks recorded.'}</p>
+                            <div className="text-[9px] text-primary/70 mt-0.5">By: {h.user?.name || 'Staff'}</div>
                           </div>
-                          <p className="mt-0.5">{h.remarks || 'No remarks recorded.'}</p>
-                          <div className="text-[9px] text-primary/70 mt-0.5">By: {h.user?.name || 'Staff'}</div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   </div>
+
                 </div>
               </div>
             );

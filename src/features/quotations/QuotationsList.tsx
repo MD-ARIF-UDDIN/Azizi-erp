@@ -7,6 +7,7 @@ import {
   Plus,
   Search,
   Printer,
+  ReceiptText,
   Clock,
   X,
   MessageSquare,
@@ -459,33 +460,72 @@ export const QuotationsList: React.FC = () => {
             const canConvert = quote.status !== 'Converted';
 
             return (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm print:p-0 print:bg-white overflow-y-auto">
-                <div className="glass border border-border rounded-2xl p-6 shadow-2xl relative bg-white print:border-none print:shadow-none print:p-0 print:static print-invoice-sheet w-full max-w-4xl max-h-[90vh] overflow-y-auto my-8">
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-md print:p-0 print:bg-white print:static overflow-y-auto">
+                <div className="relative w-full max-w-4xl max-h-[94vh] overflow-y-auto print:max-h-none print:overflow-visible my-auto space-y-4 print:space-y-0 print:my-0 print:w-full">
                   
-                  {/* Close Button */}
-                  <button
-                    onClick={() => { setSelectedQuoteDetails(null); setSelectedQuoteId(null); }}
-                    className="absolute right-4 top-4 p-2 text-muted-foreground hover:text-foreground print:hidden bg-muted/40 rounded-full transition-colors cursor-pointer"
-                  >
-                    <X size={16} />
-                  </button>
+                  {/* TOP CONTROL TOOLBAR (Hidden in Print / PDF) */}
+                  <div className="sticky top-0 z-20 flex items-center justify-between p-3.5 bg-card/95 backdrop-blur-md border border-border rounded-2xl shadow-xl print:hidden">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                        <ReceiptText size={18} />
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs text-foreground">Quotation Document Preview</div>
+                        <div className="text-[11px] text-muted-foreground">Quote #{quote.quotation_no} • {new Date(quote.created_at).toLocaleDateString()}</div>
+                      </div>
+                    </div>
 
-                  <div className="space-y-8 print:space-y-0">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handlePrint}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold shadow-md shadow-primary/20 transition-all cursor-pointer"
+                      >
+                        <Printer size={14} />
+                        <span>Print / Save PDF</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleWhatsAppShare(quote)}
+                        className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
+                      >
+                        <MessageSquare size={14} />
+                        <span className="hidden sm:inline">WhatsApp</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedQuoteDetails(null); setSelectedQuoteId(null); }}
+                        className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-xl transition-colors cursor-pointer"
+                        title="Close (Esc)"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* PRINTABLE QUOTATION PAPER SHEET */}
+                  <div className="print-invoice-sheet bg-white text-black p-6 sm:p-8 rounded-2xl shadow-2xl border border-border/80 print:border-none print:shadow-none print:p-0 print:rounded-none">
                     <div className="w-full">
-                      {/* Branding Header */}
-                      <div className="text-center space-y-1 pb-4 border-b border-gray-300">
-                        <div className="text-xl font-bold text-[#000ba0] font-serif tracking-wide italic">
-                          مكتب عزيزي للكتابة وعمل الأختام ذ.م.م - فرع ١
+                      {/* Branding Header with raw logo */}
+                      <div className="flex items-center justify-between pb-3 border-b border-gray-300 gap-3">
+                        <img src="/logo.png" alt="AZIZI Logo" className="w-14 h-14 object-contain shrink-0" />
+                        <div className="text-center flex-1 space-y-0.5">
+                          <div className="text-lg font-bold text-[#000ba0] font-serif tracking-wide italic">
+                            مكتب عزيزي للكتابة وعمل الأختام ذ.م.م - فرع ١
+                          </div>
+                          <div className="text-base font-black text-[#f28f00] tracking-wide italic uppercase">
+                            AZIZI TYPING &amp; STAMP MAKING Br. 1
+                          </div>
+                          <div className="text-xs text-black font-bold">
+                            Mobile: 0542797933 • Email: azizitypingbr@gmail.com
+                          </div>
+                          <div className="text-[11px] text-gray-700 font-semibold">
+                            Abu Dhabi, Musaffah M37, Near Irani Masjid
+                          </div>
                         </div>
-                        <div className="text-lg font-black text-[#f28f00] tracking-wide italic uppercase">
-                          AZIZI TYPING & STAMP MAKING Br. 1
-                        </div>
-                        <div className="text-xs text-black font-bold">
-                          Mobile: 0542797933 • Email: azizitypingbr@gmail.com
-                        </div>
-                        <div className="text-[11px] text-gray-700 font-semibold">
-                          Abu Dhabi, Musaffah M37, Near Irani Masjid
-                        </div>
+                        <div className="w-14 shrink-0" />
                       </div>
 
                       {/* Orange Banner Header */}
@@ -497,7 +537,7 @@ export const QuotationsList: React.FC = () => {
                       </div>
 
                       {/* Customer Metadata Table */}
-                      <table className="w-full border-collapse border border-gray-300 text-xs my-3 bg-white">
+                      <table className="w-full border-collapse border border-gray-300 text-xs my-3 bg-white text-black">
                         <tbody>
                           <tr>
                             <td className="bg-[#000ba0] text-white font-bold px-3 py-2 border border-gray-300 w-1/4 uppercase tracking-wider">
@@ -509,7 +549,7 @@ export const QuotationsList: React.FC = () => {
                                 if (quote.person_name) {
                                   return (
                                     <div className="flex flex-col">
-                                      <span className="font-extrabold text-foreground">{quote.person_name}</span>
+                                      <span className="font-extrabold text-black">{quote.person_name}</span>
                                       <span className="text-xs text-[#000ba0] font-semibold mt-0.5">
                                         Company Account: {quote.customer.name}
                                       </span>
@@ -518,7 +558,7 @@ export const QuotationsList: React.FC = () => {
                                 }
                                 return (
                                   <div className="flex flex-col">
-                                    <span className="font-extrabold text-foreground">{quote.customer.name}</span>
+                                    <span className="font-extrabold text-black">{quote.customer.name}</span>
                                     {quote.customer.company && (
                                       <span className="text-xs text-[#000ba0] font-semibold mt-0.5">
                                         Billed via: {quote.customer.company.name}
@@ -530,13 +570,13 @@ export const QuotationsList: React.FC = () => {
                             </td>
                           </tr>
                           <tr>
-                            <td className="bg-gray-100 font-bold px-3 py-2 border border-gray-300 w-1/4">
+                            <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4">
                               Phone Number
                             </td>
                             <td className="px-3 py-2 border border-gray-300 w-1/4 text-black font-semibold">
                               {quote.person_phone || quote.customer?.phone || 'N/A'}
                             </td>
-                            <td className="bg-gray-100 font-bold px-3 py-2 border border-gray-300 w-1/4">
+                            <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4">
                               Quotation Date
                             </td>
                             <td className="px-3 py-2 border border-gray-300 w-1/4 text-black font-semibold">
@@ -544,13 +584,13 @@ export const QuotationsList: React.FC = () => {
                             </td>
                           </tr>
                           <tr>
-                            <td className="bg-gray-100 font-bold px-3 py-2 border border-gray-300 w-1/4">
+                            <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4">
                               Email Address
                             </td>
                             <td className="px-3 py-2 border border-gray-300 w-1/4 text-black font-medium">
                               {quote.person_email || quote.customer?.email || 'N/A'}
                             </td>
-                            <td className="bg-gray-100 font-bold px-3 py-2 border border-gray-300 w-1/4">
+                            <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4">
                               Valid Until Date
                             </td>
                             <td className="px-3 py-2 border border-gray-300 w-1/4 text-rose-600 font-bold">
@@ -558,17 +598,17 @@ export const QuotationsList: React.FC = () => {
                             </td>
                           </tr>
                           <tr>
-                            <td className="bg-gray-100 font-bold px-3 py-2 border border-gray-300 w-1/4">
+                            <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4">
                               Status Label
                             </td>
                             <td className="px-3 py-2 border border-gray-300 text-black font-bold" colSpan={3}>
                               <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold border ${
-                                quote.status === 'Converted' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' :
-                                quote.status === 'Accepted' ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' :
-                                quote.status === 'Draft' ? 'bg-muted text-muted-foreground border-border' :
-                                quote.status === 'Sent' ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20' :
-                                quote.status === 'Rejected' ? 'bg-rose-500/10 text-rose-600 border-rose-500/20' :
-                                'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                                quote.status === 'Converted' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
+                                quote.status === 'Accepted' ? 'bg-blue-50 text-blue-700 border-blue-300' :
+                                quote.status === 'Draft' ? 'bg-gray-100 text-gray-700 border-gray-300' :
+                                quote.status === 'Sent' ? 'bg-indigo-50 text-indigo-700 border-indigo-300' :
+                                quote.status === 'Rejected' ? 'bg-rose-50 text-rose-700 border-rose-300' :
+                                'bg-amber-50 text-amber-700 border-amber-300'
                               }`}>
                                 {quote.status}
                               </span>
@@ -578,7 +618,7 @@ export const QuotationsList: React.FC = () => {
                       </table>
 
                       {/* Items Details Table */}
-                      <table className="w-full border-collapse border border-gray-300 text-xs my-4 text-left">
+                      <table className="w-full border-collapse border border-gray-300 text-xs my-4 text-left bg-white text-black">
                         <thead>
                           <tr className="bg-[#000ba0] text-white uppercase font-bold text-[10px] tracking-wider">
                             <th className="px-3 py-2 border border-gray-300 text-center w-12">No</th>
@@ -639,12 +679,12 @@ export const QuotationsList: React.FC = () => {
                       {/* Terms & Conditions Box */}
                       {((quote.terms_conditions && quote.terms_conditions.length > 0) || quote.notes) && (
                         <div className="mt-4 p-3 border border-gray-300 rounded text-xs bg-gray-50 text-black text-left">
-                          <strong className="text-gray-800 block mb-1.5 font-bold">Terms & Conditions:</strong>
+                          <strong className="text-gray-800 block mb-1.5 font-bold">Terms &amp; Conditions:</strong>
                           {quote.terms_conditions && quote.terms_conditions.length > 0 && (
                             <ol className="list-decimal pl-4 mb-2 space-y-1 text-[11px] text-gray-700 font-medium leading-relaxed">
                               {quote.terms_conditions.map((tc: any) => (
                                 <li key={tc.id}>
-                                  <span className="font-bold text-gray-850">{tc.title}:</span> {tc.content}
+                                  <span className="font-bold text-gray-800">{tc.title}:</span> {tc.content}
                                 </li>
                               ))}
                             </ol>
@@ -664,32 +704,80 @@ export const QuotationsList: React.FC = () => {
                           <div>Customer Signature</div>
                         </div>
                         <div className="text-center font-bold text-[11px] text-black">
-                          <div className="font-serif italic text-blue-800 text-[10px] mb-1 font-semibold">AZIZI TYPING CO.</div>
+                          <div className="font-serif italic text-[#000ba0] text-[10px] mb-1 font-semibold">AZIZI TYPING CO.</div>
                           <div className="border-t border-gray-300 w-32 mx-auto pt-1">Authorized Cashier</div>
                         </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* BOTTOM WORKFLOW & ACTIONS PANEL (Hidden on Print / PDF) */}
+                  <div className="p-4 bg-card border border-border rounded-2xl shadow-xl space-y-4 print:hidden">
+                    {/* Action buttons */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {hasPermission('Sales.Delete') && (
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(quote.id)}
+                            className="flex items-center gap-1 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white px-4 py-2 rounded-xl font-bold transition-all shadow-xs border border-rose-500/20 cursor-pointer"
+                          >
+                            <Trash2 size={14} />
+                            <span>Delete</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {quote.status !== 'Converted' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUpdateStatusQuoteId(quote.id);
+                              setNewStatus(quote.status);
+                              setRemarks('');
+                              setStatusModalOpen(true);
+                            }}
+                            className="flex items-center gap-1.5 bg-secondary hover:bg-muted text-foreground px-3.5 py-2 rounded-xl font-bold transition-all shadow-xs border border-border cursor-pointer"
+                          >
+                            <Clock size={13} />
+                            <span>Change Status</span>
+                          </button>
+                        )}
+
+                        {canConvert && (
+                          <button
+                            type="button"
+                            onClick={() => handleConvertToSale(quote.id)}
+                            disabled={converting}
+                            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold transition-all shadow-md cursor-pointer"
+                          >
+                            <CheckCircle size={14} />
+                            <span>Convert to Bill Invoice</span>
+                          </button>
+                        )}
                       </div>
                     </div>
 
                     {/* Status Change History Timeline */}
                     {statusHistory.length > 0 && (
-                      <div className="mt-8 border-t border-border pt-6 print:hidden">
-                        <h3 className="text-xs uppercase font-bold text-muted-foreground tracking-wider mb-4 flex items-center gap-1.5">
+                      <div className="space-y-3 pt-3 border-t border-border/60">
+                        <h3 className="text-xs uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1.5">
                           <Clock size={13} className="text-primary" />
                           Status History Log
                         </h3>
-                        <div className="relative border-l border-border pl-4 space-y-4">
+                        <div className="relative border-l border-border pl-4 space-y-3">
                           {statusHistory.map((h, i) => (
                             <div key={h.id || i} className="relative">
-                              {/* Dot */}
                               <div className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-primary border-2 border-background" />
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold border ${
-                                  h.status === 'Converted' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' :
-                                  h.status === 'Accepted' ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20' :
-                                  h.status === 'Draft' ? 'bg-muted text-muted-foreground border border-border' :
-                                  h.status === 'Sent' ? 'bg-indigo-500/10 text-indigo-600 border border-indigo-500/20' :
-                                  h.status === 'Rejected' ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20' :
-                                  'bg-amber-500/10 text-amber-600 border border-amber-500/20'
+                                  h.status === 'Converted' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' :
+                                  h.status === 'Accepted' ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' :
+                                  h.status === 'Draft' ? 'bg-muted text-muted-foreground border-border' :
+                                  h.status === 'Sent' ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20' :
+                                  h.status === 'Rejected' ? 'bg-rose-500/10 text-rose-600 border-rose-500/20' :
+                                  'bg-amber-500/10 text-amber-600 border-amber-500/20'
                                 }`}>
                                   {h.status}
                                 </span>
@@ -709,67 +797,8 @@ export const QuotationsList: React.FC = () => {
                     )}
                   </div>
 
-                        <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-4 print:hidden">
-                    {/* Left Actions */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        onClick={handlePrint}
-                        className="flex items-center gap-1 bg-secondary hover:bg-muted text-foreground px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs border border-border cursor-pointer"
-                      >
-                        <Printer size={14} />
-                        Print Quotation
-                      </button>
-                      
-                      <button
-                        onClick={() => handleWhatsAppShare(quote)}
-                        className="flex items-center gap-1 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
-                      >
-                        <MessageSquare size={14} />
-                        Share via WhatsApp
-                      </button>
-
-                      {hasPermission('Sales.Delete') && (
-                        <button
-                          onClick={() => handleDelete(quote.id)}
-                          className="flex items-center gap-1 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-xs border border-rose-500/20 cursor-pointer"
-                        >
-                          <Trash2 size={14} />
-                          Delete
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Right Actions */}
-                    <div className="flex flex-wrap items-center gap-3">
-                      {quote.status !== 'Converted' && (
-                        <button
-                          onClick={() => {
-                            setUpdateStatusQuoteId(quote.id);
-                            setNewStatus(quote.status);
-                            setRemarks('');
-                            setStatusModalOpen(true);
-                          }}
-                          className="flex items-center gap-1.5 bg-secondary hover:bg-muted text-foreground px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-xs border border-border cursor-pointer"
-                        >
-                          <Clock size={13} />
-                          Change Status
-                        </button>
-                      )}
-
-                      {canConvert && (
-                        <button
-                          onClick={() => handleConvertToSale(quote.id)}
-                          disabled={converting}
-                          className="flex items-center gap-1.5 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white border border-emerald-500/30 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
-                        >
-                          <CheckCircle size={14} />
-                          Convert to Bill Invoice
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  </div>
                 </div>
+              </div>
             );
           })()}
         </div>

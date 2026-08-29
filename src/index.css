@@ -152,39 +152,98 @@ select option {
   flex-direction: column;
 }
 
-/* ── Print styles ── */
+/* ── Print styles (Pixel-perfect A4 invoice & quotation exports) ── */
+@page {
+  size: A4 portrait;
+  margin: 10mm 10mm 10mm 10mm;
+}
+
 @media print {
-  body {
-    background: white !important;
-    color: black !important;
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
   }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
   body * {
     visibility: hidden !important;
   }
-  .print-invoice-sheet, .print-invoice-sheet * {
+
+  .print-invoice-sheet,
+  .print-invoice-sheet *:not(.print-hidden, .print-hidden *, .print\:hidden, .print\:hidden *) {
     visibility: visible !important;
   }
+
+  .print-hidden,
+  .print-hidden *,
+  .print\:hidden,
+  .print\:hidden *,
+  [class*="print:hidden"],
+  [class*="print:hidden"] * {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
   .print-invoice-sheet {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
     width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
     border: none !important;
     box-shadow: none !important;
     padding: 0 !important;
     margin: 0 !important;
-    }
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .print-invoice-sheet table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  .print-invoice-sheet table thead th {
+    background-color: #000ba0 !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    border-color: #d1d5db !important;
+  }
+
+  .print-invoice-sheet table tbody td {
+    border-color: #d1d5db !important;
+    color: #000000 !important;
+  }
+
+  .print-invoice-sheet table tfoot tr,
+  .print-invoice-sheet table tfoot td {
+    background-color: #f28f00 !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+  }
 }
 
-/* ── Modern, Simple & Understandable Table UI with Clear Column Separation ── */
-table,
-.glass table {
+/* ── Modern, Simple & Understandable Table UI with Clear Column Separation (Excluding Print Sheets) ── */
+table:not(.print-invoice-sheet table),
+.glass table:not(.print-invoice-sheet table) {
   border-collapse: separate;
   border-spacing: 0;
   width: 100%;
 }
-table thead th,
-.glass table thead th {
+table:not(.print-invoice-sheet table) thead th,
+.glass table:not(.print-invoice-sheet table) thead th {
   background-color: hsl(var(--secondary) / 0.6) !important;
   color: hsl(var(--muted-foreground)) !important;
   font-size: 11px !important;
@@ -199,17 +258,17 @@ table thead th,
   padding-right: 1rem !important;
   white-space: nowrap;
 }
-table thead th:last-child,
-.glass table thead th:last-child {
+table:not(.print-invoice-sheet table) thead th:last-child,
+.glass table:not(.print-invoice-sheet table) thead th:last-child {
   border-right: none !important;
 }
 
-table tbody tr,
-.glass table tbody tr {
+table:not(.print-invoice-sheet table) tbody tr,
+.glass table:not(.print-invoice-sheet table) tbody tr {
   transition: background-color 0.15s ease, transform 0.15s ease;
 }
-table tbody td,
-.glass table tbody td {
+table:not(.print-invoice-sheet table) tbody td,
+.glass table:not(.print-invoice-sheet table) tbody td {
   padding-top: 0.75rem !important;
   padding-bottom: 0.75rem !important;
   padding-left: 1rem !important;
@@ -220,16 +279,16 @@ table tbody td,
   border-bottom: 1px solid hsl(var(--border) / 0.6) !important;
   border-right: 1px solid hsl(var(--border) / 0.5) !important;
 }
-table tbody td:last-child,
-.glass table tbody td:last-child {
+table:not(.print-invoice-sheet table) tbody td:last-child,
+.glass table:not(.print-invoice-sheet table) tbody td:last-child {
   border-right: none !important;
 }
-table tbody tr:last-child td,
-.glass table tbody tr:last-child td {
+table:not(.print-invoice-sheet table) tbody tr:last-child td,
+.glass table:not(.print-invoice-sheet table) tbody tr:last-child td {
   border-bottom: none !important;
 }
-table tbody tr:hover,
-.glass table tbody tr:hover {
+table:not(.print-invoice-sheet table) tbody tr:hover,
+.glass table:not(.print-invoice-sheet table) tbody tr:hover {
   background-color: hsl(var(--primary) / 0.04) !important;
 }
 

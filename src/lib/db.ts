@@ -9,6 +9,17 @@ import type {
 // A mock helper to generate UUIDs locally
 const generateUUID = () => crypto.randomUUID();
 
+export const isValidUUID = (uuid?: string | null): boolean => {
+  if (!uuid || typeof uuid !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid.trim());
+};
+
+export const sanitizeUUID = (uuid?: string | null): string | null => {
+  if (!uuid || typeof uuid !== 'string') return null;
+  const trimmed = uuid.trim();
+  return isValidUUID(trimmed) ? trimmed : null;
+};
+
 // Local Storage Keys
 const KEYS = {
   BRANCHES: 'azizi_erp_branches',
@@ -133,7 +144,7 @@ const SEED_USERS = (roles: Role[], branches: Branch[]): User[] => [
 ];
 
 const SEED_CUSTOMERS = (): Customer[] => [
-  { id: 'c1-cust', name: 'Walk-in Customer', phone: '+971500000000', email: 'walkin@azizi.ae', address: 'Musaffah, Abu Dhabi', notes: 'General counter walk-in customer', customer_type: 'individual', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+  { id: 'c0000000-0000-0000-0000-000000000001', name: 'Walk-in Customer', phone: '+971500000000', email: 'walkin@azizi.ae', address: 'Musaffah, Abu Dhabi', notes: 'General counter walk-in customer', customer_type: 'individual', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
 ];
 
 const SEED_CATEGORIES = (): ServiceCategory[] => [
@@ -516,7 +527,7 @@ export const db = {
     },
     getById: async (id: string) => {
       if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.from('branches').select('*').eq('id', id).eq('is_deleted', false).single();
+        const { data, error } = await supabase.from('branches').select('*').eq('id', id).eq('is_deleted', false).maybeSingle();
         if (error) throw error;
         return data as Branch;
       }
@@ -583,7 +594,7 @@ export const db = {
     },
     getById: async (id: string) => {
       if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.from('roles').select('*').eq('id', id).single();
+        const { data, error } = await supabase.from('roles').select('*').eq('id', id).maybeSingle();
         if (error) throw error;
         return data as Role;
       }
@@ -689,7 +700,7 @@ export const db = {
     },
     getById: async (id: string) => {
       if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.from('users').select('*, role:roles(*), branch:branches(*)').eq('id', id).single();
+        const { data, error } = await supabase.from('users').select('*, role:roles(*), branch:branches(*)').eq('id', id).maybeSingle();
         if (error) throw error;
         return data as User;
       }
@@ -795,7 +806,7 @@ export const db = {
       let statusesList: OrderStatus[] = [];
 
       if (isSupabaseConfigured && supabase) {
-        const { data: c, error: cErr } = await supabase.from('customers').select('*').eq('id', id).eq('is_deleted', false).single();
+        const { data: c, error: cErr } = await supabase.from('customers').select('*').eq('id', id).eq('is_deleted', false).maybeSingle();
         if (cErr) throw cErr;
         customerRecord = c;
 
@@ -916,7 +927,7 @@ export const db = {
     },
     getById: async (id: string) => {
       if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.from('service_categories').select('*').eq('id', id).eq('is_deleted', false).single();
+        const { data, error } = await supabase.from('service_categories').select('*').eq('id', id).eq('is_deleted', false).maybeSingle();
         if (error) throw error;
         return data as ServiceCategory;
       }
@@ -986,7 +997,7 @@ export const db = {
     },
     getById: async (id: string) => {
       if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.from('services').select('*, category:service_categories(*)').eq('id', id).eq('is_deleted', false).single();
+        const { data, error } = await supabase.from('services').select('*, category:service_categories(*)').eq('id', id).eq('is_deleted', false).maybeSingle();
         if (error) throw error;
         return data as Service;
       }
@@ -1053,7 +1064,12 @@ export const db = {
       if (isSupabaseConfigured && supabase) {
         const { data, error } = await supabase.from('order_statuses').select('*').eq('is_deleted', false).order('sequence', { ascending: true });
         if (error) throw error;
-        return data as OrderStatus[];
+        if (!data || data.length === 0) {
+          const defaultStatuses = SEED_ORDER_STATUSES();
+          const { data: seeded, error: seedErr } = await supabase.from('order_statuses').upsert(defaultStatuses, { onConflict: 'id' }).select();
+          if (!seedErr && seeded && seeded.length > 0) return seeded as OrderStatus[];
+        }
+        return (data || []) as OrderStatus[];
       }
       return delay(_statuses.filter(s => !s.is_deleted).sort((a, b) => a.sequence - b.sequence));
     },
@@ -1152,8 +1168,9 @@ export const db = {
     },
     getById: async (id: string) => {
       if (isSupabaseConfigured && supabase) {
-        const { data: s, error: sErr } = await supabase.from('sales').select('*, customer:customers(*), branch:branches(*), employee:users!employee_id(*), order_status:order_statuses(*)').eq('id', id).eq('is_deleted', false).single();
+        const { data: s, error: sErr } = await supabase.from('sales').select('*, customer:customers(*), branch:branches(*), employee:users!employee_id(*), order_status:order_statuses(*)').eq('id', id).eq('is_deleted', false).maybeSingle();
         if (sErr) throw sErr;
+        if (!s) return undefined;
 
         const { data: items } = await supabase.from('sale_items').select('*, service:services(*)').eq('sale_id', id);
         const { data: paymentsList } = await supabase.from('payments').select('*').eq('sale_id', id).eq('is_deleted', false);
@@ -1213,13 +1230,26 @@ export const db = {
       const now = new Date();
 
       if (isSupabaseConfigured && supabase) {
-        // Fetch pending status
-        const { data: stData } = await supabase.from('order_statuses').select('id').eq('name', 'Pending').single();
-        const pendingStatusId = stData?.id || '';
+        // Fetch pending status safely
+        let pendingStatusId = '11111111-0000-0000-0000-000000000001';
+        const { data: stData } = await supabase.from('order_statuses').select('id').ilike('name', 'Pending').limit(1).maybeSingle();
+        if (stData?.id) {
+          pendingStatusId = stData.id;
+        } else {
+          // Check if any order status exists
+          const { data: anyStatus } = await supabase.from('order_statuses').select('id').order('sequence', { ascending: true }).limit(1).maybeSingle();
+          if (anyStatus?.id) {
+            pendingStatusId = anyStatus.id;
+          } else {
+            // Auto-seed default statuses into supabase
+            const defaultStatuses = SEED_ORDER_STATUSES();
+            await supabase.from('order_statuses').upsert(defaultStatuses, { onConflict: 'id' });
+          }
+        }
 
         const { count } = await supabase.from('sales').select('*', { count: 'exact', head: true });
         const invoiceSeq = (count || 0) + 1;
-        const { data: branchData } = await supabase.from('branches').select('name').eq('id', data.branch_id).single();
+        const { data: branchData } = await supabase.from('branches').select('name').eq('id', data.branch_id).maybeSingle();
         const branchName = branchData?.name || 'Branch';
         const branchPrefix = branchName.replace(/\s+/g, '').substring(0, 3).toUpperCase();
         const dateStr = now.getFullYear().toString() + (now.getMonth() + 1).toString().padStart(2, '0') + now.getDate().toString().padStart(2, '0');
@@ -1232,24 +1262,28 @@ export const db = {
         else if (paidAmount > 0) payment_status = 'Partially Paid';
 
         const saleId = generateUUID();
+        const customerId = sanitizeUUID(data.customer_id);
+        const employeeId = sanitizeUUID(activeUser?.id);
+        const quotationId = sanitizeUUID(data.quotation_id);
+
         const { data: createdSale, error: saleErr } = await supabase.from('sales').insert([{
           id: saleId,
           invoice_no,
-          customer_id: data.customer_id,
+          customer_id: customerId,
           branch_id: data.branch_id,
-          employee_id: activeUser.id,
-          discount: data.discount,
-          subtotal,
-          grand_total,
+          employee_id: employeeId,
+          discount: Number(data.discount) || 0,
+          subtotal: Number(subtotal) || 0,
+          grand_total: Number(grand_total) || 0,
           payment_status,
           order_status_id: pendingStatusId,
-          notes: data.notes,
-          created_by: activeUser.id,
-          updated_by: activeUser.id,
-          person_name: data.person_name,
-          person_phone: data.person_phone,
-          person_email: data.person_email,
-          quotation_id: data.quotation_id
+          notes: data.notes || null,
+          created_by: employeeId,
+          updated_by: employeeId,
+          person_name: data.person_name || null,
+          person_phone: data.person_phone || null,
+          person_email: data.person_email || null,
+          quotation_id: quotationId
         }]).select().single();
 
         if (saleErr) throw saleErr;
@@ -1261,7 +1295,7 @@ export const db = {
           quantity: item.quantity,
           unit_price: item.unit_price,
           subtotal: item.unit_price * item.quantity,
-          person_name: item.person_name || undefined
+          person_name: item.person_name || null
         }));
         const { error: itemsErr } = await supabase.from('sale_items').insert(itemsPayload);
         if (itemsErr) throw itemsErr;
@@ -1272,9 +1306,9 @@ export const db = {
             sale_id: createdSale.id,
             amount: data.initialPayment.amount,
             payment_method: data.initialPayment.payment_method,
-            received_by: activeUser.id,
-            created_by: activeUser.id,
-            updated_by: activeUser.id
+            received_by: employeeId,
+            created_by: employeeId,
+            updated_by: employeeId
           }]);
         }
 
@@ -1282,21 +1316,21 @@ export const db = {
         await supabase.from('order_status_history').insert([{
           sale_id: createdSale.id,
           new_status_id: pendingStatusId,
-          changed_by: activeUser.id,
+          changed_by: employeeId,
           remarks: 'Order Invoice Created'
         }]);
 
-        if (data.quotation_id) {
+        if (quotationId) {
           await supabase.from('quotations').update({
             status: 'Converted',
             converted_sale_id: saleId
-          }).eq('id', data.quotation_id);
+          }).eq('id', quotationId);
 
           await supabase.from('quotation_status_history').insert([{
-            quotation_id: data.quotation_id,
+            quotation_id: quotationId,
             status: 'Converted',
             remarks: `Converted to Sale Invoice #${invoice_no}`,
-            changed_by: activeUser.id
+            changed_by: employeeId
           }]);
         }
 
@@ -1413,20 +1447,21 @@ export const db = {
     },
     updateStatus: async (saleId: string, newStatusId: string, remarks?: string) => {
       const activeUser = getActiveUserSession();
+      const employeeId = sanitizeUUID(activeUser?.id);
       
       if (isSupabaseConfigured && supabase) {
-        const { data: old } = await supabase.from('sales').select('order_status_id').eq('id', saleId).single();
+        const { data: old } = await supabase.from('sales').select('order_status_id').eq('id', saleId).maybeSingle();
         const oldStatusId = old?.order_status_id;
         
-        const { data: updated, error } = await supabase.from('sales').update({ order_status_id: newStatusId, updated_by: activeUser.id }).eq('id', saleId).select().single();
+        const { data: updated, error } = await supabase.from('sales').update({ order_status_id: newStatusId, updated_by: employeeId }).eq('id', saleId).select().single();
         if (error) throw error;
 
         // Record history
         await supabase.from('order_status_history').insert([{
           sale_id: saleId,
-          previous_status_id: oldStatusId,
+          previous_status_id: sanitizeUUID(oldStatusId),
           new_status_id: newStatusId,
-          changed_by: activeUser.id,
+          changed_by: employeeId,
           remarks: remarks || 'Status updated via dashboard'
         }]);
 
@@ -1479,6 +1514,7 @@ export const db = {
     },
     addItem: async (saleId: string, item: { service_id: string; quantity: number; unit_price: number }) => {
       const activeUser = getActiveUserSession();
+      const employeeId = sanitizeUUID(activeUser?.id);
       const now = new Date();
       const subtotal = item.unit_price * item.quantity;
 
@@ -1494,13 +1530,13 @@ export const db = {
 
         const { data: allItems } = await supabase.from('sale_items').select('subtotal').eq('sale_id', saleId);
         const newSubtotal = (allItems || []).reduce((s: number, i: any) => s + i.subtotal, 0);
-        const { data: saleRow } = await supabase.from('sales').select('discount').eq('id', saleId).single();
+        const { data: saleRow } = await supabase.from('sales').select('discount').eq('id', saleId).maybeSingle();
         const newGrandTotal = Math.max(0, newSubtotal - (saleRow?.discount || 0));
 
         const { data: updated, error: upErr } = await supabase.from('sales').update({
           subtotal: newSubtotal,
           grand_total: newGrandTotal,
-          updated_by: activeUser.id
+          updated_by: employeeId
         }).eq('id', saleId).select().single();
         if (upErr) throw upErr;
         return updated as Sale;
@@ -1531,6 +1567,7 @@ export const db = {
     },
     removeItem: async (saleId: string, saleItemId: string) => {
       const activeUser = getActiveUserSession();
+      const employeeId = sanitizeUUID(activeUser?.id);
       const now = new Date();
 
       if (isSupabaseConfigured && supabase) {
@@ -1538,10 +1575,10 @@ export const db = {
         if (delErr) throw delErr;
         const { data: allItems } = await supabase.from('sale_items').select('subtotal').eq('sale_id', saleId);
         const newSubtotal = (allItems || []).reduce((s: number, i: any) => s + i.subtotal, 0);
-        const { data: saleRow } = await supabase.from('sales').select('discount').eq('id', saleId).single();
+        const { data: saleRow } = await supabase.from('sales').select('discount').eq('id', saleId).maybeSingle();
         const newGrandTotal = Math.max(0, newSubtotal - (saleRow?.discount || 0));
         const { data: updated, error: upErr } = await supabase.from('sales').update({
-          subtotal: newSubtotal, grand_total: newGrandTotal, updated_by: activeUser.id
+          subtotal: newSubtotal, grand_total: newGrandTotal, updated_by: employeeId
         }).eq('id', saleId).select().single();
         if (upErr) throw upErr;
         return updated as Sale;
@@ -1583,20 +1620,21 @@ export const db = {
       notes?: string;
     }) => {
       const activeUser = getActiveUserSession();
+      const employeeId = sanitizeUUID(activeUser?.id);
 
       if (isSupabaseConfigured && supabase) {
         const payload = {
           ...data,
           id: generateUUID(),
-          received_by: activeUser.id,
-          created_by: activeUser.id,
-          updated_by: activeUser.id
+          received_by: employeeId,
+          created_by: employeeId,
+          updated_by: employeeId
         };
         const { data: created, error } = await supabase.from('payments').insert([payload]).select().single();
         if (error) throw error;
 
         // Recalculate Sale Payment Status
-        const { data: sale } = await supabase.from('sales').select('grand_total').eq('id', data.sale_id).single();
+        const { data: sale } = await supabase.from('sales').select('grand_total').eq('id', data.sale_id).maybeSingle();
         const { data: allPayments } = await supabase.from('payments').select('amount').eq('sale_id', data.sale_id).eq('is_deleted', false);
 
         const grand_total = sale?.grand_total || 0;
@@ -1606,7 +1644,7 @@ export const db = {
         if (totalPaid >= grand_total) payment_status = 'Paid';
         else if (totalPaid > 0) payment_status = 'Partially Paid';
 
-        await supabase.from('sales').update({ payment_status, updated_by: activeUser.id }).eq('id', data.sale_id);
+        await supabase.from('sales').update({ payment_status, updated_by: employeeId }).eq('id', data.sale_id);
         return created as Payment;
       }
 
@@ -1653,7 +1691,7 @@ export const db = {
     },
     getById: async (id: string) => {
       if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.from('expense_categories').select('*').eq('id', id).eq('is_deleted', false).single();
+        const { data, error } = await supabase.from('expense_categories').select('*').eq('id', id).eq('is_deleted', false).maybeSingle();
         if (error) throw error;
         return data as ExpenseCategory;
       }
@@ -1733,7 +1771,7 @@ export const db = {
     },
     getById: async (id: string) => {
       if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.from('expenses').select('*, category:expense_categories(*), branch:branches(*)').eq('id', id).eq('is_deleted', false).single();
+        const { data, error } = await supabase.from('expenses').select('*, category:expense_categories(*), branch:branches(*)').eq('id', id).eq('is_deleted', false).maybeSingle();
         if (error) throw error;
         return data as Expense;
       }
@@ -1920,8 +1958,9 @@ export const db = {
     },
     getById: async (id: string) => {
       if (isSupabaseConfigured && supabase) {
-        const { data: q, error: qErr } = await supabase.from('quotations').select('*, customer:customers(*), branch:branches(*), employee:users!employee_id(*), converted_sale:sales!quotations_converted_sale_id_fkey(*)').eq('id', id).eq('is_deleted', false).single();
+        const { data: q, error: qErr } = await supabase.from('quotations').select('*, customer:customers(*), branch:branches(*), employee:users!employee_id(*), converted_sale:sales!quotations_converted_sale_id_fkey(*)').eq('id', id).eq('is_deleted', false).maybeSingle();
         if (qErr) throw qErr;
+        if (!q) return undefined;
 
         const { data: items } = await supabase.from('quotation_items').select('*, service:services(*)').eq('quotation_id', id);
         
@@ -1977,7 +2016,7 @@ export const db = {
       if (isSupabaseConfigured && supabase) {
         const { count } = await supabase.from('quotations').select('*', { count: 'exact', head: true });
         const quoteSeq = (count || 0) + 1;
-        const { data: branchData } = await supabase.from('branches').select('name').eq('id', data.branch_id).single();
+        const { data: branchData } = await supabase.from('branches').select('name').eq('id', data.branch_id).maybeSingle();
         const branchName = branchData?.name || 'Branch';
         const branchPrefix = branchName.replace(/\s+/g, '').substring(0, 3).toUpperCase();
         const dateStr = now.getFullYear().toString() + (now.getMonth() + 1).toString().padStart(2, '0') + now.getDate().toString().padStart(2, '0');
@@ -1985,24 +2024,27 @@ export const db = {
         const quotation_no = `QT-${branchPrefix}-${dateStr}-${serialStr}`;
 
         const quoteId = generateUUID();
+        const customerId = sanitizeUUID(data.customer_id);
+        const employeeId = sanitizeUUID(activeUser?.id);
+
         const { data: createdQuote, error: qErr } = await supabase.from('quotations').insert([{
           id: quoteId,
           quotation_no,
-          customer_id: data.customer_id,
+          customer_id: customerId,
           branch_id: data.branch_id,
-          employee_id: activeUser.id,
-          discount: data.discount,
-          subtotal,
-          grand_total,
+          employee_id: employeeId,
+          discount: Number(data.discount) || 0,
+          subtotal: Number(subtotal) || 0,
+          grand_total: Number(grand_total) || 0,
           status: data.status || 'Draft',
-          valid_until: data.valid_until,
-          notes: data.notes,
+          valid_until: data.valid_until || null,
+          notes: data.notes || null,
           terms_conditions_ids: data.terms_conditions_ids || [],
-          created_by: activeUser.id,
-          updated_by: activeUser.id,
-          person_name: data.person_name,
-          person_phone: data.person_phone,
-          person_email: data.person_email
+          created_by: employeeId,
+          updated_by: employeeId,
+          person_name: data.person_name || null,
+          person_phone: data.person_phone || null,
+          person_email: data.person_email || null
         }]).select().single();
 
         if (qErr) throw qErr;
@@ -2021,7 +2063,7 @@ export const db = {
           quotation_id: createdQuote.id,
           status: data.status || 'Draft',
           remarks: 'Quotation Created',
-          changed_by: activeUser.id
+          changed_by: employeeId
         }]);
 
         return createdQuote as Quotation;
@@ -2183,8 +2225,9 @@ export const db = {
       const activeUser = getActiveUserSession();
       let quotation: any;
       if (isSupabaseConfigured && supabase) {
-        const { data: q, error: qErr } = await supabase.from('quotations').select('*').eq('id', id).single();
+        const { data: q, error: qErr } = await supabase.from('quotations').select('*').eq('id', id).maybeSingle();
         if (qErr) throw qErr;
+        if (!q) throw new Error('Quotation not found');
         const { data: items } = await supabase.from('quotation_items').select('*').eq('quotation_id', id);
         quotation = { ...q, items: items || [] };
       } else {
@@ -2266,7 +2309,7 @@ export const db = {
     },
     getById: async (id: string) => {
       if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.from('terms_conditions').select('*').eq('id', id).eq('is_deleted', false).single();
+        const { data, error } = await supabase.from('terms_conditions').select('*').eq('id', id).eq('is_deleted', false).maybeSingle();
         if (error) throw error;
         return data as TermsConditions;
       }
