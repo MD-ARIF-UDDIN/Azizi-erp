@@ -29,7 +29,9 @@ import {
   Building2,
   Download,
   Pencil,
-  CheckCircle2
+  CheckCircle2,
+  ChevronDown,
+  FileSpreadsheet
 } from 'lucide-react';
 
 const handleWhatsAppShare = (sale: any) => {
@@ -100,6 +102,9 @@ export const CustomerList: React.FC = () => {
   const [filterDueOnly, setFilterDueOnly] = useState(false);
   const [printSaleData, setPrintSaleData] = useState<any | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [isPrintingCustomerList, setIsPrintingCustomerList] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
 
   // --- Quick Sale State ---
   const [qsCustomer, setQsCustomer] = useState<any | null>(null);
@@ -385,11 +390,26 @@ export const CustomerList: React.FC = () => {
     }
   };
 
-  // --- Quick Sale Handlers ---
+  const handlePrintCustomerDirectory = () => {
+    setIsPrintingCustomerList(true);
+    setIsPrinting(true);
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => {
+        setIsPrintingCustomerList(false);
+        setIsPrinting(false);
+      }, 500);
+    }, 400);
+  };
+
+  // --- Click Outside Handlers ---
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (qsSearchContainerRef.current && !qsSearchContainerRef.current.contains(event.target as Node)) {
         setQsIsSearchOpen(false);
+      }
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setExportMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -682,16 +702,58 @@ export const CustomerList: React.FC = () => {
               Show Due Balance Only
             </button>
 
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                exportCustomers(filteredCustomers);
-              }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-border text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all w-full sm:w-auto justify-center cursor-pointer"
-            >
-              <Download size={14} />
-              Export Excel
-            </button>
+            {/* EXPORT DROPDOWN MENU */}
+            <div className="relative w-full sm:w-auto" ref={exportMenuRef}>
+              <button
+                type="button"
+                onClick={() => setExportMenuOpen(!exportMenuOpen)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border border-border text-foreground bg-muted/40 hover:bg-muted transition-all w-full sm:w-auto justify-center cursor-pointer shadow-xs"
+              >
+                <Download size={14} className="text-primary" />
+                <span>Export</span>
+                <ChevronDown size={13} className={`transition-transform duration-200 ${exportMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {exportMenuOpen && (
+                <div className="absolute right-0 mt-2 w-52 bg-popover border border-border rounded-xl shadow-xl z-50 p-1.5 animate-in fade-in zoom-in-95">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExportMenuOpen(false);
+                      exportCustomers(filteredCustomers);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium rounded-lg text-foreground hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors text-left cursor-pointer"
+                  >
+                    <div className="p-1.5 rounded-lg bg-emerald-500/15 text-emerald-500 shrink-0">
+                      <FileSpreadsheet size={15} />
+                    </div>
+                    <div>
+                      <div className="font-bold">Export Excel</div>
+                      <div className="text-[10px] text-muted-foreground">Spreadsheet (.xlsx)</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExportMenuOpen(false);
+                      handlePrintCustomerDirectory();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium rounded-lg text-foreground hover:bg-rose-500/10 hover:text-rose-500 transition-colors text-left cursor-pointer mt-0.5"
+                  >
+                    <div className="p-1.5 rounded-lg bg-rose-500/15 text-rose-500 shrink-0">
+                      <FileText size={15} />
+                    </div>
+                    <div>
+                      <div className="font-bold">Export PDF / Print</div>
+                      <div className="text-[10px] text-muted-foreground">Printable Report (.pdf)</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Main Grid Table */}
@@ -1215,12 +1277,13 @@ export const CustomerList: React.FC = () => {
                             {selectedCustomer.sales.map((s: any) => (
                               <tr key={s.id} className="hover:bg-primary/5">
                                 <td>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-mono font-bold text-primary text-xs px-2 py-0.5 rounded bg-primary/10 border border-primary/20">
-                                      #{s.invoice_no}
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-mono font-bold text-xs tracking-tight text-foreground bg-muted/60 dark:bg-muted/40 px-2 py-0.5 rounded-md border border-border/80 inline-flex items-center gap-1 shadow-2xs">
+                                      <ReceiptText size={12} className="text-primary opacity-80 shrink-0" />
+                                      <span>#{s.invoice_no}</span>
                                     </span>
                                     {selectedCustomer.customer_type === 'company' && s.person_name && (
-                                      <span className="text-[10px] bg-blue-500/10 text-blue-500 px-1.5 py-0.2 rounded font-semibold">
+                                      <span className="text-[10px] bg-blue-500/10 text-blue-500 px-1.5 py-0.5 rounded-md font-semibold">
                                         {s.person_name}
                                       </span>
                                     )}
@@ -2658,6 +2721,104 @@ export const CustomerList: React.FC = () => {
               })()}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 2. CUSTOMER DIRECTORY PDF / PRINT REPORT */}
+      {isPrintingCustomerList && (
+        <div className="hidden print:block fixed inset-0 bg-white text-black z-[99999] p-8 font-sans print-invoice-sheet">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b-2 border-[#000ba0] pb-3 mb-3">
+            <div className="flex items-center gap-3">
+              <img src="/logo.png" alt="Azizi Logo" className="w-14 h-14 object-contain" />
+              <div>
+                <h1 className="text-lg font-black text-[#000ba0] tracking-tight">AZIZI TYPING &amp; STAMP MAKING</h1>
+                <p className="text-[11px] text-gray-600 font-semibold">Musaffah M37, Abu Dhabi, UAE • Tel: 0542797933 • azizitypingbr@gmail.com</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="bg-[#f28f00] text-white px-3 py-1 rounded text-xs font-bold uppercase tracking-wider inline-block">
+                Customer Directory Report
+              </div>
+              <div className="text-[10px] text-gray-500 mt-1 font-mono">Date: {new Date().toLocaleDateString()}</div>
+            </div>
+          </div>
+
+          {/* Filter Note & Summary KPIs */}
+          {(() => {
+            const totalBilledAll = filteredCustomers.reduce((sum: number, c: any) => sum + (c.total_purchased || 0), 0);
+            const totalPaidAll = filteredCustomers.reduce((sum: number, c: any) => sum + (c.total_paid || 0), 0);
+            const totalDueAll = filteredCustomers.reduce((sum: number, c: any) => sum + (c.due || 0), 0);
+            const totalOrdersAll = filteredCustomers.reduce((sum: number, c: any) => sum + (c.sales_count || 0), 0);
+
+            return (
+              <>
+                <div className="grid grid-cols-4 gap-2 mb-3">
+                  <div className="border border-gray-300 rounded p-2 bg-gray-50 text-center">
+                    <div className="text-[9px] text-gray-500 font-bold uppercase">Total Customers</div>
+                    <div className="text-sm font-black text-black">{filteredCustomers.length}</div>
+                  </div>
+                  <div className="border border-gray-300 rounded p-2 bg-gray-50 text-center">
+                    <div className="text-[9px] text-gray-500 font-bold uppercase">Grand Total Billing</div>
+                    <div className="text-sm font-black text-[#000ba0]">{totalBilledAll.toFixed(2)} AED</div>
+                  </div>
+                  <div className="border border-gray-300 rounded p-2 bg-gray-50 text-center">
+                    <div className="text-[9px] text-gray-500 font-bold uppercase">Total Collected Paid</div>
+                    <div className="text-sm font-black text-emerald-700">{totalPaidAll.toFixed(2)} AED</div>
+                  </div>
+                  <div className="border border-gray-300 rounded p-2 bg-gray-50 text-center">
+                    <div className="text-[9px] text-gray-500 font-bold uppercase">Total Outstanding Due</div>
+                    <div className="text-sm font-black text-rose-700">{totalDueAll.toFixed(2)} AED</div>
+                  </div>
+                </div>
+
+                {/* Customer Table */}
+                <table className="w-full border-collapse border border-gray-300 text-[11px] my-2">
+                  <thead className="bg-[#000ba0] text-white font-bold">
+                    <tr>
+                      <th className="border border-gray-300 px-2 py-1.5 text-center w-7">#</th>
+                      <th className="border border-gray-300 px-2 py-1.5 text-left">Customer Name</th>
+                      <th className="border border-gray-300 px-2 py-1.5 text-left">Contact / Phone</th>
+                      <th className="border border-gray-300 px-2 py-1.5 text-center">Type</th>
+                      <th className="border border-gray-300 px-2 py-1.5 text-right">Grand Total</th>
+                      <th className="border border-gray-300 px-2 py-1.5 text-right">Total Paid</th>
+                      <th className="border border-gray-300 px-2 py-1.5 text-right">Outstanding Due</th>
+                      <th className="border border-gray-300 px-2 py-1.5 text-center w-14">Orders</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-300">
+                    {filteredCustomers.map((c: any, index: number) => (
+                      <tr key={c.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <td className="border border-gray-300 px-2 py-1 text-center font-bold">{index + 1}</td>
+                        <td className="border border-gray-300 px-2 py-1 font-bold text-black">{c.name}</td>
+                        <td className="border border-gray-300 px-2 py-1 text-gray-700">{c.phone || c.email || 'N/A'}</td>
+                        <td className="border border-gray-300 px-2 py-1 text-center uppercase text-[10px] font-semibold">{c.customer_type || 'individual'}</td>
+                        <td className="border border-gray-300 px-2 py-1 text-right font-semibold">{(c.total_purchased || 0).toFixed(2)} AED</td>
+                        <td className="border border-gray-300 px-2 py-1 text-right font-semibold text-emerald-700">{(c.total_paid || 0).toFixed(2)} AED</td>
+                        <td className="border border-gray-300 px-2 py-1 text-right font-bold text-rose-700">{(c.due || 0).toFixed(2)} AED</td>
+                        <td className="border border-gray-300 px-2 py-1 text-center">{c.sales_count || 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-[#f28f00] text-white font-bold text-xs">
+                      <td colSpan={4} className="border border-gray-300 px-2 py-1.5 text-center uppercase">Total Summary</td>
+                      <td className="border border-gray-300 px-2 py-1.5 text-right">{totalBilledAll.toFixed(2)} AED</td>
+                      <td className="border border-gray-300 px-2 py-1.5 text-right">{totalPaidAll.toFixed(2)} AED</td>
+                      <td className="border border-gray-300 px-2 py-1.5 text-right">{totalDueAll.toFixed(2)} AED</td>
+                      <td className="border border-gray-300 px-2 py-1.5 text-center">{totalOrdersAll}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+
+                {/* Footer Signature */}
+                <div className="flex justify-between items-end mt-6 pt-3 border-t border-gray-200 text-[10px] text-gray-500">
+                  <div>Generated by Azizi ERP System • Confidential</div>
+                  <div>Authorized Signatory: _______________________</div>
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
       </div>

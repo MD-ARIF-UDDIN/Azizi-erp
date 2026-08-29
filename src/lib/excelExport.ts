@@ -79,6 +79,7 @@ export const exportSales = (sales: any[]) => {
     'Branch',
     'Customer Name',
     'Customer Type',
+    'Members / Persons',
     'Contact Phone',
     'Contact Email',
     'Job Status',
@@ -96,16 +97,20 @@ export const exportSales = (sales: any[]) => {
     const totalPaid = s.payments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0;
     const due = Math.max(0, s.grand_total - totalPaid);
     const itemsSummary = s.items?.map((item: any) => `${item.service?.name || 'Service'} (x${item.quantity})`).join(', ') || '';
+    const memberNames = Array.from(new Set([
+      ...(s.person_name ? [s.person_name.trim()] : []),
+      ...((s.items || []).map((item: any) => item.person_name?.trim()).filter(Boolean))
+    ])).filter(Boolean);
+    const membersStr = memberNames.join(', ');
     
     return [
       idx + 1,
       `#${s.invoice_no}`,
       s.created_at ? new Date(s.created_at).toLocaleString() : '',
       s.branch?.name || '',
-      s.customer 
-        ? (s.person_name ? `${s.person_name} (${s.customer.name})` : s.customer.name) 
-        : 'Walk-in Customer',
+      s.customer?.name || 'Walk-in Customer',
       s.customer?.customer_type ? (s.customer.customer_type === 'company' ? 'Company' : 'Individual') : 'Walk-in',
+      membersStr,
       s.person_phone || s.customer?.phone || '',
       s.person_email || s.customer?.email || '',
       s.order_status?.name || '',

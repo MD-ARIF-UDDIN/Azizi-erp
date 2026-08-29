@@ -224,10 +224,8 @@ const SEED_SALES_AND_FINANCIALS = (
     const discount = i % 5 === 0 ? 20.00 : 0.00;
     const grand_total = Math.max(0, subtotal - discount);
 
-    const branchPrefix = b.name.replace(/\s+/g, '').substring(0, 3).toUpperCase();
-    const dateStr = saleDate.getFullYear().toString() + (saleDate.getMonth() + 1).toString().padStart(2, '0') + saleDate.getDate().toString().padStart(2, '0');
     const serialStr = (i + 1).toString().padStart(4, '0');
-    const invoice_no = `INV-${branchPrefix}-${dateStr}-${serialStr}`;
+    const invoice_no = `INV-${serialStr}`;
 
     let order_status = statuses.find(s => s.name === 'Completed')!;
     let pay_status: 'Paid' | 'Partially Paid' | 'Unpaid' = 'Paid';
@@ -1267,12 +1265,8 @@ export const db = {
 
         const { count } = await supabase.from('sales').select('*', { count: 'exact', head: true });
         const invoiceSeq = (count || 0) + 1;
-        const { data: branchData } = await supabase.from('branches').select('name').eq('id', data.branch_id).maybeSingle();
-        const branchName = branchData?.name || 'Branch';
-        const branchPrefix = branchName.replace(/\s+/g, '').substring(0, 3).toUpperCase();
-        const dateStr = now.getFullYear().toString() + (now.getMonth() + 1).toString().padStart(2, '0') + now.getDate().toString().padStart(2, '0');
         const serialStr = invoiceSeq.toString().padStart(4, '0');
-        const invoice_no = `INV-${branchPrefix}-${dateStr}-${serialStr}`;
+        const invoice_no = `INV-${serialStr}`;
 
         const paidAmount = data.initialPayment ? data.initialPayment.amount : 0;
         let payment_status: Sale['payment_status'] = 'Unpaid';
@@ -1306,62 +1300,49 @@ export const db = {
 
         if (saleErr) throw saleErr;
 
-        // Insert items
-        const itemsPayload = data.items.map(item => ({
-          sale_id: createdSale.id,
-          service_id: item.service_id,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          subtotal: item.unit_price * item.quantity,
-          person_name: item.person_name || null
-        }));
-        const { error: itemsErr } = await supabase.from('sale_items').insert(itemsPayload);
-        if (itemsErr) throw itemsErr;
-
-        // Insert initial payment if present
-        if (data.initialPayment && data.initialPayment.amount > 0) {
-          await supabase.from('payments').insert([{
+        if (createdSale) {
+          const itemsPayload = data.items.map(item => ({
+            id: generateUUID(),
             sale_id: createdSale.id,
-            amount: data.initialPayment.amount,
-            payment_method: data.initialPayment.payment_method,
-            received_by: employeeId,
-            created_by: employeeId,
-            updated_by: employeeId
-          }]);
+            service_id: item.service_id,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            subtotal: item.unit_price * item.quantity,
+            service_date: item.service_date || new Date().toISOString().split('T')[0],
+            person_name: item.person_name || null
+          }));
+          const { error: itemsErr } = await supabase.from('sale_items').insert(itemsPayload);
+          if (itemsErr) throw itemsErr;
+
+          if (data.initialPayment && data.initialPayment.amount > 0) {
+            const { error: pErr } = await supabase.from('payments').insert([{
+              id: generateUUID(),
+              sale_id: createdSale.id,
+              amount: data.initialPayment.amount,
+              payment_method: data.initialPayment.payment_method,
+              payment_date: new Date().toISOString(),
+              transaction_no: (data.initialPayment as any).transaction_no || null,
+              notes: (data.initialPayment as any).notes || null,
+              created_by: employeeId,
+              updated_by: employeeId
+            }]);
+            if (pErr) throw pErr;
+          }
+
+          if (data.quotation_id) {
+            await supabase.from('quotations').update({ 
+              status: 'Converted',
+              remarks: `Converted to Sale Invoice #${invoice_no}`,
+              updated_at: new Date().toISOString()
+            }).eq('id', data.quotation_id);
+          }
         }
-
-        // Status history
-        await supabase.from('order_status_history').insert([{
-          sale_id: createdSale.id,
-          new_status_id: pendingStatusId,
-          changed_by: employeeId,
-          remarks: 'Order Invoice Created'
-        }]);
-
-        if (quotationId) {
-          await supabase.from('quotations').update({
-            status: 'Converted',
-            converted_sale_id: saleId
-          }).eq('id', quotationId);
-
-          await supabase.from('quotation_status_history').insert([{
-            quotation_id: quotationId,
-            status: 'Converted',
-            remarks: `Converted to Sale Invoice #${invoice_no}`,
-            changed_by: employeeId
-          }]);
-        }
-
         return createdSale as Sale;
       }
 
       const invoiceSeq = _sales.length + 1;
-      const branch = _branches.find(b => b.id === data.branch_id);
-      const branchName = branch ? branch.name : 'Branch';
-      const branchPrefix = branchName.replace(/\s+/g, '').substring(0, 3).toUpperCase();
-      const dateStr = now.getFullYear().toString() + (now.getMonth() + 1).toString().padStart(2, '0') + now.getDate().toString().padStart(2, '0');
       const serialStr = invoiceSeq.toString().padStart(4, '0');
-      const invoice_no = `INV-${branchPrefix}-${dateStr}-${serialStr}`;
+      const invoice_no = `INV-${serialStr}`;
       const pendingStatus = _statuses.find(os => os.name === 'Pending') || _statuses[0];
       const saleId = generateUUID();
 

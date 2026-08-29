@@ -17,7 +17,9 @@ import {
   MessageSquare,
   Download,
   Pencil,
-  Trash2
+  Trash2,
+  Building2,
+  Users
 } from 'lucide-react';
 
 const handleWhatsAppShare = (sale: any) => {
@@ -513,6 +515,7 @@ export const SalesList: React.FC = () => {
                         <th className="text-center w-12">#</th>
                         <th>Invoice & Time</th>
                         <th>Customer</th>
+                        <th>Members / Persons</th>
                         <th>Job Status</th>
                         <th>Payment Status</th>
                         <th className="text-right">Bill Total</th>
@@ -522,7 +525,7 @@ export const SalesList: React.FC = () => {
                     <tbody className="divide-y divide-border/50">
                       {filteredSales.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                          <td colSpan={8} className="py-12 text-center text-muted-foreground">
                             <div className="max-w-xs mx-auto space-y-1">
                               <div className="font-bold text-foreground">No matching invoices found</div>
                               <div className="text-xs">Try adjusting your search query or quick filter chips above.</div>
@@ -534,6 +537,10 @@ export const SalesList: React.FC = () => {
                           const isSelected = selectedSaleId === s.id;
                           const totalPaid = (s.payments || []).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
                           const remainingDue = Math.max(0, (s.grand_total || 0) - totalPaid);
+                          const memberNames = Array.from(new Set([
+                            ...(s.person_name ? [s.person_name.trim()] : []),
+                            ...((s.items || []).map((item: any) => item.person_name?.trim()).filter(Boolean))
+                          ])).filter(Boolean);
 
                           return (
                             <tr
@@ -550,25 +557,26 @@ export const SalesList: React.FC = () => {
 
                               {/* Invoice & Time */}
                               <td>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-mono font-bold text-primary text-xs px-2 py-0.5 rounded bg-primary/10 border border-primary/20">
-                                    #{s.invoice_no}
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-mono font-bold text-xs tracking-tight text-foreground bg-muted/60 dark:bg-muted/40 hover:bg-muted px-2 py-0.5 rounded-md border border-border/80 inline-flex items-center gap-1 shadow-2xs">
+                                    <ReceiptText size={12} className="text-primary opacity-80 shrink-0" />
+                                    <span>#{s.invoice_no}</span>
                                   </span>
                                   {(s as any).quotation_id && (
-                                    <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
                                       Quote
                                     </span>
                                   )}
                                 </div>
-                                <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1.5">
+                                <div className="text-[11px] text-muted-foreground mt-1 flex flex-wrap items-center gap-1.5 font-medium">
+                                  <span>{new Date(s.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                  <span className="text-muted-foreground/40">•</span>
                                   <span>{new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                  <span>•</span>
-                                  <span>{new Date(s.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
                                   {s.branch?.name && (
-                                    <>
-                                      <span>•</span>
-                                      <span className="truncate max-w-[90px]">{s.branch.name}</span>
-                                    </>
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-muted/60 text-[10px] font-semibold text-muted-foreground ml-0.5">
+                                      <Building2 size={10} className="text-primary/70 shrink-0" />
+                                      <span className="truncate max-w-[80px]">{s.branch.name}</span>
+                                    </span>
                                   )}
                                 </div>
                               </td>
@@ -576,24 +584,41 @@ export const SalesList: React.FC = () => {
                               {/* Customer */}
                               <td>
                                 <div className="font-bold text-foreground text-xs leading-tight">
-                                  {s.person_name ? (
-                                    <span>{s.person_name}</span>
-                                  ) : s.customer ? (
+                                  {s.customer ? (
                                     <span>{s.customer.name}</span>
                                   ) : (
                                     <span className="text-muted-foreground font-normal italic">Walk-in Customer</span>
                                   )}
                                 </div>
                                 <div className="text-[11px] text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1.5">
-                                  {s.person_phone || s.customer?.phone ? (
-                                    <span>{s.person_phone || s.customer?.phone}</span>
+                                  {s.customer?.phone ? (
+                                    <span>{s.customer?.phone}</span>
                                   ) : null}
-                                  {s.customer?.company && (
+                                  {s.customer?.customer_type === 'company' && (
                                     <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-500 font-semibold border border-blue-500/20">
-                                      {s.customer.company.name}
+                                      Company
                                     </span>
                                   )}
                                 </div>
+                              </td>
+
+                              {/* Members / Persons */}
+                              <td>
+                                {memberNames.length > 0 ? (
+                                  <div className="space-y-0.5">
+                                    <div className="font-semibold text-xs text-foreground max-w-[180px] truncate" title={memberNames.join(', ')}>
+                                      {memberNames.join(', ')}
+                                    </div>
+                                    {memberNames.length > 1 && (
+                                      <div className="text-[10px] text-muted-foreground font-medium flex items-center gap-1">
+                                        <Users size={10} className="text-primary" />
+                                        <span>{memberNames.length} persons</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground text-xs italic">—</span>
+                                )}
                               </td>
 
                               {/* Job Status */}
