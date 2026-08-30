@@ -138,6 +138,8 @@ export interface SaleItem {
   subtotal: number;
   person_name?: string;
   service_date?: string;
+  staff_id?: string;
+  staff?: User;
   service?: Service;
   created_at: string;
   updated_at: string;

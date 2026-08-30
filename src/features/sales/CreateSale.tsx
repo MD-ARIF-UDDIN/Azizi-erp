@@ -26,6 +26,7 @@ interface CartItem {
   unit_price: number;
   person_name?: string;
   service_date?: string;
+  staff_id?: string;
 }
 
 export const CreateSale: React.FC = () => {
@@ -194,7 +195,8 @@ export const CreateSale: React.FC = () => {
         quantity: 1, 
         unit_price: service.price, 
         person_name: selectedPersonName || undefined,
-        service_date: new Date().toISOString().split('T')[0]
+        service_date: new Date().toISOString().split('T')[0],
+        staff_id: user?.id
       }]);
     }
   };
@@ -251,7 +253,8 @@ export const CreateSale: React.FC = () => {
           quantity: qi.quantity,
           unit_price: qi.unit_price,
           person_name: selectedPersonName || undefined,
-          service_date: qi.service_date || new Date().toISOString().split('T')[0]
+          service_date: qi.service_date || new Date().toISOString().split('T')[0],
+          staff_id: user?.id
         };
       });
 
@@ -355,7 +358,8 @@ export const CreateSale: React.FC = () => {
           quantity: item.quantity,
           unit_price: item.unit_price,
           person_name: item.person_name || undefined,
-          service_date: item.service_date || new Date().toISOString().split('T')[0]
+          service_date: item.service_date || new Date().toISOString().split('T')[0],
+          staff_id: item.staff_id || user?.id
         })),
         initialPayment: paidAmount > 0 ? {
           amount: paidAmount,
@@ -625,8 +629,13 @@ export const CreateSale: React.FC = () => {
                           </td>
                           <td>
                             <div className="font-bold text-foreground text-xs">{item.service.name}</div>
-                            <div className="text-[10px] text-muted-foreground mt-0.5">
-                              Standard: {item.service.price.toFixed(2)} AED
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              <span className="text-[10px] text-muted-foreground">
+                                Standard: {item.service.price.toFixed(2)} AED
+                              </span>
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-primary/10 text-primary font-semibold border border-primary/20">
+                                Staff: {user?.name || 'Current Staff'}
+                              </span>
                             </div>
                           </td>
                           <td className="text-center">

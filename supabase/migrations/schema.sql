@@ -140,6 +140,7 @@ CREATE TABLE IF NOT EXISTS public.sale_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     sale_id UUID NOT NULL REFERENCES public.sales(id) ON DELETE CASCADE,
     service_id UUID NOT NULL REFERENCES public.services(id) ON DELETE RESTRICT,
+    staff_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
     quantity INT NOT NULL DEFAULT 1 CHECK (quantity > 0),
     unit_price NUMERIC(10, 2) NOT NULL CHECK (unit_price >= 0),
     subtotal NUMERIC(10, 2) NOT NULL CHECK (subtotal >= 0),

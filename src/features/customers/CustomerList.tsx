@@ -140,6 +140,7 @@ export const CustomerList: React.FC = () => {
   // --- Edit Invoice Items State ---
   const [editItemsModalOpen, setEditItemsModalOpen] = useState(false);
   const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
+  const [editingSale, setEditingSale] = useState<any | null>(null);
   const [editingSaleItems, setEditingSaleItems] = useState<any[]>([]);
   const [allServices, setAllServices] = useState<any[]>([]);
   const [addServiceId, setAddServiceId] = useState('');
@@ -264,6 +265,7 @@ export const CustomerList: React.FC = () => {
     try {
       setEditingSaleId(saleId);
       const detail = await db.sales.getById(saleId);
+      setEditingSale(detail);
       setEditingSaleItems(detail?.items || []);
       const svcs = await db.services.getAll();
       setAllServices(svcs.filter(s => s.status === 'Active'));
@@ -280,8 +282,9 @@ export const CustomerList: React.FC = () => {
     if (!editingSaleId || !addServiceId || addQty <= 0) return;
     setEditSaving(true);
     try {
-      await db.sales.addItem(editingSaleId, { service_id: addServiceId, quantity: addQty, unit_price: addPrice });
+      await db.sales.addItem(editingSaleId, { service_id: addServiceId, quantity: addQty, unit_price: addPrice, staff_id: user?.id });
       const detail = await db.sales.getById(editingSaleId);
+      setEditingSale(detail);
       setEditingSaleItems(detail?.items || []);
       setAddServiceId('');
       setAddQty(1);
@@ -300,6 +303,7 @@ export const CustomerList: React.FC = () => {
     try {
       await db.sales.removeItem(editingSaleId, itemId);
       const detail = await db.sales.getById(editingSaleId);
+      setEditingSale(detail);
       setEditingSaleItems(detail?.items || []);
       await fetchCustomers();
     } catch (err) {
@@ -527,7 +531,8 @@ export const CustomerList: React.FC = () => {
           service_id: i.service.id, 
           quantity: i.quantity, 
           unit_price: i.unit_price,
-          person_name: i.person_name || undefined
+          person_name: i.person_name || undefined,
+          staff_id: user?.id
         })),
         initialPayment: initialPaymentPayload
       });
@@ -1745,8 +1750,13 @@ export const CustomerList: React.FC = () => {
                               </td>
                               <td className="py-2.5">
                                 <div className="font-bold text-foreground text-xs">{item.service.name}</div>
-                                <div className="text-[10px] text-muted-foreground">
-                                  Standard: {item.service.price.toFixed(2)} AED
+                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                  <span className="text-[10px] text-muted-foreground">
+                                    Standard: {item.service.price.toFixed(2)} AED
+                                  </span>
+                                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-primary/10 text-primary font-semibold border border-primary/20">
+                                    Staff: {user?.name || 'Current Staff'}
+                                  </span>
                                 </div>
                               </td>
                               {qsCustomer.customer_type === 'company' && qsCustomer.members && qsCustomer.members.length > 0 && (
@@ -2173,6 +2183,7 @@ export const CustomerList: React.FC = () => {
                   <thead className="bg-muted/20">
                     <tr>
                       <th className="px-3 py-2 text-left text-muted-foreground font-semibold">Service</th>
+                      <th className="px-3 py-2 text-center text-muted-foreground font-semibold">Staff</th>
                       <th className="px-3 py-2 text-center text-muted-foreground font-semibold">Qty</th>
                       <th className="px-3 py-2 text-right text-muted-foreground font-semibold">Price</th>
                       <th className="px-3 py-2 text-right text-muted-foreground font-semibold">Total</th>
@@ -2182,7 +2193,17 @@ export const CustomerList: React.FC = () => {
                   <tbody>
                     {editingSaleItems.map((item: any) => (
                       <tr key={item.id} className="border-t border-border/40 text-foreground">
-                        <td className="px-3 py-2 font-medium text-foreground">{item.service?.name || 'Service'}</td>
+                        <td className="px-3 py-2 font-medium text-foreground">
+                          <div>{item.service?.name || 'Service'}</div>
+                          {item.person_name && (
+                            <div className="text-[10px] text-muted-foreground italic">(For: {item.person_name})</div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-center text-[11px] font-medium text-foreground">
+                          <span className="px-2 py-0.5 rounded bg-muted/80 text-foreground font-semibold border border-border/60">
+                            {item.staff?.name || editingSale?.employee?.name || user?.name || 'Staff'}
+                          </span>
+                        </td>
                         <td className="px-3 py-2 text-center text-foreground">{item.quantity}</td>
                         <td className="px-3 py-2 text-right text-foreground">{item.unit_price.toFixed(2)}</td>
                         <td className="px-3 py-2 text-right font-bold text-foreground">{item.subtotal.toFixed(2)}</td>
@@ -2650,7 +2671,7 @@ export const CustomerList: React.FC = () => {
                         <td className="px-3 py-1.5 border-r border-gray-300" />
                         <td className="px-3 py-1.5 border-r border-gray-300" />
                         <td className="px-3 py-1.5 border-r border-gray-300" />
-                        <td className="px-3 py-1.5" />
+                        <td className="px-3 py-1.5 text-right" />
                       </tr>
                     );
                   }

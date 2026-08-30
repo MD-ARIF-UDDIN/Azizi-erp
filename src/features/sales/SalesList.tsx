@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../lib/db';
 import type { OrderStatus } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
@@ -57,7 +57,7 @@ Thank you for choosing AZIZI!`;
 
 
 export const SalesList: React.FC = () => {
-  const { hasPermission, activeBranchId } = useAuth();
+  const { hasPermission, activeBranchId, user } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const printId = searchParams.get('print');
@@ -78,6 +78,9 @@ export const SalesList: React.FC = () => {
   // Detail Modal States
   const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
   const [selectedSaleDetails, setSelectedSaleDetails] = useState<any | null>(null);
+  const selectedSaleIdRef = useRef<string | null>(null);
+  selectedSaleIdRef.current = selectedSaleId;
+  const lastAutoPrintedRef = useRef<string | null>(null);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [newStatusId, setNewStatusId] = useState('');
   const [statusRemarks, setStatusRemarks] = useState('');
@@ -85,6 +88,7 @@ export const SalesList: React.FC = () => {
   // Edit Items Modal States
   const [editItemsModalOpen, setEditItemsModalOpen] = useState(false);
   const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
+  const [editingSale, setEditingSale] = useState<any | null>(null);
   const [editingSaleItems, setEditingSaleItems] = useState<any[]>([]);
   const [allServices, setAllServices] = useState<any[]>([]);
   const [addServiceId, setAddServiceId] = useState('');
@@ -116,6 +120,12 @@ export const SalesList: React.FC = () => {
     return sum + Math.max(0, (s.grand_total || 0) - paid);
   }, 0);
 
+  const handleCloseDetail = () => {
+    selectedSaleIdRef.current = null;
+    setSelectedSaleDetails(null);
+    setSelectedSaleId(null);
+  };
+
   const fetchSales = async () => {
     setLoading(true);
     try {
@@ -126,10 +136,13 @@ export const SalesList: React.FC = () => {
       setSales(sData);
       setStatuses(osData);
 
-      // Refresh Detail Panel if open
-      if (selectedSaleId) {
-        const detail = await db.sales.getById(selectedSaleId);
-        setSelectedSaleDetails(detail);
+      // Refresh Detail Panel if still actively open
+      const currentId = selectedSaleIdRef.current;
+      if (currentId) {
+        const detail = await db.sales.getById(currentId);
+        if (selectedSaleIdRef.current === currentId) {
+          setSelectedSaleDetails(detail);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -140,10 +153,11 @@ export const SalesList: React.FC = () => {
 
   useEffect(() => {
     fetchSales();
-  }, [activeBranchId, selectedSaleId]);
+  }, [activeBranchId]);
 
   useEffect(() => {
-    if (printId) {
+    if (printId && lastAutoPrintedRef.current !== printId) {
+      lastAutoPrintedRef.current = printId;
       const triggerAutoPrint = async () => {
         try {
           const ids = printId.split(',');
@@ -155,6 +169,7 @@ export const SalesList: React.FC = () => {
           if (details.length > 0) {
             setSelectedSaleDetails(details.length === 1 ? details[0] : details);
             setSelectedSaleId(ids[0]);
+            selectedSaleIdRef.current = ids[0];
             setSearchParams({}, { replace: true });
             setTimeout(() => {
               window.print();
@@ -168,12 +183,25 @@ export const SalesList: React.FC = () => {
     }
   }, [printId]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedSaleDetails) {
+        handleCloseDetail();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedSaleDetails]);
+
   const handleOpenDetail = async (id: string) => {
     setSelectedSaleId(id);
+    selectedSaleIdRef.current = id;
     setLoading(true);
     try {
       const detail = await db.sales.getById(id);
-      setSelectedSaleDetails(detail);
+      if (selectedSaleIdRef.current === id) {
+        setSelectedSaleDetails(detail);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -204,6 +232,7 @@ export const SalesList: React.FC = () => {
     try {
       setEditingSaleId(saleId);
       const detail = await db.sales.getById(saleId);
+      setEditingSale(detail);
       setEditingSaleItems(detail?.items || []);
       const svcs = await db.services.getAll();
       setAllServices(svcs.filter(s => s.status === 'Active'));
@@ -220,8 +249,9 @@ export const SalesList: React.FC = () => {
     if (!editingSaleId || !addServiceId || addQty <= 0) return;
     setEditSaving(true);
     try {
-      await db.sales.addItem(editingSaleId, { service_id: addServiceId, quantity: addQty, unit_price: addPrice });
+      await db.sales.addItem(editingSaleId, { service_id: addServiceId, quantity: addQty, unit_price: addPrice, staff_id: user?.id });
       const detail = await db.sales.getById(editingSaleId);
+      setEditingSale(detail);
       setEditingSaleItems(detail?.items || []);
       setAddServiceId('');
       setAddQty(1);
@@ -237,6 +267,7 @@ export const SalesList: React.FC = () => {
     try {
       await db.sales.removeItem(editingSaleId, itemId);
       const detail = await db.sales.getById(editingSaleId);
+      setEditingSale(detail);
       setEditingSaleItems(detail?.items || []);
       await fetchSales();
     } catch (err) { console.error(err); }
@@ -667,9 +698,11 @@ export const SalesList: React.FC = () => {
                                     <Clock size={14} />
                                   </button>
                                   <button
-                                    onClick={async () => {
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
                                       const detail = await db.sales.getById(s.id);
                                       setSelectedSaleId(s.id);
+                                      selectedSaleIdRef.current = s.id;
                                       setSelectedSaleDetails(detail);
                                       setTimeout(() => {
                                         window.print();
@@ -721,7 +754,12 @@ export const SalesList: React.FC = () => {
               : [selectedSaleDetails];
 
             return (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-md print:p-0 print:bg-white print:static overflow-y-auto">
+              <div 
+                className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-md print:p-0 print:bg-white print:static overflow-y-auto"
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) handleCloseDetail();
+                }}
+              >
                 <div className="relative w-full max-w-4xl max-h-[94vh] overflow-y-auto print:max-h-none print:overflow-visible my-auto space-y-4 print:space-y-0 print:my-0 print:w-full">
                   
                   {/* TOP CONTROL TOOLBAR (Hidden in Print / PDF) */}
@@ -757,7 +795,7 @@ export const SalesList: React.FC = () => {
 
                       <button
                         type="button"
-                        onClick={() => { setSelectedSaleDetails(null); setSelectedSaleId(null); }}
+                        onClick={handleCloseDetail}
                         className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-xl transition-colors cursor-pointer"
                         title="Close (Esc)"
                       >
@@ -872,12 +910,13 @@ export const SalesList: React.FC = () => {
                           <table className="w-full text-left border-collapse">
                             <thead className="bg-[#000ba0] text-white font-bold">
                               <tr>
-                                <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[6%]">No</th>
-                                <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[14%]">Date</th>
-                                <th className="px-3 py-2.5 border-r border-gray-300 w-[47%]">Description of Service</th>
-                                <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[9%]">Qty</th>
-                                <th className="px-3 py-2.5 text-right border-r border-gray-300 w-[10%]">Rate</th>
-                                <th className="px-3 py-2.5 text-right w-[14%]">Amount</th>
+                                <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[5%] print:w-[6%]">No</th>
+                                <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[13%] print:w-[14%]">Date</th>
+                                <th className="px-3 py-2.5 border-r border-gray-300 w-[38%] print:w-[47%]">Description of Service</th>
+                                <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[14%] print:hidden">Staff</th>
+                                <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[8%] print:w-[9%]">Qty</th>
+                                <th className="px-3 py-2.5 text-right border-r border-gray-300 w-[10%] print:w-[10%]">Rate</th>
+                                <th className="px-3 py-2.5 text-right w-[12%] print:w-[14%]">Amount</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-300">
@@ -903,6 +942,11 @@ export const SalesList: React.FC = () => {
                                           </span>
                                         ) : null}
                                       </td>
+                                      <td className="px-3 py-1.5 text-center border-r border-gray-300 text-black text-[11px] font-medium print:hidden">
+                                        <span className="px-2 py-0.5 rounded bg-muted/80 text-foreground font-semibold border border-border/60">
+                                          {item.staff?.name || item.staff_id || saleItem.employee?.name || 'Staff'}
+                                        </span>
+                                      </td>
                                       <td className="px-3 py-1.5 text-center border-r border-gray-300 text-black">{item.quantity}</td>
                                       <td className="px-3 py-1.5 text-right border-r border-gray-300 text-black">{item.unit_price.toFixed(2)}</td>
                                       <td className="px-3 py-1.5 text-right text-black font-bold">{item.subtotal.toFixed(2)}</td>
@@ -919,6 +963,7 @@ export const SalesList: React.FC = () => {
                                       <td className="px-3 py-1.5 text-center border-r border-gray-300 text-black font-semibold">{rowNum}</td>
                                       <td className="px-3 py-1.5 border-r border-gray-300"></td>
                                       <td className="px-3 py-1.5 border-r border-gray-300"></td>
+                                      <td className="px-3 py-1.5 border-r border-gray-300 print:hidden"></td>
                                       <td className="px-3 py-1.5 border-r border-gray-300"></td>
                                       <td className="px-3 py-1.5 border-r border-gray-300"></td>
                                       <td className="px-3 py-1.5 text-right"></td>
@@ -930,7 +975,15 @@ export const SalesList: React.FC = () => {
                               })()}
                             </tbody>
                             <tfoot>
-                              <tr className="bg-[#f28f00] text-white font-bold border-t border-gray-300">
+                              <tr className="bg-[#f28f00] text-white font-bold border-t border-gray-300 print:hidden">
+                                <td className="px-3 py-2 text-center border-r border-gray-300" colSpan={6}>
+                                  Sub Total
+                                </td>
+                                <td className="px-3 py-2 text-right text-white font-bold">
+                                  {saleItem.subtotal.toFixed(2)}
+                                </td>
+                              </tr>
+                              <tr className="bg-[#f28f00] text-white font-bold border-t border-gray-300 hidden print:table-row">
                                 <td className="px-3 py-2 text-center border-r border-gray-300" colSpan={5}>
                                   Sub Total
                                 </td>
@@ -1200,6 +1253,7 @@ export const SalesList: React.FC = () => {
                     <thead className="bg-muted/20">
                       <tr>
                         <th className="px-3 py-2 text-left text-muted-foreground font-semibold">Service</th>
+                        <th className="px-3 py-2 text-center text-muted-foreground font-semibold">Staff</th>
                         <th className="px-3 py-2 text-center text-muted-foreground font-semibold">Qty</th>
                         <th className="px-3 py-2 text-right text-muted-foreground font-semibold">Price</th>
                         <th className="px-3 py-2 text-right text-muted-foreground font-semibold">Total</th>
@@ -1209,7 +1263,17 @@ export const SalesList: React.FC = () => {
                     <tbody>
                       {editingSaleItems.map((item: any) => (
                         <tr key={item.id} className="border-t border-border/40">
-                          <td className="px-3 py-2 font-medium text-foreground">{item.service?.name || 'Service'}</td>
+                          <td className="px-3 py-2 font-medium text-foreground">
+                            <div>{item.service?.name || 'Service'}</div>
+                            {item.person_name && (
+                              <div className="text-[10px] text-muted-foreground italic">(For: {item.person_name})</div>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-center text-[11px] font-medium text-foreground">
+                            <span className="px-2 py-0.5 rounded bg-muted/80 text-foreground font-semibold border border-border/60">
+                              {item.staff?.name || editingSale?.employee?.name || user?.name || 'Staff'}
+                            </span>
+                          </td>
                           <td className="px-3 py-2 text-center">{item.quantity}</td>
                           <td className="px-3 py-2 text-right">{item.unit_price.toFixed(2)}</td>
                           <td className="px-3 py-2 text-right font-bold">{item.subtotal.toFixed(2)}</td>

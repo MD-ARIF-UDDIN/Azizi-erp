@@ -264,6 +264,7 @@ const SEED_SALES_AND_FINANCIALS = (
       id: item1_id,
       sale_id,
       service_id: s1.id,
+      staff_id: u.id,
       quantity: quantity1,
       unit_price: s1.price,
       subtotal: s1.price * quantity1,
@@ -276,6 +277,7 @@ const SEED_SALES_AND_FINANCIALS = (
       id: item2_id,
       sale_id,
       service_id: s2.id,
+      staff_id: u.id,
       quantity: quantity2,
       unit_price: s2.price,
       subtotal: s2.price * quantity2,
@@ -1154,7 +1156,7 @@ export const db = {
         // Fetch inner items and payments
         const resolvedSales = [];
         for (const s of (data || [])) {
-          const { data: items } = await supabase.from('sale_items').select('*, service:services(*)').eq('sale_id', s.id);
+          const { data: items } = await supabase.from('sale_items').select('*, service:services(*), staff:users!staff_id(*)').eq('sale_id', s.id);
           const { data: pList } = await supabase.from('payments').select('*').eq('sale_id', s.id).eq('is_deleted', false);
           resolvedSales.push({
             ...s,
@@ -1177,7 +1179,8 @@ export const db = {
         order_status: _statuses.find(os => os.id === s.order_status_id),
         items: _saleItems.filter((si: SaleItem) => si.sale_id === s.id).map((si: SaleItem) => ({
           ...si,
-          service: _services.find(srv => srv.id === si.service_id)
+          service: _services.find(srv => srv.id === si.service_id),
+          staff: _users.find(u => u.id === (si.staff_id || s.employee_id))
         })),
         payments: _payments.filter((p: Payment) => p.sale_id === s.id && !p.is_deleted)
       })));
@@ -1188,7 +1191,7 @@ export const db = {
         if (sErr) throw sErr;
         if (!s) return undefined;
 
-        const { data: items } = await supabase.from('sale_items').select('*, service:services(*)').eq('sale_id', id);
+        const { data: items } = await supabase.from('sale_items').select('*, service:services(*), staff:users!staff_id(*)').eq('sale_id', id);
         const { data: paymentsList } = await supabase.from('payments').select('*').eq('sale_id', id).eq('is_deleted', false);
         const { data: history } = await supabase.from('order_status_history').select('*, new_status:order_statuses(*), user:users(*)').eq('sale_id', id).order('created_at', { ascending: false });
 
@@ -1205,7 +1208,8 @@ export const db = {
 
       const items = _saleItems.filter((si: SaleItem) => si.sale_id === s.id).map((si: SaleItem) => ({
         ...si,
-        service: _services.find(srv => srv.id === si.service_id)
+        service: _services.find(srv => srv.id === si.service_id),
+        staff: _users.find(u => u.id === (si.staff_id || s.employee_id))
       }));
 
       const paymentsList = _payments.filter((p: Payment) => p.sale_id === s.id && !p.is_deleted);
@@ -1233,7 +1237,7 @@ export const db = {
       branch_id: string;
       discount: number;
       notes?: string;
-      items: Array<{ service_id: string; quantity: number; unit_price: number; person_name?: string; service_date?: string }>;
+      items: Array<{ service_id: string; quantity: number; unit_price: number; person_name?: string; service_date?: string; staff_id?: string }>;
       initialPayment?: { amount: number; payment_method: Payment['payment_method'] };
       person_name?: string;
       person_phone?: string;
@@ -1309,7 +1313,8 @@ export const db = {
             unit_price: item.unit_price,
             subtotal: item.unit_price * item.quantity,
             service_date: item.service_date || new Date().toISOString().split('T')[0],
-            person_name: item.person_name || null
+            person_name: item.person_name || null,
+            staff_id: item.staff_id ? sanitizeUUID(item.staff_id) : employeeId
           }));
           const { error: itemsErr } = await supabase.from('sale_items').insert(itemsPayload);
           if (itemsErr) throw itemsErr;
@@ -1355,6 +1360,7 @@ export const db = {
         subtotal: item.unit_price * item.quantity,
         person_name: item.person_name || undefined,
         service_date: item.service_date || now.toISOString().split('T')[0],
+        staff_id: item.staff_id || activeUser.id,
         created_at: item.service_date ? new Date(item.service_date).toISOString() : now.toISOString(),
         updated_at: now.toISOString()
       }));
@@ -1512,9 +1518,10 @@ export const db = {
       logAudit(getActiveUserSession().id, 'DELETE_SOFT_SALE', 'sales', id, old, updated);
       return delay(true);
     },
-    addItem: async (saleId: string, item: { service_id: string; quantity: number; unit_price: number; person_name?: string; service_date?: string }) => {
+    addItem: async (saleId: string, item: { service_id: string; quantity: number; unit_price: number; person_name?: string; service_date?: string; staff_id?: string }) => {
       const activeUser = getActiveUserSession();
       const employeeId = sanitizeUUID(activeUser?.id);
+      const targetStaffId = item.staff_id ? sanitizeUUID(item.staff_id) : employeeId;
       const now = new Date();
       const subtotal = item.unit_price * item.quantity;
       const serviceDate = item.service_date || now.toISOString().split('T')[0];
@@ -1526,7 +1533,9 @@ export const db = {
           quantity: item.quantity,
           unit_price: item.unit_price,
           subtotal,
-          person_name: item.person_name || null
+          person_name: item.person_name || null,
+          service_date: serviceDate,
+          staff_id: targetStaffId
         }]);
         if (itemErr) throw itemErr;
 
@@ -1555,6 +1564,7 @@ export const db = {
         subtotal,
         person_name: item.person_name || undefined,
         service_date: serviceDate,
+        staff_id: item.staff_id || activeUser.id,
         created_at: item.service_date ? new Date(item.service_date).toISOString() : now.toISOString(),
         updated_at: now.toISOString()
       };
@@ -2253,7 +2263,8 @@ export const db = {
         items: quotation.items.map((item: any) => ({
           service_id: item.service_id,
           quantity: item.quantity,
-          unit_price: item.unit_price
+          unit_price: item.unit_price,
+          staff_id: activeUser.id
         })),
         person_name: quotation.person_name,
         person_phone: quotation.person_phone,
