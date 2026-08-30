@@ -134,19 +134,24 @@ export const exportServices = (services: any[]) => {
     'SL',
     'Service Name',
     'Category',
-    'Base Price (AED)',
-    'Status',
-    'Description'
+    'Selling Price (AED)',
+    'Our Expense (AED)',
+    'Gross Profit (AED)'
   ];
 
-  const rows = services.map((s, idx) => [
-    idx + 1,
-    s.name || '',
-    s.category?.name || 'Uncategorized',
-    Number(s.price.toFixed(2)),
-    s.status || 'Active',
-    s.description || ''
-  ]);
+  const rows = services.map((s, idx) => {
+    const price = s.price || 0;
+    const expense = s.expense || 0;
+    const profit = price - expense;
+    return [
+      idx + 1,
+      s.name || '',
+      s.category?.name || 'Uncategorized',
+      Number(price.toFixed(2)),
+      Number(expense.toFixed(2)),
+      Number(profit.toFixed(2))
+    ];
+  });
 
   exportToExcel(headers, rows, 'Services_Catalog', 'Services');
 };

@@ -759,33 +759,33 @@ export const CustomerList: React.FC = () => {
           {/* Main Grid Table */}
           {loading && customers.length === 0 ? (
             <div className="space-y-3">
-              <div className="h-12 bg-muted/30 rounded-xl animate-pulse" />
-              <div className="h-24 bg-muted/30 rounded-xl animate-pulse" />
+              <div className="h-12 bg-muted/30 rounded-md animate-pulse" />
+              <div className="h-24 bg-muted/30 rounded-md animate-pulse" />
             </div>
           ) : (
-            <div className="glass border border-border rounded-2xl overflow-hidden shadow-xl">
+            <div className="table-container">
               <div className="overflow-x-auto">
-                <table className="w-full text-left">
+                <table>
                   <thead>
                     <tr>
-                      <th className="text-center w-12">#</th>
+                      <th className="text-center" style={{ width: '45px' }}>SL</th>
                       <th>Customer & Contact</th>
                       <th>Account Type</th>
-                      <th>Grand Total</th>
-                      <th>Total Paid</th>
-                      <th>Outstanding Due</th>
+                      <th className="text-right">Grand Total</th>
+                      <th className="text-right">Total Paid</th>
+                      <th className="text-right">Outstanding Due</th>
                       <th>Active Documents</th>
                       <th className="text-center">Invoices</th>
-                      <th className="text-center w-48">Actions</th>
+                      <th className="text-center" style={{ width: '160px' }}>Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border/50">
+                  <tbody>
                     {filteredCustomers.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="py-12 text-center text-muted-foreground">
+                        <td colSpan={9} className="py-12 text-center text-slate-500">
                           <div className="max-w-xs mx-auto space-y-1">
-                            <div className="font-bold text-foreground">No customers found</div>
-                            <div className="text-xs">Click "Register Customer" to add a new person or company.</div>
+                            <div className="font-bold text-black text-sm font-heading">No customers found</div>
+                            <div className="text-xs text-slate-500">Click "Register Customer" to add a new person or company.</div>
                           </div>
                         </td>
                       </tr>
@@ -798,20 +798,20 @@ export const CustomerList: React.FC = () => {
                           <tr
                             key={c.id}
                             onClick={() => handleOpenDetail(c)}
-                            className={`transition-colors cursor-pointer ${
+                            className={`cursor-pointer ${
                               isSelected ? 'bg-primary/5 font-semibold' : ''
                             } ${
                               anyDocExpiringSoon ? 'bg-rose-500/5 hover:bg-rose-500/10' : ''
                             }`}
                           >
                             {/* Serial */}
-                            <td className="text-center text-muted-foreground font-bold text-xs">
+                            <td className="text-center font-semibold text-xs text-slate-500">
                               {idx + 1}
                             </td>
 
                             {/* Customer Details */}
                             <td>
-                              <div className="font-bold text-foreground text-xs flex items-center gap-1.5">
+                              <div className="font-bold text-black text-xs flex items-center gap-1.5">
                                 {c.customer_type === 'company' ? (
                                   <Building2 size={14} className="text-primary shrink-0" />
                                 ) : (
@@ -819,9 +819,9 @@ export const CustomerList: React.FC = () => {
                                 )}
                                 <span>{c.name}</span>
                               </div>
-                              <div className="text-[11px] text-muted-foreground flex items-center gap-3 mt-1">
+                              <div className="text-[11px] text-slate-600 flex items-center gap-3 mt-1">
                                 {c.phone && (
-                                  <span className="flex items-center gap-1">
+                                  <span className="flex items-center gap-1 font-medium">
                                     <Phone size={11} className="text-primary" /> {c.phone}
                                   </span>
                                 )}
@@ -837,41 +837,41 @@ export const CustomerList: React.FC = () => {
                             <td>
                               {c.customer_type === 'company' ? (
                                 <div className="flex flex-wrap items-center gap-1.5">
-                                  <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded border border-primary/20 inline-flex items-center gap-1">
+                                  <span className="bg-sky-50 text-sky-700 text-[10px] font-bold px-2 py-0.5 rounded border border-sky-200 inline-flex items-center gap-1 font-heading">
                                     <Building2 size={11} /> Company
                                   </span>
                                   {c.members && c.members.length > 0 && (
-                                    <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded font-semibold">
+                                    <span className="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-semibold border border-slate-200">
                                       👥 {c.members.length} {c.members.length === 1 ? 'person' : 'people'}
                                     </span>
                                   )}
                                 </div>
                               ) : (
-                                <span className="bg-muted text-muted-foreground text-[10px] font-bold px-2 py-0.5 rounded border border-border inline-flex items-center gap-1">
+                                <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded border border-slate-200 inline-flex items-center gap-1 font-heading">
                                   <User size={11} /> Person
                                 </span>
                               )}
                             </td>
 
                             {/* Grand Total */}
-                            <td>
-                              <span className="font-bold text-xs text-foreground">
+                            <td className="text-right">
+                              <span className="font-bold text-xs text-black font-heading">
                                 {(c.total_purchased || 0).toFixed(2)} AED
                               </span>
                             </td>
 
                             {/* Total Paid */}
-                            <td>
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            <td className="text-right">
+                              <span className="font-bold text-xs text-emerald-700 font-heading">
                                 {(c.total_paid || 0).toFixed(2)} AED
                               </span>
                             </td>
 
                             {/* Outstanding Due */}
-                            <td>
+                            <td className="text-right">
                               {c.due > 0 ? (
-                                <div className="flex items-center gap-2">
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <span className="font-bold text-xs text-rose-700 font-heading">
                                     {c.due.toFixed(2)} AED
                                   </span>
                                   <button
@@ -879,15 +879,15 @@ export const CustomerList: React.FC = () => {
                                       e.stopPropagation();
                                       openQuickPayment(c);
                                     }}
-                                    className="px-1.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold transition-all cursor-pointer shadow-xs"
+                                    className="px-1.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold transition-all cursor-pointer shadow-xs font-heading"
                                     title="Collect Due Payment"
                                   >
                                     Pay
                                   </button>
                                 </div>
                               ) : (
-                                <span className="text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1">
-                                  ✓ Clear (0.00)
+                                <span className="text-emerald-700 text-xs font-bold font-heading">
+                                  ✓ Clear
                                 </span>
                               )}
                             </td>
@@ -1646,9 +1646,6 @@ export const CustomerList: React.FC = () => {
                                       </span>
                                     )}
                                   </div>
-                                  {service.description && (
-                                    <div className="text-[11px] text-muted-foreground truncate">{service.description}</div>
-                                  )}
                                 </div>
 
                                 <div className="flex items-center gap-2.5 shrink-0">

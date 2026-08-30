@@ -180,70 +180,75 @@ export const PaymentList: React.FC = () => {
         {/* DATA TABLE */}
         {loading && payments.length === 0 ? (
           <div className="space-y-3 animate-pulse">
-            <div className="h-10 bg-muted/30 rounded-xl" />
-            <div className="h-28 bg-muted/30 rounded-xl" />
+            <div className="h-10 bg-muted/30 rounded-md" />
+            <div className="h-28 bg-muted/30 rounded-md" />
           </div>
         ) : (
-          <div className="glass border border-border rounded-2xl overflow-hidden shadow-xl">
+          <div className="table-container">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-secondary/40 border-b border-border text-muted-foreground text-xs uppercase font-semibold">
+              <table>
+                <thead>
                   <tr>
-                    <th className="px-4 py-4 text-center w-12">SL</th>
-                    <th className="px-6 py-4">Transaction Date</th>
-                    <th className="px-6 py-4">Invoice Reference</th>
-                    <th className="px-6 py-4">Customer Details</th>
-                    <th className="px-6 py-4">Method & reference</th>
-                    <th className="px-6 py-4">Received By</th>
-                    <th className="px-6 py-4 text-right">Amount Collected</th>
+                    <th className="text-center" style={{ width: '45px' }}>SL</th>
+                    <th>Transaction Date</th>
+                    <th>Invoice Reference</th>
+                    <th>Customer Details</th>
+                    <th>Method & Reference</th>
+                    <th>Received By</th>
+                    <th className="text-right">Amount Collected</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border/60">
+                <tbody>
                   {filteredPayments.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center text-muted-foreground">
-                        No financial receipts matching search parameters were found.
+                      <td colSpan={7} className="py-12 text-center text-slate-500">
+                        <div className="max-w-xs mx-auto space-y-1">
+                          <div className="font-bold text-black text-sm font-heading">No payment records found</div>
+                          <div className="text-xs text-slate-500">No financial receipts matching search parameters were found.</div>
+                        </div>
                       </td>
                     </tr>
                   ) : (
                     filteredPayments.map((p, idx) => (
-                      <tr key={p.id} className="hover:bg-muted/25 transition-colors">
-                        <td className="px-4 py-4 text-center text-muted-foreground font-semibold">
+                      <tr key={p.id}>
+                        <td className="text-center font-semibold text-xs text-slate-500">
                           {idx + 1}
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="text-foreground flex items-center gap-1.5">
+                        <td>
+                          <div className="text-black font-semibold flex items-center gap-1.5 text-xs">
                             <Calendar size={13} className="text-primary" />
-                            {new Date(p.payment_date).toLocaleString()}
+                            {new Date(p.payment_date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                           </div>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="font-semibold text-foreground">{p.sale_invoice}</div>
-                          <div className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <td>
+                          <div className="font-bold text-black text-xs leading-tight">#{p.sale_invoice}</div>
+                          <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5 font-medium">
                             <Building size={10} /> {p.sale_branch_name}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-foreground font-medium">
-                          {p.sale_customer_name}
+                        <td>
+                          <div className="font-bold text-black text-xs leading-tight">
+                            {p.sale_customer_name}
+                          </div>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-1 text-foreground font-semibold">
+                        <td>
+                          <div className="flex items-center gap-1 text-black font-semibold text-xs">
                             <Wallet size={12} className="text-primary" />
                             {p.payment_method}
                           </div>
                           {p.transaction_no && (
-                            <div className="text-[10px] text-muted-foreground mt-0.5">
+                            <div className="text-[10px] text-slate-500 mt-0.5">
                               Ref: {p.transaction_no}
                             </div>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-muted-foreground text-xs">
+                        <td className="text-slate-600 text-xs font-medium">
                           <span className="flex items-center gap-1">
                             <User size={12} />
                             {p.received_by_name}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-right font-bold text-emerald-400">
+                        <td className="text-right font-black text-emerald-700 text-sm font-heading">
                           +{p.amount.toFixed(2)} AED
                         </td>
                       </tr>

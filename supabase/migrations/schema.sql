@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS public.services (
     name TEXT NOT NULL,
     description TEXT,
     price NUMERIC(10, 2) NOT NULL DEFAULT 0.00 CHECK (price >= 0),
+    expense NUMERIC(10, 2) DEFAULT 0.00 CHECK (expense >= 0),
     status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive')),
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

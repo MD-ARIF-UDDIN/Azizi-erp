@@ -293,29 +293,32 @@ export const QuotationsList: React.FC = () => {
           <div className="w-full space-y-4 print:hidden">
             {loading && quotations.length === 0 ? (
               <div className="space-y-3">
-                <div className="h-10 bg-muted/30 rounded-xl animate-pulse" />
-                <div className="h-28 bg-muted/30 rounded-xl animate-pulse" />
+                <div className="h-10 bg-muted/30 rounded-md animate-pulse" />
+                <div className="h-28 bg-muted/30 rounded-md animate-pulse" />
               </div>
             ) : (
-              <div className="glass border border-border rounded-2xl overflow-hidden shadow-xl">
+              <div className="table-container">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-secondary/40 border-b border-border text-muted-foreground text-xs uppercase font-semibold">
+                  <table>
+                    <thead>
                       <tr>
-                        <th className="px-4 py-4 text-center w-12">SL</th>
-                        <th className="px-5 py-4">Quotation No & Date</th>
-                        <th className="px-5 py-4">Customer</th>
-                        <th className="px-5 py-4">Valid Until</th>
-                        <th className="px-5 py-4">Status</th>
-                        <th className="px-5 py-4 text-right">Grand Total</th>
-                        <th className="px-5 py-4 text-center w-48">Actions</th>
+                        <th className="text-center" style={{ width: '45px' }}>SL</th>
+                        <th>Quotation No & Date</th>
+                        <th>Customer</th>
+                        <th>Valid Until</th>
+                        <th>Status</th>
+                        <th className="text-right">Grand Total</th>
+                        <th className="text-center" style={{ width: '160px' }}>Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border/60">
+                    <tbody>
                       {filteredQuotations.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
-                            No quotations matched selection filters.
+                          <td colSpan={7} className="py-12 text-center text-slate-500">
+                            <div className="max-w-xs mx-auto space-y-1">
+                              <div className="font-bold text-black text-sm font-heading">No matching quotations found</div>
+                              <div className="text-xs text-slate-500">Try adjusting your search query or status filter above.</div>
+                            </div>
                           </td>
                         </tr>
                       ) : (
@@ -326,76 +329,45 @@ export const QuotationsList: React.FC = () => {
                             <tr
                               key={q.id}
                               style={isHighlighted ? { backgroundColor: 'color-mix(in srgb, var(--color-primary) 5%, transparent)' } : undefined}
-                              className={`hover:bg-muted/25 transition-colors ${
-                                isSelected ? 'bg-secondary/25 font-medium' : ''
+                              className={`cursor-pointer ${
+                                isSelected ? 'bg-primary/5 font-medium' : ''
                               }`}
+                              onClick={() => handleOpenDetail(q.id)}
                             >
-                              <td className="px-4 py-4 text-center text-muted-foreground font-semibold">
+                              <td className="text-center font-semibold text-xs text-slate-500">
                                 {idx + 1}
                               </td>
-                              <td className="px-5 py-4">
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary/10 border border-primary/20 text-primary font-mono font-bold text-[11px] tracking-wide">
-                                  # {q.quotation_no}
+                              <td>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-black font-mono font-bold text-xs tracking-wide">
+                                  #{q.quotation_no}
                                 </span>
-                                <div className="text-[10px] text-muted-foreground mt-1.5">
-                                  {new Date(q.created_at).toLocaleString()} • {q.branch?.name}
+                                <div className="text-[11px] text-slate-500 mt-1">
+                                  {new Date(q.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
                                 </div>
                               </td>
-                              <td className="px-5 py-4">
-                                {q.customer ? (
-                                  <>
-                                    <div className="text-foreground font-medium flex flex-wrap items-center gap-1.5">
-                                      {q.person_name ? (
-                                        <>
-                                          <span>{q.person_name}</span>
-                                          <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded font-semibold">
-                                            Company: {q.customer.name}
-                                          </span>
-                                        </>
-                                      ) : (
-                                        <>
-                                          <span>{q.customer.name}</span>
-                                          {q.customer.company && (
-                                            <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded font-semibold">
-                                              Billed to: {q.customer.company.name}
-                                            </span>
-                                          )}
-                                        </>
-                                      )}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground mt-0.5">{q.person_phone || q.customer.phone || 'No phone'}</div>
-                                  </>
-                                ) : (
-                                  <div className="text-foreground font-medium">Walk-in Customer</div>
-                                )}
+                              <td>
+                                <div className="font-bold text-black text-xs leading-tight">
+                                  {q.customer?.name || 'Walk-in Customer'}
+                                </div>
+                                <div className="text-[11px] text-slate-500 mt-0.5">
+                                  {q.customer?.phone || ''}
+                                </div>
                               </td>
-                              <td className="px-5 py-4 text-xs text-foreground font-semibold">
-                                {q.valid_until ? (
-                                  <span className="inline-flex items-center gap-1">
-                                    <Clock size={12} className="text-muted-foreground" />
-                                    {new Date(q.valid_until).toLocaleDateString()}
-                                  </span>
-                                ) : (
-                                  <span className="text-muted-foreground italic">N/A</span>
-                                )}
+                              <td>
+                                <span className="text-xs text-black font-medium">
+                                  {q.valid_until ? new Date(q.valid_until).toLocaleDateString() : '—'}
+                                </span>
                               </td>
-                               <td className="px-5 py-4 cursor-pointer hover:opacity-80 transition-all" onClick={(e) => { e.stopPropagation(); handleOpenHistoryLog(q.id, q.quotation_no); }} title="Click to view status history steps">
-                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ${
-                                  q.status === 'Converted' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                                  q.status === 'Accepted' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
-                                  q.status === 'Draft' ? 'bg-muted text-muted-foreground border border-border' :
-                                  q.status === 'Sent' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' :
-                                  q.status === 'Rejected' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
-                                  'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                }`}>
+                              <td onClick={(e) => { e.stopPropagation(); handleOpenHistoryLog(q.id, q.quotation_no); }} title="Click to view status history steps">
+                                <span className={`badge badge-${q.status === 'Converted' || q.status === 'Accepted' ? 'success' : q.status === 'Draft' || q.status === 'Sent' ? 'info' : q.status === 'Rejected' || q.status === 'Expired' ? 'danger' : 'warning'}`}>
                                   {q.status}
                                 </span>
                               </td>
-                              <td className="px-5 py-4 text-right font-bold text-foreground">
-                                {q.grand_total.toFixed(2)} AED
+                              <td className="text-right font-black text-black text-sm font-heading">
+                                {q.grand_total.toFixed(2)} <span className="text-[10px] font-medium text-slate-500">AED</span>
                               </td>
-                              <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex items-center justify-center gap-1.5">
+                              <td onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-center gap-1">
                                   <button
                                     onClick={() => handleOpenDetail(q.id)}
                                     className="px-2.5 py-1.5 bg-secondary hover:bg-secondary-foreground/10 text-foreground text-xs font-bold rounded-lg transition-all cursor-pointer"
@@ -645,7 +617,6 @@ export const QuotationsList: React.FC = () => {
                                 </td>
                                 <td className="px-3 py-2 border border-gray-300">
                                   <div className="font-extrabold">{item.service?.name || 'Service Item'}</div>
-                                  <div className="text-[10px] text-gray-500 mt-0.5">{item.service?.description || 'N/A'}</div>
                                 </td>
                                 <td className="px-3 py-2 border border-gray-300 text-center text-sm font-bold">
                                   {item.quantity}

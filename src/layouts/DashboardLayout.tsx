@@ -52,18 +52,18 @@ const SidebarLink: React.FC<SidebarLinkProps> = ({ to, icon, label, collapsed, p
   return (
     <Link
       to={to}
-      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] transition-all duration-200 group relative font-bold ${
+      className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] transition-all duration-150 group relative font-medium ${
         isActive
-          ? 'bg-primary text-white shadow-md'
-          : 'text-muted-foreground hover:text-foreground hover:bg-muted/80'
+          ? 'bg-white text-primary font-semibold shadow-xs border border-border/70 relative before:content-[""] before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[3px] before:bg-primary before:rounded-r-sm'
+          : 'text-black hover:bg-slate-200/60 font-semibold'
       }`}
     >
-      <div className={`flex-shrink-0 transition-transform duration-200 ${isActive ? 'scale-110' : 'group-hover:scale-105'}`}>
+      <div className={`flex-shrink-0 transition-transform duration-150 ${isActive ? 'text-primary' : 'text-black'}`}>
         {icon}
       </div>
-      {!collapsed && <span>{label}</span>}
+      {!collapsed && <span className={isActive ? 'text-primary' : 'text-black'}>{label}</span>}
       {!collapsed && badge !== undefined && badge > 0 && (
-        <span className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${isActive ? 'bg-white text-primary' : 'bg-rose-500 text-white'}`}>
+        <span className={`ml-auto text-[10px] font-bold px-1.5 py-0.2 rounded-full shrink-0 ${isActive ? 'bg-primary/10 text-primary' : 'bg-rose-500 text-white'}`}>
           {badge}
         </span>
       )}
@@ -75,7 +75,7 @@ const SidebarLink: React.FC<SidebarLinkProps> = ({ to, icon, label, collapsed, p
       )}
       
       {collapsed && (
-        <div className="absolute left-full ml-3 px-2.5 py-1.5 bg-foreground text-white text-xs font-semibold rounded-md opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-150 shadow-lg z-[60] whitespace-nowrap">
+        <div className="absolute left-full ml-3 px-2.5 py-1 bg-black text-white text-xs font-semibold rounded-md opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-150 shadow-md z-[60] whitespace-nowrap">
           {label}
         </div>
       )}
@@ -115,41 +115,40 @@ const SidebarDropdown: React.FC<SidebarDropdownProps> = ({ label, icon, collapse
 
   if (!isAllowed || allowedLinks.length === 0) return null;
 
-
   return (
     <div>
       <button
         onClick={() => { if (!collapsed) setIsOpen(!isOpen); }}
-        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[13px] font-bold transition-all duration-200 group relative ${
+        className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-[13px] font-semibold transition-all duration-150 group relative cursor-pointer ${
           isAnyActive && !isOpen
-            ? 'bg-primary/5 text-primary'
-            : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+            ? 'bg-white/90 text-primary border border-border/70'
+            : 'text-black hover:bg-slate-200/60'
         }`}
       >
-        <div className="flex items-center gap-3">
-          <div className={`flex-shrink-0 transition-transform duration-200 ${isAnyActive ? 'scale-110 text-primary' : 'group-hover:scale-105'}`}>
+        <div className="flex items-center gap-2.5">
+          <div className={`flex-shrink-0 transition-transform duration-150 ${isAnyActive ? 'text-primary' : 'text-black'}`}>
             {icon}
           </div>
-          {!collapsed && <span>{label}</span>}
+          {!collapsed && <span className={isAnyActive && !isOpen ? 'text-primary' : 'text-black'}>{label}</span>}
         </div>
         {!collapsed && (
           <ChevronDown
-            size={14}
-            className={`transition-transform duration-200 opacity-50 ${isOpen ? 'rotate-180' : ''}`}
+            size={13}
+            className={`transition-transform duration-200 text-black ${isOpen ? 'rotate-180' : ''}`}
           />
         )}
 
         {collapsed && (
-          <div className="absolute left-full ml-3 w-44 bg-card text-card-foreground text-xs rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-150 shadow-xl border border-border z-[60] p-1.5">
-            <div className="font-bold px-2 py-1 text-muted-foreground text-[10px] uppercase tracking-wider mb-1">{label}</div>
+          <div className="absolute left-full ml-3 w-44 bg-white text-black text-xs rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-150 shadow-lg border border-slate-200 z-[60] p-1.5">
+            <div className="font-bold px-2 py-1 text-black text-[10px] uppercase tracking-wider mb-1 font-heading">{label}</div>
             {allowedLinks.map(link => (
               <Link
                 key={link.to}
                 to={link.to}
                 className={`block px-2 py-1.5 rounded-md transition-colors ${
                   location.pathname === link.to
-                    ? 'bg-primary text-white font-bold'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground font-bold'
+                    ? 'bg-primary/10 text-primary font-bold'
+                    : 'text-black hover:bg-slate-100 font-semibold'
                 }`}
               >
                 {link.label}
@@ -160,17 +159,17 @@ const SidebarDropdown: React.FC<SidebarDropdownProps> = ({ label, icon, collapse
       </button>
 
       {!collapsed && isOpen && (
-        <div className="ml-5 pl-3 border-l-2 border-border mt-1 space-y-0.5">
+        <div className="ml-4 pl-2.5 border-l border-slate-300 mt-1 space-y-0.5">
           {allowedLinks.map(link => {
             const isChildActive = location.pathname === link.to;
             return (
               <Link
                 key={link.to}
                 to={link.to}
-                className={`flex items-center px-2.5 py-1.5 rounded-md text-xs font-bold transition-all duration-200 ${
+                className={`flex items-center px-2 py-1.5 rounded-md text-xs transition-all duration-150 ${
                   isChildActive
-                    ? 'text-primary bg-primary/5'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                    ? 'text-primary bg-white font-bold shadow-2xs border border-border/70'
+                    : 'text-black hover:bg-slate-200/50 font-medium'
                 }`}
               >
                 {link.label}
@@ -187,10 +186,10 @@ const SidebarDropdown: React.FC<SidebarDropdownProps> = ({ label, icon, collapse
 
 const SidebarSection: React.FC<{ label: string; collapsed: boolean }> = ({ label, collapsed }) => (
   !collapsed ? (
-    <div className="px-3 pt-5 pb-1">
-      <span className="text-[10px] uppercase tracking-wider font-black text-muted-foreground">{label}</span>
+    <div className="px-3 pt-4 pb-1">
+      <span className="text-[10px] uppercase tracking-wider font-extrabold text-black/70 font-heading">{label}</span>
     </div>
-  ) : <div className="pt-3" />
+  ) : <div className="pt-2" />
 );
 
 /* ════════════════════════ MAIN LAYOUT ════════════════════════ */
@@ -366,44 +365,44 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
         const isCollapsedResponsive = collapsed && !mobileOpen;
         return (
           <aside
-            className={`bg-card flex flex-col justify-between transition-all duration-300 z-50 border-r border-border fixed inset-y-0 left-0 md:static md:translate-x-0 ${
-              mobileOpen ? 'translate-x-0 w-[260px]' : '-translate-x-full md:translate-x-0'
-            } ${isCollapsedResponsive ? 'md:w-[68px]' : 'md:w-[260px]'}`}
+            className={`bg-[#f1f5f9] flex flex-col justify-between transition-all duration-200 z-50 border-r border-slate-200 fixed inset-y-0 left-0 md:static md:translate-x-0 ${
+              mobileOpen ? 'translate-x-0 w-[240px]' : '-translate-x-full md:translate-x-0'
+            } ${isCollapsedResponsive ? 'md:w-[68px]' : 'md:w-[240px]'}`}
           >
             <div className="flex-1 flex flex-col min-h-0">
               {/* Logo */}
-              <div className="flex h-16 items-center justify-between px-4 border-b border-border">
+              <div className="flex h-15 items-center justify-between px-3.5 border-b border-slate-200">
                 {!isCollapsedResponsive ? (
                   <>
                     <div className="flex items-center gap-2.5">
-                      <Logo size={32} />
+                      <Logo size={28} />
                       <div>
-                        <span className="font-bold text-sm text-foreground tracking-wide">AZIZI TYPING</span>
-                        <div className="text-[9px] text-muted-foreground -mt-0.5">Stamp Making - ERP</div>
+                        <span className="font-heading font-extrabold text-sm text-black tracking-tight leading-none block">AZIZI ERP</span>
+                        <div className="text-[9px] font-bold text-black/70 font-heading tracking-wide mt-0.5">Typing & Services</div>
                       </div>
                     </div>
                     {/* Desktop Collapse Button */}
                     <button
                       onClick={() => setCollapsed(true)}
-                      className="p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground rounded-lg transition-all md:block hidden"
+                      className="p-1 hover:bg-slate-200 text-black hover:text-primary rounded-md transition-all md:block hidden cursor-pointer"
                       title="Collapse Sidebar"
                     >
-                      <PanelLeftClose size={16} />
+                      <PanelLeftClose size={15} />
                     </button>
                     {/* Mobile Close Button */}
                     <button
                       onClick={() => setMobileOpen(false)}
-                      className="p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground rounded-lg transition-all md:hidden block"
+                      className="p-1 hover:bg-slate-200 text-black hover:text-primary rounded-md transition-all md:hidden block cursor-pointer"
                       title="Close Navigation"
                     >
-                      <X size={18} />
+                      <X size={16} />
                     </button>
                   </>
                 ) : (
                   <div className="w-full flex justify-center py-1 md:block hidden">
                     <button
                       onClick={() => setCollapsed(false)}
-                      className="p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground rounded-lg transition-all"
+                      className="p-1 hover:bg-slate-200 text-black hover:text-primary rounded-md transition-all cursor-pointer"
                       title="Expand Sidebar"
                     >
                       <PanelLeft size={16} />
@@ -413,14 +412,14 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
               </div>
 
               {/* Navigation */}
-              <nav className="flex-1 space-y-0.5 px-3 py-3 overflow-y-auto">
-                <SidebarLink to="/" icon={<LayoutDashboard size={18} />} label="Dashboard" collapsed={isCollapsedResponsive} />
+              <nav className="flex-1 space-y-0.5 px-2.5 py-2.5 overflow-y-auto">
+                <SidebarLink to="/" icon={<LayoutDashboard size={17} />} label="Dashboard" collapsed={isCollapsedResponsive} />
 
                 <SidebarSection label="Business" collapsed={isCollapsedResponsive} />
 
                 <SidebarDropdown
                   label="eCustomers"
-                  icon={<Users size={18} />}
+                  icon={<Users size={17} />}
                   collapsed={isCollapsedResponsive}
                   permission="Customer.View"
                   links={[
@@ -431,7 +430,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
 
                 <SidebarDropdown
                   label="eServices"
-                  icon={<Briefcase size={18} />}
+                  icon={<Briefcase size={17} />}
                   collapsed={isCollapsedResponsive}
                   permission="Customer.View"
                   links={[
@@ -443,7 +442,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
 
                 <SidebarDropdown
                   label="eQuotations"
-                  icon={<FileText size={18} />}
+                  icon={<FileText size={17} />}
                   collapsed={isCollapsedResponsive}
                   permission="Sales.View"
                   links={[
@@ -454,7 +453,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
 
                 <SidebarDropdown
                   label="Invoices"
-                  icon={<Receipt size={18} />}
+                  icon={<Receipt size={17} />}
                   collapsed={isCollapsedResponsive}
                   permission="Sales.View"
                   links={[
@@ -467,7 +466,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
 
                 <SidebarDropdown
                   label="ePayments"
-                  icon={<DollarSign size={18} />}
+                  icon={<DollarSign size={17} />}
                   collapsed={isCollapsedResponsive}
                   permission="Payments.View"
                   links={[
@@ -478,7 +477,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
 
                 <SidebarDropdown
                   label="eExpenses"
-                  icon={<TrendingDown size={18} />}
+                  icon={<TrendingDown size={17} />}
                   collapsed={isCollapsedResponsive}
                   permission="Expenses.View"
                   links={[
@@ -490,12 +489,12 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
 
             <SidebarSection label="Administration" collapsed={isCollapsedResponsive} />
 
-            <SidebarLink to="/rbac" icon={<UserCheck size={18} />} label="Users & Roles" collapsed={isCollapsedResponsive} permission="Users.View" />
-            <SidebarLink to="/expiry-tracker" icon={<Calendar size={18} />} label="Expiry Tracker" collapsed={isCollapsedResponsive} permission="Sales.View" badge={expiryCount > 0 ? expiryCount : undefined} />
-            <SidebarLink to="/reports" icon={<FileBarChart2 size={18} />} label="Reports" collapsed={isCollapsedResponsive} permission="Reports.View" />
+            <SidebarLink to="/rbac" icon={<UserCheck size={17} />} label="Users & Roles" collapsed={isCollapsedResponsive} permission="Users.View" />
+            <SidebarLink to="/expiry-tracker" icon={<Calendar size={17} />} label="Expiry Tracker" collapsed={isCollapsedResponsive} permission="Sales.View" badge={expiryCount > 0 ? expiryCount : undefined} />
+            <SidebarLink to="/reports" icon={<FileBarChart2 size={17} />} label="Reports" collapsed={isCollapsedResponsive} permission="Reports.View" />
             <SidebarDropdown
               label="Settings"
-              icon={<Settings size={18} />}
+              icon={<Settings size={17} />}
               collapsed={isCollapsedResponsive}
               permission="Settings.Update"
               links={[
@@ -508,32 +507,32 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
         </div>
 
         {/* Sidebar Footer */}
-        <div className="p-3 border-t border-border space-y-2">
+        <div className="p-2.5 border-t border-slate-200 space-y-1.5 bg-[#f1f5f9]">
           {/* Branch Selector (Sidebar version) */}
           {!isCollapsedResponsive && (
             <div className="relative w-full">
               <button
                 onClick={() => { setShowBranchSwitcher(!showBranchSwitcher); setShowUserSwitcher(false); }}
-                className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg border border-border bg-muted/20 hover:bg-muted text-xs font-semibold text-foreground transition-all cursor-pointer ${
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-black transition-all cursor-pointer shadow-2xs ${
                   !isAdmin ? 'opacity-75 cursor-not-allowed' : ''
                 }`}
                 disabled={!isAdmin}
               >
                 <div className="flex items-center gap-2 truncate">
-                  <Building size={14} className="text-primary shrink-0" />
+                  <Building size={13} className="text-primary shrink-0" />
                   <span className="truncate">{activeBranchName}</span>
                 </div>
-                {isAdmin && <ChevronsUpDown size={12} className="text-muted-foreground shrink-0" />}
+                {isAdmin && <ChevronsUpDown size={11} className="text-black shrink-0" />}
               </button>
 
               {showBranchSwitcher && isAdmin && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowBranchSwitcher(false)} />
-                  <div className="absolute left-0 bottom-full mb-2 w-56 rounded-xl border border-border bg-card shadow-xl z-50 p-1.5">
-                    <div className="px-2 py-1 text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">Branch View</div>
+                  <div className="absolute left-0 bottom-full mb-2 w-56 rounded-lg border border-slate-200 bg-white shadow-xl z-50 p-1.5 animate-scale-in">
+                    <div className="px-2 py-1 text-[9px] font-bold text-black uppercase tracking-wider font-heading">Branch View</div>
                     <button
                       onClick={() => { setActiveBranchId('all'); setShowBranchSwitcher(false); }}
-                      className="w-full text-left flex items-center justify-between px-2.5 py-1.5 text-xs rounded-lg hover:bg-accent transition-colors font-medium text-foreground cursor-pointer"
+                      className="w-full text-left flex items-center justify-between px-2.5 py-1.5 text-xs rounded-md hover:bg-slate-100 transition-colors font-bold text-black cursor-pointer"
                     >
                       <span>All Branches</span>
                       {activeBranchId === 'all' && <Check size={12} className="text-primary" />}
@@ -542,7 +541,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                       <button
                         key={b.id}
                         onClick={() => { setActiveBranchId(b.id); setShowBranchSwitcher(false); }}
-                        className="w-full text-left flex items-center justify-between px-2.5 py-1.5 text-xs rounded-lg hover:bg-accent transition-colors font-medium text-foreground cursor-pointer"
+                        className="w-full text-left flex items-center justify-between px-2.5 py-1.5 text-xs rounded-md hover:bg-slate-100 transition-colors font-bold text-black cursor-pointer"
                       >
                         <span className="truncate">{b.name}</span>
                         {activeBranchId === b.id && <Check size={12} className="text-primary" />}
@@ -558,28 +557,28 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
           <div className="relative w-full">
             <button
               onClick={() => { setShowUserSwitcher(!showUserSwitcher); setShowBranchSwitcher(false); }}
-              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border border-border bg-muted/20 hover:bg-muted text-xs font-semibold text-foreground transition-all cursor-pointer"
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-black transition-all cursor-pointer shadow-2xs"
             >
               <div className="flex items-center gap-2 truncate">
-                <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-[10px] uppercase shrink-0">
+                <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-[10px] uppercase shrink-0 font-heading">
                   {user?.name.charAt(0)}
                 </div>
                 {!isCollapsedResponsive && (
                   <div className="text-left truncate">
-                    <div className="font-bold text-[11px] leading-none truncate">{user?.name}</div>
-                    <div className="text-[9px] text-muted-foreground leading-none mt-0.5 truncate">{currentUserRoleName}</div>
+                    <div className="font-bold text-[11px] leading-none truncate text-black">{user?.name}</div>
+                    <div className="text-[9px] text-black/75 leading-none mt-0.5 truncate font-semibold">{currentUserRoleName}</div>
                   </div>
                 )}
               </div>
-              {!isCollapsedResponsive && <ChevronsUpDown size={12} className="text-muted-foreground shrink-0" />}
+              {!isCollapsedResponsive && <ChevronsUpDown size={11} className="text-black shrink-0" />}
             </button>
 
             {showUserSwitcher && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowUserSwitcher(false)} />
-                <div className="absolute left-0 bottom-full mb-2 w-60 rounded-xl border border-border bg-card shadow-xl z-50 p-2">
-                  <div className="px-2 py-1 border-b border-border pb-1.5 mb-1.5">
-                    <div className="font-bold text-xs flex items-center gap-1.5 text-foreground">
+                <div className="absolute left-0 bottom-full mb-2 w-60 rounded-lg border border-slate-200 bg-white shadow-xl z-50 p-1.5">
+                  <div className="px-2 py-1 border-b border-slate-100 pb-1.5 mb-1">
+                    <div className="font-bold text-xs flex items-center gap-1.5 text-black font-heading">
                       <Shield size={12} className="text-primary" />
                       Impersonate Profile
                     </div>
@@ -591,15 +590,15 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                         <button
                           key={u.id}
                           onClick={() => handleImpersonate(u.email)}
-                          className={`w-full text-left px-2 py-1.5 rounded-lg text-[11px] hover:bg-accent transition-colors flex items-center justify-between font-medium text-foreground cursor-pointer ${
-                            isCurrent ? 'bg-accent font-bold text-primary' : ''
+                          className={`w-full text-left px-2 py-1.5 rounded-md text-[11px] hover:bg-slate-100 transition-colors flex items-center justify-between font-bold text-black cursor-pointer ${
+                            isCurrent ? 'bg-primary/10 font-bold text-primary' : ''
                           }`}
                         >
                           <div className="truncate">
-                            <div className="truncate">{u.name}</div>
-                            <div className="text-[9px] text-muted-foreground truncate">{u.role?.name} • {u.branch?.name}</div>
+                            <div className="truncate font-bold text-black">{u.name}</div>
+                            <div className="text-[9px] text-black/70 truncate font-semibold">{u.role?.name} • {u.branch?.name}</div>
                           </div>
-                          {isCurrent && <Check size={10} />}
+                          {isCurrent && <Check size={12} className="text-primary" />}
                         </button>
                       );
                     })}
@@ -611,13 +610,13 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
 
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2 text-destructive/70 hover:text-destructive hover:bg-destructive/5 rounded-lg transition-colors group relative text-[13px] font-bold cursor-pointer"
+            className="w-full flex items-center gap-2.5 px-2.5 py-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors group relative text-xs font-semibold cursor-pointer"
           >
-            <LogOut size={18} className="group-hover:-translate-x-0.5 transition-transform" />
-            {!isCollapsedResponsive && <span className="font-medium">Log Out</span>}
+            <LogOut size={15} className="group-hover:-translate-x-0.5 transition-transform" />
+            {!isCollapsedResponsive && <span>Sign Out</span>}
             {isCollapsedResponsive && (
-              <div className="absolute left-full ml-3 px-2.5 py-1.5 bg-foreground text-white text-xs font-medium rounded-md opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-150 shadow-lg z-[60] whitespace-nowrap">
-                Log Out
+              <div className="absolute left-full ml-3 px-2 py-1 bg-slate-900 text-white text-xs font-medium rounded-md opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-150 shadow-md z-[60] whitespace-nowrap">
+                Sign Out
               </div>
             )}
           </button>
@@ -629,12 +628,12 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
       {/* ═══════ MAIN CONTENT ═══════ */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Speed Bar (Desktop + Mobile) */}
-        <header className="h-14 border-b border-border flex items-center justify-between px-4 bg-card shrink-0 shadow-2xs">
+        <header className="h-14 border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 bg-white shrink-0 shadow-2xs">
           {/* Left section: Mobile menu & Global Quick Search button */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileOpen(true)}
-              className="p-2 hover:bg-muted text-muted-foreground hover:text-foreground rounded-lg transition-all md:hidden cursor-pointer"
+              className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-800 rounded-md transition-all md:hidden cursor-pointer"
               title="Open Navigation"
             >
               <Menu size={18} />
@@ -643,7 +642,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
             {/* Quick Command Palette Button */}
             <button
               onClick={() => setCommandPaletteOpen(true)}
-              className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-border bg-muted/30 hover:bg-muted text-muted-foreground hover:text-foreground transition-all text-xs font-semibold w-52 sm:w-80 justify-between cursor-pointer"
+              className="flex items-center gap-2.5 px-3 py-1.5 rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-all text-xs font-medium w-52 sm:w-80 justify-between cursor-pointer"
             >
               <div className="flex items-center gap-2 truncate">
                 <Search size={14} className="text-primary shrink-0" />
@@ -656,13 +655,13 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
           {/* Right section: Live Time & Quick Invoice button */}
           <div className="flex items-center gap-2.5">
             {/* Live Clock */}
-            <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/40 border border-border text-[11px] font-mono text-muted-foreground font-semibold">
+            <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-50 border border-slate-200 text-[11px] font-mono text-slate-600 font-semibold">
               <Clock size={12} className="text-primary" />
               <span>{currentTime}</span>
             </div>
 
             {/* Branch Badge */}
-            <div className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary/5 text-primary text-xs font-bold border border-primary/20">
+            <div className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-md bg-sky-50 text-sky-700 text-xs font-bold border border-sky-200 font-heading">
               <Building size={12} />
               <span className="truncate max-w-[120px]">{activeBranchName}</span>
             </div>
@@ -670,10 +669,10 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
             {/* Global New Invoice F2 Button */}
             <button
               onClick={() => navigate('/sales/create')}
-              className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold shadow-md shadow-primary/20 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-3 py-1.5 sm:px-3.5 sm:py-1.5 rounded-md text-xs font-bold shadow-xs transition-all cursor-pointer font-heading"
               title="Create New Invoice (Press F2)"
             >
-              <Plus size={15} />
+              <Plus size={14} />
               <span className="hidden sm:inline">New Invoice</span>
               <kbd className="bg-white/20 text-white border-white/30 text-[9px] px-1 py-0.2 ml-0.5">F2</kbd>
             </button>
@@ -681,7 +680,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-3 sm:p-5 bg-background">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#f8fafc]">
           <div className="mx-auto w-full">
             {children}
           </div>

@@ -10,6 +10,8 @@ import {
   Minus,
   Trash2,
   User,
+  Building2,
+  Users,
   FileText,
   Percent,
   ChevronLeft,
@@ -34,10 +36,14 @@ export const CreateQuotation: React.FC = () => {
   // Form States
   const [customerType, setCustomerType] = useState<'existing' | 'new'>('existing');
   const [customerId, setCustomerId] = useState('');
+  const [newCustomerType, setNewCustomerType] = useState<'individual' | 'company'>('individual');
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerPhone, setNewCustomerPhone] = useState('');
   const [newCustomerEmail, setNewCustomerEmail] = useState('');
   const [newCustomerAddress, setNewCustomerAddress] = useState('');
+  const [newCompanyMembers, setNewCompanyMembers] = useState<{ id?: string; name: string; phone?: string; email?: string }[]>([]);
+  const [newMemberName, setNewMemberName] = useState('');
+  const [newMemberPhone, setNewMemberPhone] = useState('');
   const [branchId, setBranchId] = useState('');
   const [discount, setDiscount] = useState(0);
   const [notes, setNotes] = useState('');
@@ -52,14 +58,16 @@ export const CreateQuotation: React.FC = () => {
   const [selectedTermIds, setSelectedTermIds] = useState<string[]>([]);
 
   const selectedCustomerRecord = customers.find(c => c.id === customerId);
-  const isCompanySelected = selectedCustomerRecord?.customer_type === 'company';
-  const companyEmployees = isCompanySelected && selectedCustomerRecord?.members
-    ? selectedCustomerRecord.members
-    : [];
+  const isCompanySelected = customerType === 'existing'
+    ? selectedCustomerRecord?.customer_type === 'company'
+    : newCustomerType === 'company';
+  const companyEmployees = customerType === 'existing'
+    ? (isCompanySelected && selectedCustomerRecord?.members ? selectedCustomerRecord.members : [])
+    : (newCustomerType === 'company' ? newCompanyMembers : []);
 
   useEffect(() => {
     setCart([]);
-  }, [customerId, customerType]);
+  }, [customerId, customerType, newCustomerType]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -154,17 +162,27 @@ export const CreateQuotation: React.FC = () => {
       let finalCustomerId = customerId;
       if (customerType === 'new') {
         if (!newCustomerName.trim()) {
-          setErrorMsg('New customer name is required.');
+          setErrorMsg(newCustomerType === 'company' ? 'Company name is required.' : 'Customer name is required.');
           setSaving(false);
           return;
         }
-        const createdCust = await db.customers.create({
+        const custPayload: any = {
           name: newCustomerName.trim(),
-          phone: newCustomerPhone.trim() || '+880000000000',
+          phone: newCustomerPhone.trim() || undefined,
           email: newCustomerEmail.trim() || undefined,
           address: newCustomerAddress.trim() || undefined,
-          notes: 'Registered via billing counter.'
-        });
+          notes: 'Registered via billing counter.',
+          customer_type: newCustomerType
+        };
+        if (newCustomerType === 'company') {
+          custPayload.members = newCompanyMembers.filter(m => m.name.trim()).map(m => ({
+            id: m.id || crypto.randomUUID(),
+            name: m.name.trim(),
+            phone: m.phone?.trim() || undefined,
+            email: m.email?.trim() || undefined
+          }));
+        }
+        const createdCust = await db.customers.create(custPayload);
         finalCustomerId = createdCust.id;
       }
 
@@ -480,49 +498,153 @@ export const CreateQuotation: React.FC = () => {
                 </div>
               ) : (
                 <div className="space-y-3 pt-2">
+                  {/* Company vs Individual Toggle */}
                   <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground">Name *</label>
+                    <label className="text-[10px] uppercase tracking-wider font-extrabold text-black">Account Type *</label>
+                    <div className="flex rounded-lg bg-white p-0.5 border border-slate-200 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setNewCustomerType('individual')}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer ${
+                          newCustomerType === 'individual'
+                            ? 'bg-primary text-white shadow-xs'
+                            : 'text-slate-600 hover:text-black'
+                        }`}
+                      >
+                        <User size={13} /> Individual
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewCustomerType('company')}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer ${
+                          newCustomerType === 'company'
+                            ? 'bg-primary text-white shadow-xs'
+                            : 'text-slate-600 hover:text-black'
+                        }`}
+                      >
+                        <Building2 size={13} /> Company
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider font-extrabold text-black">
+                      {newCustomerType === 'company' ? 'Company / Trade Name *' : 'Full Name *'}
+                    </label>
                     <input
                       type="text"
-                      placeholder="Customer Name"
+                      placeholder={newCustomerType === 'company' ? 'E.g. Al Safa Transport LLC' : 'E.g. Mohammed Ali'}
                       value={newCustomerName}
                       onChange={(e) => setNewCustomerName(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-muted/30 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-md text-xs font-medium text-black"
                     />
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground">Phone Number</label>
-                    <input
-                      type="text"
-                      placeholder="+971500000000"
-                      value={newCustomerPhone}
-                      onChange={(e) => setNewCustomerPhone(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-muted/30 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                    />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-wider font-extrabold text-black">Phone</label>
+                      <input
+                        type="text"
+                        placeholder="+971 50 000 0000"
+                        value={newCustomerPhone}
+                        onChange={(e) => setNewCustomerPhone(e.target.value)}
+                        className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-md text-xs font-medium text-black"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-wider font-extrabold text-black">Email</label>
+                      <input
+                        type="email"
+                        placeholder="client@gmail.com"
+                        value={newCustomerEmail}
+                        onChange={(e) => setNewCustomerEmail(e.target.value)}
+                        className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-md text-xs font-medium text-black"
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground">Email</label>
-                    <input
-                      type="email"
-                      placeholder="client@gmail.com"
-                      value={newCustomerEmail}
-                      onChange={(e) => setNewCustomerEmail(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-muted/30 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground">Address</label>
+                    <label className="text-[10px] uppercase tracking-wider font-extrabold text-black">Address</label>
                     <input
                       type="text"
                       placeholder="Musaffah M37, Abu Dhabi"
                       value={newCustomerAddress}
                       onChange={(e) => setNewCustomerAddress(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-muted/30 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-md text-xs font-medium text-black"
                     />
                   </div>
+
+                  {/* Company Staff / Members Section */}
+                  {newCustomerType === 'company' && (
+                    <div className="pt-2 border-t border-slate-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] uppercase tracking-wider font-extrabold text-black flex items-center gap-1">
+                          <Users size={12} className="text-primary" />
+                          <span>Persons / Staff Under Company</span>
+                        </label>
+                        <span className="text-[10px] text-slate-500 font-semibold">{newCompanyMembers.length} added</span>
+                      </div>
+
+                      {/* Add Person Inline Bar */}
+                      <div className="space-y-1.5 bg-white p-2 rounded-lg border border-slate-200">
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <input
+                            type="text"
+                            placeholder="Person / Employee Name"
+                            value={newMemberName}
+                            onChange={(e) => setNewMemberName(e.target.value)}
+                            className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-black text-xs font-medium"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Phone (Optional)"
+                            value={newMemberPhone}
+                            onChange={(e) => setNewMemberPhone(e.target.value)}
+                            className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded text-black text-xs font-medium"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!newMemberName.trim()) return;
+                            setNewCompanyMembers([...newCompanyMembers, {
+                              id: crypto.randomUUID(),
+                              name: newMemberName.trim(),
+                              phone: newMemberPhone.trim() || undefined
+                            }]);
+                            setNewMemberName('');
+                            setNewMemberPhone('');
+                          }}
+                          className="w-full py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold rounded text-xs transition-colors flex items-center justify-center gap-1 border border-sky-200 cursor-pointer"
+                        >
+                          <Plus size={12} /> Add Person
+                        </button>
+                      </div>
+
+                      {/* List of Added Members */}
+                      {newCompanyMembers.length > 0 && (
+                        <div className="space-y-1 max-h-32 overflow-y-auto pr-0.5">
+                          {newCompanyMembers.map((m, idx) => (
+                            <div key={m.id || idx} className="flex items-center justify-between p-1.5 bg-white rounded border border-slate-200 text-xs">
+                              <div className="truncate">
+                                <span className="font-bold text-black">{m.name}</span>
+                                {m.phone && <span className="text-[10px] text-slate-500 ml-1.5">({m.phone})</span>}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setNewCompanyMembers(newCompanyMembers.filter((_, i) => i !== idx))}
+                                className="text-slate-400 hover:text-rose-600 p-0.5 transition-colors cursor-pointer"
+                                title="Remove Person"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

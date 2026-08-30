@@ -136,70 +136,75 @@ export const ServicesList: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="glass border border-border rounded-2xl overflow-hidden shadow-xl">
+                <div className="table-container">
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-secondary/40 border-b border-border text-muted-foreground text-xs uppercase font-semibold">
+                    <table>
+                      <thead>
                         <tr>
-                          <th className="px-4 py-4 text-center w-12">SL</th>
-                          <th className="px-6 py-4">Service Name</th>
-                          <th className="px-6 py-4">Category</th>
-                          <th className="px-6 py-4">Base Price</th>
-                          <th className="px-6 py-4">Status</th>
-                          <th className="px-6 py-4 text-right">Actions</th>
+                          <th className="text-center" style={{ width: '45px' }}>SL</th>
+                          <th>Service Name</th>
+                          <th>Category</th>
+                          <th className="text-right">Selling Price</th>
+                          <th className="text-right">Our Expense</th>
+                          <th className="text-center" style={{ width: '120px' }}>Actions</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-border/60">
+                      <tbody>
                         {services.length === 0 ? (
                           <tr>
-                            <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
-                              No service items registered. Please add service items.
+                            <td colSpan={6} className="py-12 text-center text-slate-500">
+                              <div className="max-w-xs mx-auto space-y-1">
+                                <div className="font-bold text-black text-sm font-heading">No service items registered</div>
+                                <div className="text-xs text-slate-500">Click "Add Service Item" to create services.</div>
+                              </div>
                             </td>
                           </tr>
                         ) : (
                           services.map((s, idx) => (
-                            <tr key={s.id} className="hover:bg-muted/25 transition-colors">
-                              <td className="px-4 py-4 text-center text-muted-foreground font-semibold">
+                            <tr key={s.id}>
+                              <td className="text-center font-semibold text-xs text-slate-500">
                                 {idx + 1}
                               </td>
-                              <td className="px-6 py-4">
-                                <div className="font-semibold text-foreground">{s.name}</div>
-                                {s.description && <div className="text-xs text-muted-foreground mt-0.5">{s.description}</div>}
+                              <td>
+                                <div className="font-bold text-black text-xs leading-tight">{s.name}</div>
                               </td>
-                              <td className="px-6 py-4">
-                                <span className="inline-flex items-center gap-1 text-xs text-primary font-semibold">
-                                  <Tag size={12} />
+                              <td>
+                                <span className="inline-flex items-center gap-1 text-xs text-slate-700 font-medium">
+                                  <Tag size={12} className="text-primary" />
                                   {s.category?.name || 'Uncategorized'}
                                 </span>
                               </td>
-                              <td className="px-6 py-4 text-foreground font-bold">
+                              <td className="text-right font-black text-black text-xs font-heading">
                                 {s.price.toFixed(2)} AED
                               </td>
-                              <td className="px-6 py-4">
-                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                                  s.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                                  'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20'
-                                }`}>
-                                  {s.status}
-                                </span>
+                              <td className="text-right font-bold text-slate-700 text-xs font-heading">
+                                {s.expense !== undefined && s.expense > 0 ? (
+                                  <span className="text-rose-600 font-bold">{s.expense.toFixed(2)} AED</span>
+                                ) : (
+                                  <span className="text-slate-400 font-normal">0.00 AED</span>
+                                )}
                               </td>
-                              <td className="px-6 py-4 text-right space-x-2">
-                                {hasPermission('Customer.Update') && (
-                                  <button
-                                    onClick={() => navigate(`/services/edit/${s.id}`)}
-                                    className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors"
-                                  >
-                                    <Edit2 size={14} />
-                                  </button>
-                                )}
-                                {hasPermission('Customer.Delete') && (
-                                  <button
-                                    onClick={() => handleDeleteService(s.id)}
-                                    className="p-1.5 hover:bg-destructive/10 rounded text-muted-foreground hover:text-destructive transition-colors"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                )}
+                              <td>
+                                <div className="flex items-center justify-center gap-1.5">
+                                  {hasPermission('Customer.Update') && (
+                                    <button
+                                      onClick={() => navigate(`/services/edit/${s.id}`)}
+                                      className="p-1 hover:bg-slate-100 rounded text-slate-600 hover:text-black transition-colors cursor-pointer"
+                                      title="Edit Service"
+                                    >
+                                      <Edit2 size={14} />
+                                    </button>
+                                  )}
+                                  {hasPermission('Customer.Delete') && (
+                                    <button
+                                      onClick={() => handleDeleteService(s.id)}
+                                      className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                      title="Delete Service"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           ))

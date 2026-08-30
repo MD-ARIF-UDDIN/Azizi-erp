@@ -208,73 +208,80 @@ export const ExpenseList: React.FC = () => {
                 </div>
 
                 {/* Expenses Log Table */}
-                <div className="glass border border-border rounded-2xl overflow-hidden shadow-xl">
+                <div className="table-container">
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-secondary/40 border-b border-border text-muted-foreground text-xs uppercase font-semibold">
+                    <table>
+                      <thead>
                         <tr>
-                          <th className="px-4 py-4 text-center w-12">SL</th>
-                          <th className="px-6 py-4">Expense Date</th>
-                          <th className="px-6 py-4">Category</th>
-                          <th className="px-6 py-4">Branch</th>
-                          <th className="px-6 py-4">Paid To</th>
-                          <th className="px-6 py-4">Method</th>
-                          <th className="px-6 py-4 text-right">Amount</th>
-                          <th className="px-6 py-4 text-right">Actions</th>
+                          <th className="text-center" style={{ width: '45px' }}>SL</th>
+                          <th>Expense Date</th>
+                          <th>Category</th>
+                          <th>Branch</th>
+                          <th>Paid To</th>
+                          <th>Method</th>
+                          <th className="text-right">Amount</th>
+                          <th className="text-center" style={{ width: '120px' }}>Actions</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-border/60">
+                      <tbody>
                         {filteredExpenses.length === 0 ? (
                           <tr>
-                            <td colSpan={8} className="px-6 py-12 text-center text-muted-foreground">
-                              No expense records matching filters were found.
+                            <td colSpan={8} className="py-12 text-center text-slate-500">
+                              <div className="max-w-xs mx-auto space-y-1">
+                                <div className="font-bold text-black text-sm font-heading">No expense records found</div>
+                                <div className="text-xs text-slate-500">No expense records matching the filters were found.</div>
+                              </div>
                             </td>
                           </tr>
                         ) : (
                           filteredExpenses.map((e, idx) => (
-                            <tr key={e.id} className="hover:bg-muted/25 transition-colors">
-                              <td className="px-4 py-4 text-center text-muted-foreground font-semibold">
+                            <tr key={e.id}>
+                              <td className="text-center font-semibold text-xs text-slate-500">
                                 {idx + 1}
                               </td>
-                              <td className="px-6 py-4 text-foreground">
-                                <div className="font-semibold">{e.expense_date}</div>
-                                {e.description && <div className="text-[10px] text-muted-foreground mt-0.5">{e.description}</div>}
+                              <td>
+                                <div className="font-bold text-black text-xs leading-tight">{e.expense_date}</div>
+                                {e.description && <div className="text-[11px] text-slate-500 mt-0.5">{e.description}</div>}
                               </td>
-                              <td className="px-6 py-4">
-                                <span className="inline-flex items-center gap-1 text-xs text-primary font-semibold">
-                                  <Tag size={12} />
+                              <td>
+                                <span className="inline-flex items-center gap-1 text-xs text-slate-700 font-medium">
+                                  <Tag size={12} className="text-primary" />
                                   {e.category?.name || 'General'}
                                 </span>
                               </td>
-                              <td className="px-6 py-4 text-muted-foreground text-xs font-semibold">
+                              <td className="text-slate-600 text-xs font-semibold">
                                 {e.branch?.name}
                               </td>
-                              <td className="px-6 py-4 text-foreground font-medium">
-                                {e.paid_to || 'N/A'}
+                              <td className="text-black font-semibold text-xs">
+                                {e.paid_to || '—'}
                               </td>
-                              <td className="px-6 py-4 text-muted-foreground text-xs">
+                              <td className="text-slate-600 text-xs">
                                 {e.payment_method}
                               </td>
-                              <td className="px-6 py-4 text-right font-bold text-rose-400">
+                              <td className="text-right font-black text-rose-700 text-xs font-heading">
                                 -{e.amount.toFixed(2)} AED
                               </td>
-                              <td className="px-6 py-4 text-right space-x-1">
-                                {hasPermission('Expenses.Update') && (
-                                  <button
-                                    onClick={() => navigate(`/expenses/edit/${e.id}`)}
-                                    className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors"
-                                  >
-                                    <Edit2 size={13} />
-                                  </button>
-                                )}
-                                {hasPermission('Expenses.Delete') && (
-                                  <button
-                                    onClick={() => handleDeleteExpense(e.id)}
-                                    className="p-1.5 hover:bg-destructive/10 rounded text-muted-foreground hover:text-destructive transition-colors"
-                                  >
-                                    <Trash2 size={13} />
-                                  </button>
-                                )}
+                              <td>
+                                <div className="flex items-center justify-center gap-1.5">
+                                  {hasPermission('Expenses.Update') && (
+                                    <button
+                                      onClick={() => navigate(`/expenses/edit/${e.id}`)}
+                                      className="p-1 hover:bg-slate-100 rounded text-slate-600 hover:text-black transition-colors cursor-pointer"
+                                      title="Edit Expense"
+                                    >
+                                      <Edit2 size={13} />
+                                    </button>
+                                  )}
+                                  {hasPermission('Expenses.Delete') && (
+                                    <button
+                                      onClick={() => handleDeleteExpense(e.id)}
+                                      className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                      title="Delete Expense"
+                                    >
+                                      <Trash2 size={13} />
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           ))

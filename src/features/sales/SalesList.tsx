@@ -17,9 +17,7 @@ import {
   MessageSquare,
   Download,
   Pencil,
-  Trash2,
-  Building2,
-  Users
+  Trash2
 } from 'lucide-react';
 
 const handleWhatsAppShare = (sale: any) => {
@@ -338,41 +336,21 @@ export const SalesList: React.FC = () => {
 
         {/* SHIFT SUMMARY CARDS */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 print:hidden">
-          <div className="glass p-3.5 rounded-xl border border-border/80 flex items-center justify-between">
-            <div>
-              <div className="text-[11px] font-semibold text-muted-foreground uppercase">Today's Invoices</div>
-              <div className="text-xl font-bold text-foreground mt-0.5">{todaySales.length}</div>
-            </div>
-            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
-              #
-            </div>
+          <div className="glass p-3.5 rounded-xl border border-border">
+            <div className="text-[11px] font-bold text-black uppercase">Today's Invoices</div>
+            <div className="text-xl font-extrabold text-black font-heading mt-0.5">{todaySales.length}</div>
           </div>
-          <div className="glass p-3.5 rounded-xl border border-border/80 flex items-center justify-between">
-            <div>
-              <div className="text-[11px] font-semibold text-muted-foreground uppercase">Today's Total</div>
-              <div className="text-xl font-bold text-foreground mt-0.5">{todayTotalAmount.toFixed(2)} <span className="text-xs font-normal text-muted-foreground">AED</span></div>
-            </div>
-            <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 font-bold text-xs">
-              AED
-            </div>
+          <div className="glass p-3.5 rounded-xl border border-border">
+            <div className="text-[11px] font-bold text-black uppercase">Today's Total</div>
+            <div className="text-xl font-extrabold text-black font-heading mt-0.5">{todayTotalAmount.toFixed(2)} <span className="text-xs font-semibold text-black/70">AED</span></div>
           </div>
-          <div className="glass p-3.5 rounded-xl border border-border/80 flex items-center justify-between">
-            <div>
-              <div className="text-[11px] font-semibold text-muted-foreground uppercase">Today Collected</div>
-              <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">{todayPaidAmount.toFixed(2)} <span className="text-xs font-normal text-muted-foreground">AED</span></div>
-            </div>
-            <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-xs">
-              ✓
-            </div>
+          <div className="glass p-3.5 rounded-xl border border-border">
+            <div className="text-[11px] font-bold text-emerald-700 uppercase">Today Collected</div>
+            <div className="text-xl font-extrabold text-emerald-600 font-heading mt-0.5">{todayPaidAmount.toFixed(2)} <span className="text-xs font-semibold text-black/70">AED</span></div>
           </div>
-          <div className="glass p-3.5 rounded-xl border border-border/80 flex items-center justify-between">
-            <div>
-              <div className="text-[11px] font-semibold text-muted-foreground uppercase">Outstanding Dues</div>
-              <div className="text-xl font-bold text-rose-600 dark:text-rose-400 mt-0.5">{totalUnpaidDues.toFixed(2)} <span className="text-xs font-normal text-muted-foreground">AED</span></div>
-            </div>
-            <div className="w-9 h-9 rounded-lg bg-rose-500/10 flex items-center justify-center text-rose-600 dark:text-rose-400 font-bold text-xs">
-              !
-            </div>
+          <div className="glass p-3.5 rounded-xl border border-border">
+            <div className="text-[11px] font-bold text-rose-700 uppercase">Outstanding Dues</div>
+            <div className="text-xl font-extrabold text-rose-600 font-heading mt-0.5">{totalUnpaidDues.toFixed(2)} <span className="text-xs font-semibold text-black/70">AED</span></div>
           </div>
         </div>
 
@@ -385,7 +363,7 @@ export const SalesList: React.FC = () => {
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 quickFilter === 'all'
                   ? 'bg-primary text-white shadow-sm'
-                  : 'bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted'
+                  : 'bg-muted/50 text-slate-700 hover:text-black hover:bg-slate-200'
               }`}
             >
               All Invoices ({sales.length})
@@ -395,22 +373,22 @@ export const SalesList: React.FC = () => {
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
                 quickFilter === 'today'
                   ? 'bg-primary text-white shadow-sm'
-                  : 'bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted'
+                  : 'bg-muted/50 text-slate-700 hover:text-black hover:bg-slate-200'
               }`}
             >
-              <span>⚡ Today's Shift</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/20">{todaySales.length}</span>
+              <span>Today's Shift</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/10 font-bold">{todaySales.length}</span>
             </button>
             <button
               onClick={() => setQuickFilter('unpaid')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
                 quickFilter === 'unpaid'
                   ? 'bg-rose-500 text-white shadow-sm'
-                  : 'bg-muted/50 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10'
+                  : 'bg-muted/50 text-rose-700 hover:text-rose-900 hover:bg-rose-100'
               }`}
             >
-              <span>⚠️ Unpaid & Dues</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/20">
+              <span>Unpaid & Dues</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-200 font-bold">
                 {sales.filter(s => s.payment_status !== 'Paid').length}
               </span>
             </button>
@@ -419,10 +397,10 @@ export const SalesList: React.FC = () => {
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
                 quickFilter === 'completed'
                   ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'bg-muted/50 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10'
+                  : 'bg-muted/50 text-emerald-700 hover:text-emerald-900 hover:bg-emerald-100'
               }`}
             >
-              <span>✅ Completed</span>
+              <span>Completed</span>
             </button>
           </div>
 
@@ -503,32 +481,32 @@ export const SalesList: React.FC = () => {
           <div className="w-full space-y-4 print:hidden">
             {loading && sales.length === 0 ? (
               <div className="space-y-3">
-                <div className="h-10 bg-muted/30 rounded-xl animate-pulse" />
-                <div className="h-28 bg-muted/30 rounded-xl animate-pulse" />
+                <div className="h-10 bg-muted/30 rounded-md animate-pulse" />
+                <div className="h-28 bg-muted/30 rounded-md animate-pulse" />
               </div>
             ) : (
-              <div className="glass border border-border rounded-2xl overflow-hidden shadow-xl">
+              <div className="table-container">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left">
+                  <table>
                     <thead>
                       <tr>
-                        <th className="text-center w-12">#</th>
-                        <th>Invoice & Time</th>
+                        <th className="text-center" style={{ width: '45px' }}>SL</th>
+                        <th>Invoice ID & Time</th>
                         <th>Customer</th>
                         <th>Members / Persons</th>
                         <th>Job Status</th>
                         <th>Payment Status</th>
-                        <th className="text-right">Bill Total</th>
-                        <th className="text-center w-44">Quick Actions</th>
+                        <th className="text-right">Net Value</th>
+                        <th className="text-center" style={{ width: '160px' }}>Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border/50">
+                    <tbody>
                       {filteredSales.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                          <td colSpan={8} className="py-12 text-center text-slate-500">
                             <div className="max-w-xs mx-auto space-y-1">
-                              <div className="font-bold text-foreground">No matching invoices found</div>
-                              <div className="text-xs">Try adjusting your search query or quick filter chips above.</div>
+                              <div className="font-bold text-black text-sm font-heading">No matching invoices found</div>
+                              <div className="text-xs text-slate-500">Try adjusting your search query or quick filter chips above.</div>
                             </div>
                           </td>
                         </tr>
@@ -551,31 +529,29 @@ export const SalesList: React.FC = () => {
                               onClick={() => handleOpenDetail(s.id)}
                             >
                               {/* Serial */}
-                              <td className="text-center text-muted-foreground font-bold text-xs">
+                              <td className="text-center font-semibold text-xs text-slate-500">
                                 {idx + 1}
                               </td>
 
                               {/* Invoice & Time */}
                               <td>
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="font-mono font-bold text-xs tracking-tight text-foreground bg-muted/60 dark:bg-muted/40 hover:bg-muted px-2 py-0.5 rounded-md border border-border/80 inline-flex items-center gap-1 shadow-2xs">
-                                    <ReceiptText size={12} className="text-primary opacity-80 shrink-0" />
-                                    <span>#{s.invoice_no}</span>
+                                  <span className="font-mono font-bold text-xs tracking-tight text-black bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded border border-slate-200">
+                                    #{s.invoice_no}
                                   </span>
                                   {(s as any).quotation_id && (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                    <span className="badge badge-Draft text-[10px]">
                                       Quote
                                     </span>
                                   )}
                                 </div>
-                                <div className="text-[11px] text-muted-foreground mt-1 flex flex-wrap items-center gap-1.5 font-medium">
-                                  <span>{new Date(s.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                                  <span className="text-muted-foreground/40">•</span>
+                                <div className="text-[11px] text-slate-500 mt-1 flex flex-wrap items-center gap-1.5 font-medium">
+                                  <span className="text-black font-semibold">{new Date(s.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                  <span className="text-slate-300">•</span>
                                   <span>{new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                   {s.branch?.name && (
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-muted/60 text-[10px] font-semibold text-muted-foreground ml-0.5">
-                                      <Building2 size={10} className="text-primary/70 shrink-0" />
-                                      <span className="truncate max-w-[80px]">{s.branch.name}</span>
+                                    <span className="px-1.5 py-0.2 rounded bg-slate-100 text-[10px] font-semibold text-slate-700 ml-0.5 border border-slate-200 truncate max-w-[90px]">
+                                      {s.branch.name}
                                     </span>
                                   )}
                                 </div>
@@ -583,19 +559,19 @@ export const SalesList: React.FC = () => {
 
                               {/* Customer */}
                               <td>
-                                <div className="font-bold text-foreground text-xs leading-tight">
+                                <div className="font-bold text-black text-xs leading-tight">
                                   {s.customer ? (
                                     <span>{s.customer.name}</span>
                                   ) : (
-                                    <span className="text-muted-foreground font-normal italic">Walk-in Customer</span>
+                                    <span className="text-slate-500 font-normal italic">Walk-in Customer</span>
                                   )}
                                 </div>
-                                <div className="text-[11px] text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1.5">
+                                <div className="text-[11px] text-slate-600 mt-0.5 flex flex-wrap items-center gap-1.5">
                                   {s.customer?.phone ? (
-                                    <span>{s.customer?.phone}</span>
+                                    <span className="font-medium">{s.customer?.phone}</span>
                                   ) : null}
                                   {s.customer?.customer_type === 'company' && (
-                                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-500 font-semibold border border-blue-500/20">
+                                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-sky-50 text-sky-800 font-semibold border border-sky-200">
                                       Company
                                     </span>
                                   )}
@@ -606,29 +582,28 @@ export const SalesList: React.FC = () => {
                               <td>
                                 {memberNames.length > 0 ? (
                                   <div className="space-y-0.5">
-                                    <div className="font-semibold text-xs text-foreground max-w-[180px] truncate" title={memberNames.join(', ')}>
+                                    <div className="font-semibold text-xs text-black max-w-[180px] truncate" title={memberNames.join(', ')}>
                                       {memberNames.join(', ')}
                                     </div>
                                     {memberNames.length > 1 && (
-                                      <div className="text-[10px] text-muted-foreground font-medium flex items-center gap-1">
-                                        <Users size={10} className="text-primary" />
-                                        <span>{memberNames.length} persons</span>
+                                      <div className="text-[10px] text-slate-500 font-medium">
+                                        {memberNames.length} persons
                                       </div>
                                     )}
                                   </div>
                                 ) : (
-                                  <span className="text-muted-foreground text-xs italic">—</span>
+                                  <span className="text-slate-400 text-xs italic">—</span>
                                 )}
                               </td>
 
                               {/* Job Status */}
                               <td>
                                 <span
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-0.8 rounded-full text-[11px] font-bold border"
+                                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold border font-heading"
                                   style={{
-                                    borderColor: `${s.order_status?.color || '#10b981'}30`,
+                                    borderColor: `${s.order_status?.color || '#10b981'}40`,
                                     color: s.order_status?.color || '#10b981',
-                                    backgroundColor: `${s.order_status?.color || '#10b981'}12`
+                                    backgroundColor: `${s.order_status?.color || '#10b981'}10`
                                   }}
                                 >
                                   <span
@@ -642,24 +617,24 @@ export const SalesList: React.FC = () => {
                               {/* Payment Status & Due */}
                               <td>
                                 {s.payment_status === 'Paid' ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.8 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
-                                    ✓ Paid Full
+                                  <span className="badge badge-Paid">
+                                    Paid Full
                                   </span>
                                 ) : s.payment_status === 'Partially Paid' ? (
                                   <div>
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25">
+                                    <span className="badge badge-Partial">
                                       Partial
                                     </span>
-                                    <div className="text-[11px] font-bold text-amber-600 dark:text-amber-400 mt-0.5">
+                                    <div className="text-[11px] font-bold text-amber-700 mt-0.5 font-heading">
                                       Due: {remainingDue.toFixed(2)} AED
                                     </div>
                                   </div>
                                 ) : (
                                   <div>
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25">
+                                    <span className="badge badge-Unpaid">
                                       Unpaid
                                     </span>
-                                    <div className="text-[11px] font-bold text-rose-600 dark:text-rose-400 mt-0.5">
+                                    <div className="text-[11px] font-bold text-rose-700 mt-0.5 font-heading">
                                       Due: {remainingDue.toFixed(2)} AED
                                     </div>
                                   </div>
@@ -667,8 +642,8 @@ export const SalesList: React.FC = () => {
                               </td>
 
                               {/* Grand Total */}
-                              <td className="text-right font-black text-foreground text-sm">
-                                {s.grand_total.toFixed(2)} <span className="text-[10px] font-semibold text-muted-foreground">AED</span>
+                              <td className="text-right font-black text-black text-sm font-heading">
+                                {s.grand_total.toFixed(2)} <span className="text-[10px] font-medium text-slate-500">AED</span>
                               </td>
 
                               {/* Quick Actions */}
@@ -677,7 +652,7 @@ export const SalesList: React.FC = () => {
                                   {remainingDue > 0 && (
                                     <button
                                       onClick={() => handleOpenPayModal(s.id)}
-                                      className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer shadow-xs"
+                                      className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer shadow-xs font-heading"
                                       title="Collect Payment"
                                     >
                                       <CreditCard size={11} />

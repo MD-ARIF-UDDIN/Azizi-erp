@@ -88,6 +88,7 @@ export interface Service {
   name: string;
   description?: string;
   price: number;
+  expense?: number;
   status: 'Active' | 'Inactive';
   is_deleted: boolean;
   created_at: string;
