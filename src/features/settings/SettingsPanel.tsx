@@ -128,7 +128,6 @@ export const SettingsPanel: React.FC = () => {
         {/* HEADER */}
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground m-0">ERP Global Settings</h1>
-          <p className="text-sm text-muted-foreground">Configure profile descriptors, receipt headers, and custom order status queues.</p>
         </div>
 
         {/* TAB CONTROLS */}

@@ -136,11 +136,17 @@ export interface SaleItem {
   quantity: number;
   unit_price: number;
   subtotal: number;
+  expense?: number;
+  account_id?: string;
+  expense_id?: string;
   person_name?: string;
   service_date?: string;
   staff_id?: string;
+  notes?: string;
   staff?: User;
   service?: Service;
+  account?: Account;
+  expenses?: Expense[];
   created_at: string;
   updated_at: string;
 }
@@ -150,9 +156,11 @@ export interface Payment {
   sale_id: string;
   amount: number;
   payment_method: 'Cash' | 'Card' | 'Mobile Banking' | 'Bank Transfer';
+  account_id?: string;
   transaction_no?: string;
   payment_date: string;
   notes?: string;
+  person_name?: string;
   received_by?: string;
   is_deleted: boolean;
   created_at: string;
@@ -179,6 +187,9 @@ export interface Expense {
   description?: string;
   paid_to?: string;
   payment_method: 'Cash' | 'Card' | 'Mobile Banking' | 'Bank Transfer';
+  sale_id?: string;
+  sale_item_id?: string;
+  account_id?: string;
   is_deleted: boolean;
   created_at: string;
   updated_at: string;
@@ -272,5 +283,60 @@ export interface TermsConditions {
   is_deleted: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface Account {
+  id: string;
+  name: string;
+  type: 'card' | 'cash_drawer' | 'bank' | 'other';
+  bank_name?: string;
+  account_number?: string;
+  balance: number;
+  branch_id?: string;
+  is_active: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+  updated_by?: string;
+  branch?: Branch;
+}
+
+export interface AccountTransaction {
+  id: string;
+  account_id: string;
+  transaction_type: 'deposit' | 'withdrawal' | 'expense' | 'income' | 'transfer';
+  amount: number;
+  balance_after?: number;
+  sale_id?: string;
+  expense_id?: string;
+  payment_id?: string;
+  related_account_id?: string;
+  description?: string;
+  reference_no?: string;
+  created_at: string;
+  created_by?: string;
+  account?: Account;
+  related_account?: Account;
+}
+
+export interface JournalEntry {
+  id: string;
+  entry_date: string;
+  entry_type: 'cash_in' | 'cash_out' | 'transfer' | 'adjustment';
+  from_account: string;
+  to_account: string;
+  from_account_id?: string;
+  to_account_id?: string;
+  amount: number;
+  sale_id?: string;
+  payment_id?: string;
+  expense_id?: string;
+  reference_no?: string;
+  description?: string;
+  performed_by?: string;
+  created_at: string;
+  created_by?: string;
+  creator?: User;
 }
 

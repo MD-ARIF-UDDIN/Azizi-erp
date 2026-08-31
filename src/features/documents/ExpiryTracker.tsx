@@ -188,7 +188,6 @@ export const ExpiryTracker: React.FC = () => {
           <div>
             <div className="text-xs font-bold text-primary uppercase tracking-wider mb-0.5">Renewals Hub</div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground m-0">Visa & Expiry Tracker</h1>
-            <p className="text-sm text-muted-foreground mt-1">Track document validity timelines and follow up with clients for renewals.</p>
           </div>
           <button
             onClick={() => {
@@ -367,17 +366,17 @@ export const ExpiryTracker: React.FC = () => {
                       {doc.notified ? 'Notified' : 'Mark Notified'}
                     </button>
 
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => handleEdit(doc)}
-                        className="p-1.5 hover:bg-muted text-muted-foreground hover:text-primary rounded-lg transition-colors cursor-pointer"
+                        className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-black flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                         title="Edit Expiry Tracking"
                       >
                         <Edit2 size={13} />
                       </button>
                       <button
                         onClick={() => handleDelete(doc.id)}
-                        className="p-1.5 hover:bg-muted text-muted-foreground hover:text-destructive rounded-lg transition-colors cursor-pointer"
+                        className="w-7 h-7 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-500 hover:text-rose-700 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                         title="Remove Tracking"
                       >
                         <Trash2 size={13} />
@@ -405,7 +404,6 @@ export const ExpiryTracker: React.FC = () => {
                 <h2 className="font-bold text-foreground text-base m-0">
                   {editingDocId ? 'Edit Document Details' : 'Track New Document Expiry'}
                 </h2>
-                <p className="text-xs text-muted-foreground mt-1">Specify document details and date of validity expiration.</p>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4 text-xs">

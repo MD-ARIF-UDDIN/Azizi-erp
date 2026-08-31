@@ -19,10 +19,13 @@ import { PaymentList } from './features/payments/PaymentList';
 import { PaymentForm } from './features/payments/PaymentForm';
 import { RbacList } from './features/rbac/RbacList';
 import { ReportsCenter } from './features/reports/ReportsCenter';
+import { DailySheet } from './features/reports/DailySheet';
 import { SettingsPanel } from './features/settings/SettingsPanel';
 import { ExpiryTracker } from './features/documents/ExpiryTracker';
 import { QuotationsList } from './features/quotations/QuotationsList';
 import { CreateQuotation } from './features/quotations/CreateQuotation';
+import { AccountList } from './features/accounts/AccountList';
+import { JournalList } from './features/journal/JournalList';
 
 // Initialize Query Client
 const queryClient = new QueryClient({
@@ -218,6 +221,22 @@ function App() {
               }
             />
             <Route
+              path="/accounts"
+              element={
+                <AuthenticatedRoute>
+                  <AccountList />
+                </AuthenticatedRoute>
+              }
+            />
+            <Route
+              path="/journal"
+              element={
+                <AuthenticatedRoute>
+                  <JournalList />
+                </AuthenticatedRoute>
+              }
+            />
+            <Route
               path="/payments"
               element={
                 <AuthenticatedRoute>
@@ -246,6 +265,14 @@ function App() {
               element={
                 <AuthenticatedRoute>
                   <ReportsCenter />
+                </AuthenticatedRoute>
+              }
+            />
+            <Route
+              path="/daily-sheet"
+              element={
+                <AuthenticatedRoute>
+                  <DailySheet />
                 </AuthenticatedRoute>
               }
             />

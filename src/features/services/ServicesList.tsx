@@ -189,19 +189,19 @@ export const ServicesList: React.FC = () => {
                                   {hasPermission('Customer.Update') && (
                                     <button
                                       onClick={() => navigate(`/services/edit/${s.id}`)}
-                                      className="p-1 hover:bg-slate-100 rounded text-slate-600 hover:text-black transition-colors cursor-pointer"
+                                      className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-black flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                                       title="Edit Service"
                                     >
-                                      <Edit2 size={14} />
+                                      <Edit2 size={13} />
                                     </button>
                                   )}
                                   {hasPermission('Customer.Delete') && (
                                     <button
                                       onClick={() => handleDeleteService(s.id)}
-                                      className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                      className="w-7 h-7 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-500 hover:text-rose-700 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                                       title="Delete Service"
                                     >
-                                      <Trash2 size={14} />
+                                      <Trash2 size={13} />
                                     </button>
                                   )}
                                 </div>

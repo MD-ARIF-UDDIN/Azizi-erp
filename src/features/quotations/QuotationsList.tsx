@@ -13,7 +13,8 @@ import {
   MessageSquare,
   Trash2,
   CheckCircle,
-  FileCheck2
+  FileCheck2,
+  Eye
 } from 'lucide-react';
 
 const handleWhatsAppShare = (quote: any) => {
@@ -367,12 +368,13 @@ export const QuotationsList: React.FC = () => {
                                 {q.grand_total.toFixed(2)} <span className="text-[10px] font-medium text-slate-500">AED</span>
                               </td>
                               <td onClick={(e) => e.stopPropagation()}>
-                                <div className="flex items-center justify-center gap-1">
+                                <div className="flex items-center justify-center gap-1.5">
                                   <button
                                     onClick={() => handleOpenDetail(q.id)}
-                                    className="px-2.5 py-1.5 bg-secondary hover:bg-secondary-foreground/10 text-foreground text-xs font-bold rounded-lg transition-all cursor-pointer"
+                                    className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-black flex items-center justify-center transition-all cursor-pointer shadow-2xs"
+                                    title="View Quotation Details"
                                   >
-                                    Details
+                                    <Eye size={13} />
                                   </button>
                                   <button
                                     onClick={async () => {
@@ -383,7 +385,7 @@ export const QuotationsList: React.FC = () => {
                                         window.print();
                                       }, 400);
                                     }}
-                                    className="p-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-white rounded-lg transition-all inline-flex items-center justify-center align-middle cursor-pointer"
+                                    className="w-7 h-7 rounded-full bg-primary/10 hover:bg-primary text-primary hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                                     title="Print Quotation"
                                   >
                                     <Printer size={13} />
@@ -397,7 +399,7 @@ export const QuotationsList: React.FC = () => {
                                           setRemarks('');
                                           setStatusModalOpen(true);
                                         }}
-                                        className="p-1.5 bg-amber-500/10 hover:bg-amber-500 text-amber-500 hover:text-white rounded-lg transition-all inline-flex items-center justify-center align-middle cursor-pointer"
+                                        className="w-7 h-7 rounded-full bg-amber-500/10 hover:bg-amber-500 text-amber-600 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                                         title="Change Status"
                                       >
                                         <Clock size={13} />
@@ -405,7 +407,7 @@ export const QuotationsList: React.FC = () => {
                                       <button
                                         onClick={() => handleConvertToSale(q.id)}
                                         disabled={converting}
-                                        className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white rounded-lg transition-all inline-flex items-center justify-center align-middle cursor-pointer"
+                                        className="w-7 h-7 rounded-full bg-emerald-500/10 hover:bg-emerald-500 text-emerald-600 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                                         title="Convert to Sale Invoice"
                                       >
                                         <FileCheck2 size={13} />

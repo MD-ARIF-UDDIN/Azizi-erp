@@ -224,6 +224,27 @@ table:not(.print-invoice-sheet table) tbody tr:hover td,
   background-color: #fafaf9 !important;
 }
 
+table:not(.print-invoice-sheet table) tfoot td,
+.table-container table tfoot td,
+.glass table tfoot td {
+  padding: 0.55rem 0.85rem !important;
+  background-color: #f8fafc !important;
+  border-top: 2px solid #cbd5e1 !important;
+  border-bottom: none !important;
+  border-right: 1px solid #e2e8f0 !important;
+  border-left: none !important;
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  color: #000000 !important;
+  vertical-align: middle;
+}
+
+table:not(.print-invoice-sheet table) tfoot td:last-child,
+.table-container table tfoot td:last-child,
+.glass table tfoot td:last-child {
+  border-right: none !important;
+}
+
 /* ── Badges in Almas ERP ── */
 .badge {
   display: inline-flex;
@@ -295,48 +316,93 @@ input:focus, select:focus, textarea:focus {
 /* ── Print styles (Pixel-perfect A4 invoice & quotation exports) ── */
 @page {
   size: A4 portrait;
-  margin: 10mm 10mm 10mm 10mm;
+  margin: 6mm 8mm 6mm 8mm;
 }
 
 @media print {
-  * {
+  *, *::before, *::after {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     color-adjust: exact !important;
+    box-sizing: border-box !important;
   }
 
-  html, body {
+  html, body, #root {
     background: #ffffff !important;
     color: #000000 !important;
     width: 100% !important;
     height: auto !important;
+    min-height: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
+    overflow: visible !important;
+    position: static !important;
+    display: block !important;
   }
 
-  body * {
-    visibility: hidden !important;
+  /* Reset layout containers from DashboardLayout (h-screen, overflow-hidden) */
+  .h-screen,
+  .w-screen,
+  .overflow-hidden,
+  .overflow-y-auto,
+  .overflow-x-auto,
+  main,
+  aside,
+  header {
+    height: auto !important;
+    max-height: none !important;
+    width: 100% !important;
+    overflow: visible !important;
+    position: static !important;
   }
 
-  .print-invoice-sheet,
-  .print-invoice-sheet *:not(.print-hidden, .print-hidden *, .print\:hidden, .print\:hidden *) {
-    visibility: visible !important;
-  }
-
-  .print-hidden,
-  .print-hidden *,
+  /* Hide navigation, sidebar, topbar, buttons and anything marked print:hidden */
+  aside,
+  header,
+  nav,
   .print\:hidden,
-  .print\:hidden *,
+  .print-hidden,
   [class*="print:hidden"],
   [class*="print:hidden"] * {
     display: none !important;
-    visibility: hidden !important;
   }
 
+  /* Reset fixed modal overlays so they don't clip, obscure or darken the invoice */
+  .fixed,
+  .fixed.inset-0 {
+    position: static !important;
+    inset: auto !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    display: block !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+  }
+
+  .fixed > div,
+  .fixed.inset-0 > div {
+    position: static !important;
+    max-height: none !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* The printable sheet itself */
   .print-invoice-sheet {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
+    display: block !important;
+    position: static !important;
     width: 100% !important;
     max-width: 100% !important;
     height: auto !important;
@@ -348,6 +414,8 @@ input:focus, select:focus, textarea:focus {
     margin: 0 !important;
     background: #ffffff !important;
     color: #000000 !important;
+    visibility: visible !important;
+    page-break-inside: avoid;
   }
 
   .print-invoice-sheet table {
@@ -359,12 +427,16 @@ input:focus, select:focus, textarea:focus {
     background-color: #000ba0 !important;
     color: #ffffff !important;
     font-weight: 700 !important;
-    border-color: #d1d5db !important;
+    border: 1px solid #9ca3af !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   .print-invoice-sheet table tbody td {
-    border-color: #d1d5db !important;
+    border: 1px solid #d1d5db !important;
     color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   .print-invoice-sheet table tfoot tr,
@@ -372,5 +444,7 @@ input:focus, select:focus, textarea:focus {
     background-color: #f28f00 !important;
     color: #ffffff !important;
     font-weight: 700 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }

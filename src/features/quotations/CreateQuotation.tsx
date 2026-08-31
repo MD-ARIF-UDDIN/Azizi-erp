@@ -291,9 +291,6 @@ export const CreateQuotation: React.FC = () => {
               {/* Service Cards Grid */}
               {services.length > 0 ? (
                 <div>
-                  <p className="text-xs text-muted-foreground mb-3 font-medium">
-                    Tap a service card to add it to the quotation:
-                  </p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                     {services.map(service => {
                       const cartItem = cart.find(item => item.service.id === service.id);

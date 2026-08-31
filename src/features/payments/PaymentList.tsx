@@ -22,6 +22,7 @@ export const PaymentList: React.FC = () => {
   
   // Data States
   const [payments, setPayments] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -31,10 +32,12 @@ export const PaymentList: React.FC = () => {
   const fetchPayments = async () => {
     setLoading(true);
     try {
-      // In local storage, we resolve relations manually or use db services
-      // Fetching all sales first to filter payments by branch if needed
-      const allSales = await db.sales.getAll();
-      const allUsers = await db.users.getAll();
+      const [allSales, allUsers, allAccounts] = await Promise.all([
+        db.sales.getAll(),
+        db.users.getAll(),
+        db.accounts.getAll()
+      ]);
+      setAccounts(allAccounts);
       
       // Let's resolve payments
       const resolved: any[] = [];
@@ -79,6 +82,7 @@ export const PaymentList: React.FC = () => {
     const matchesSearch =
       p.sale_invoice.toLowerCase().includes(search.toLowerCase()) ||
       p.sale_customer_name.toLowerCase().includes(search.toLowerCase()) ||
+      (p.person_name && p.person_name.toLowerCase().includes(search.toLowerCase())) ||
       (p.transaction_no && p.transaction_no.includes(search));
       
     const matchesMethod = methodFilter ? p.payment_method === methodFilter : true;
@@ -147,29 +151,29 @@ export const PaymentList: React.FC = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
             <input
               type="text"
-              placeholder="Search by invoice number, transaction reference, customer..."
+              placeholder="Search by invoice number, transaction reference, customer, member name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
+              className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-lg text-xs"
             />
           </div>
-          
+
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <select
               value={methodFilter}
               onChange={(e) => setMethodFilter(e.target.value)}
-              className="px-3 py-2 bg-popover border border-border rounded-lg text-xs text-foreground w-full sm:w-auto"
+              className="px-3 py-2 bg-background border border-border rounded-lg text-xs flex-1 sm:flex-none font-semibold text-foreground cursor-pointer"
             >
-              <option value="">All Payment Modes</option>
+              <option value="">All Payment Methods</option>
               <option value="Cash">Cash</option>
               <option value="Card">Card</option>
-              <option value="Mobile Banking">Mobile Banking (bKash/Nagad)</option>
+              <option value="Mobile Banking">Mobile Banking</option>
               <option value="Bank Transfer">Bank Transfer</option>
             </select>
 
             <button
               onClick={() => exportPayments(filteredPayments)}
-              className="flex items-center gap-1.5 border border-border text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all cursor-pointer whitespace-nowrap w-full sm:w-auto justify-center"
+              className="flex items-center gap-1.5 border border-border text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all cursor-pointer whitespace-nowrap"
             >
               <Download size={14} />
               Export Excel
@@ -192,8 +196,9 @@ export const PaymentList: React.FC = () => {
                     <th className="text-center" style={{ width: '45px' }}>SL</th>
                     <th>Transaction Date</th>
                     <th>Invoice Reference</th>
-                    <th>Customer Details</th>
-                    <th>Method & Reference</th>
+                    <th>Customer &amp; Member</th>
+                    <th>Method &amp; Reference</th>
+                    <th>Note / Remarks</th>
                     <th>Received By</th>
                     <th className="text-right">Amount Collected</th>
                   </tr>
@@ -201,7 +206,7 @@ export const PaymentList: React.FC = () => {
                 <tbody>
                   {filteredPayments.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-slate-500">
+                      <td colSpan={8} className="py-12 text-center text-slate-500">
                         <div className="max-w-xs mx-auto space-y-1">
                           <div className="font-bold text-black text-sm font-heading">No payment records found</div>
                           <div className="text-xs text-slate-500">No financial receipts matching search parameters were found.</div>
@@ -230,16 +235,41 @@ export const PaymentList: React.FC = () => {
                           <div className="font-bold text-black text-xs leading-tight">
                             {p.sale_customer_name}
                           </div>
+                          {p.person_name && (
+                            <div className="mt-1">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold">
+                                👤 For: {p.person_name}
+                              </span>
+                            </div>
+                          )}
                         </td>
                         <td>
                           <div className="flex items-center gap-1 text-black font-semibold text-xs">
                             <Wallet size={12} className="text-primary" />
                             {p.payment_method}
                           </div>
+                          {(() => {
+                            const acc = accounts.find(a => a.id === p.account_id);
+                            if (!acc) return null;
+                            return (
+                              <div className="text-[10px] font-bold text-primary flex items-center gap-1 mt-0.5">
+                                <span>{acc.type === 'cash_drawer' ? '💵' : acc.type === 'bank' ? '🏦' : '💳'} {acc.name}</span>
+                              </div>
+                            );
+                          })()}
                           {p.transaction_no && (
                             <div className="text-[10px] text-slate-500 mt-0.5">
                               Ref: {p.transaction_no}
                             </div>
+                          )}
+                        </td>
+                        <td>
+                          {p.notes ? (
+                            <div className="text-xs text-foreground font-medium max-w-[180px] truncate" title={p.notes}>
+                              {p.notes.replace(/\[Member:\s*[^\]]+\]/g, '').trim() || '—'}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs italic">—</span>
                           )}
                         </td>
                         <td className="text-slate-600 text-xs font-medium">

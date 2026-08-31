@@ -26,7 +26,9 @@ import {
   FileText,
   Search,
   Plus,
-  Clock
+  Clock,
+  CreditCard,
+  BookOpen
 } from 'lucide-react';
 
 import { Logo } from '../components/Logo';
@@ -415,39 +417,40 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
               <nav className="flex-1 space-y-0.5 px-2.5 py-2.5 overflow-y-auto">
                 <SidebarLink to="/" icon={<LayoutDashboard size={17} />} label="Dashboard" collapsed={isCollapsedResponsive} />
 
-                <SidebarSection label="Business" collapsed={isCollapsedResponsive} />
+                {/* 1. OPERATIONS */}
+                <SidebarSection label="Operations" collapsed={isCollapsedResponsive} />
 
                 <SidebarDropdown
-                  label="eCustomers"
+                  label="Customers"
                   icon={<Users size={17} />}
                   collapsed={isCollapsedResponsive}
                   permission="Customer.View"
                   links={[
-                    { to: '/customers', label: 'List', permission: 'Customer.View' },
-                    { to: '/customers/create', label: 'Create', permission: 'Customer.Create' }
+                    { to: '/customers', label: 'Customer List', permission: 'Customer.View' },
+                    { to: '/customers/create', label: 'Add Customer', permission: 'Customer.Create' }
                   ]}
                 />
 
                 <SidebarDropdown
-                  label="eServices"
+                  label="Services"
                   icon={<Briefcase size={17} />}
                   collapsed={isCollapsedResponsive}
                   permission="Customer.View"
                   links={[
-                    { to: '/services', label: 'List', permission: 'Customer.View' },
-                    { to: '/services/create', label: 'Create', permission: 'Customer.Create' },
-                    { to: '/services/category/create', label: 'Create Category', permission: 'Customer.Create' }
+                    { to: '/services', label: 'Services List', permission: 'Customer.View' },
+                    { to: '/services/create', label: 'Add Service', permission: 'Customer.Create' },
+                    { to: '/services/category/create', label: 'Add Category', permission: 'Customer.Create' }
                   ]}
                 />
 
                 <SidebarDropdown
-                  label="eQuotations"
+                  label="Quotations"
                   icon={<FileText size={17} />}
                   collapsed={isCollapsedResponsive}
                   permission="Sales.View"
                   links={[
-                    { to: '/quotations', label: 'List', permission: 'Sales.View' },
-                    { to: '/quotations/create', label: 'Create', permission: 'Sales.Create' }
+                    { to: '/quotations', label: 'Quotations List', permission: 'Sales.View' },
+                    { to: '/quotations/create', label: 'Create Quotation', permission: 'Sales.Create' }
                   ]}
                 />
 
@@ -457,53 +460,93 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                   collapsed={isCollapsedResponsive}
                   permission="Sales.View"
                   links={[
-                    { to: '/sales', label: 'List', permission: 'Sales.View' },
-                    { to: '/sales/create', label: 'Create', permission: 'Sales.Create' }
+                    { to: '/sales', label: 'Invoices List', permission: 'Sales.View' },
+                    { to: '/sales/create', label: 'Create Invoice', permission: 'Sales.Create' }
                   ]}
                 />
 
-                <SidebarSection label="Finance" collapsed={isCollapsedResponsive} />
+                <SidebarLink
+                  to="/expiry-tracker"
+                  icon={<Calendar size={17} />}
+                  label="Expiry Tracker"
+                  collapsed={isCollapsedResponsive}
+                  permission="Sales.View"
+                  badge={expiryCount > 0 ? expiryCount : undefined}
+                />
+
+                {/* 2. FINANCE & ACCOUNTS */}
+                <SidebarSection label="Finance & Accounts" collapsed={isCollapsedResponsive} />
+
+                <SidebarLink
+                  to="/accounts"
+                  icon={<CreditCard size={17} />}
+                  label="Cards & Wallets"
+                  collapsed={isCollapsedResponsive}
+                  permission="Expenses.View"
+                />
+
+                <SidebarLink
+                  to="/journal"
+                  icon={<BookOpen size={17} />}
+                  label="Journal (Cash Flow)"
+                  collapsed={isCollapsedResponsive}
+                  permission="Expenses.View"
+                />
 
                 <SidebarDropdown
-                  label="ePayments"
+                  label="Payments"
                   icon={<DollarSign size={17} />}
                   collapsed={isCollapsedResponsive}
                   permission="Payments.View"
                   links={[
-                    { to: '/payments', label: 'List', permission: 'Payments.View' },
-                    { to: '/payments/create', label: 'Create', permission: 'Payments.Create' }
+                    { to: '/payments', label: 'Payments List', permission: 'Payments.View' },
+                    { to: '/payments/create', label: 'Record Payment', permission: 'Payments.Create' }
                   ]}
                 />
 
                 <SidebarDropdown
-                  label="eExpenses"
+                  label="Expenses"
                   icon={<TrendingDown size={17} />}
                   collapsed={isCollapsedResponsive}
                   permission="Expenses.View"
                   links={[
-                    { to: '/expenses', label: 'List', permission: 'Expenses.View' },
-                    { to: '/expenses/create', label: 'Create', permission: 'Expenses.Create' },
-                    { to: '/expenses/category/create', label: 'Create Category', permission: 'Expenses.Create' }
+                    { to: '/expenses', label: 'Expenses List', permission: 'Expenses.View' },
+                    { to: '/expenses/create', label: 'Record Expense', permission: 'Expenses.Create' },
+                    { to: '/expenses/category/create', label: 'Expense Categories', permission: 'Expenses.Create' }
                   ]}
                 />
 
-            <SidebarSection label="Administration" collapsed={isCollapsedResponsive} />
+                {/* 3. REPORTS & AUDIT */}
+                <SidebarSection label="Reports & Insights" collapsed={isCollapsedResponsive} />
 
-            <SidebarLink to="/rbac" icon={<UserCheck size={17} />} label="Users & Roles" collapsed={isCollapsedResponsive} permission="Users.View" />
-            <SidebarLink to="/expiry-tracker" icon={<Calendar size={17} />} label="Expiry Tracker" collapsed={isCollapsedResponsive} permission="Sales.View" badge={expiryCount > 0 ? expiryCount : undefined} />
-            <SidebarLink to="/reports" icon={<FileBarChart2 size={17} />} label="Reports" collapsed={isCollapsedResponsive} permission="Reports.View" />
-            <SidebarDropdown
-              label="Settings"
-              icon={<Settings size={17} />}
-              collapsed={isCollapsedResponsive}
-              permission="Settings.Update"
-              links={[
-                { to: '/settings?tab=company', label: 'Company Settings', permission: 'Settings.Update' },
-                { to: '/settings?tab=branches', label: 'Branch Settings', permission: 'Settings.Update' },
-                { to: '/settings?tab=terms', label: 'Terms & Conditions', permission: 'Settings.Update' }
-              ]}
-            />
-          </nav>
+                <SidebarDropdown
+                  label="Reports"
+                  icon={<FileBarChart2 size={17} />}
+                  collapsed={isCollapsedResponsive}
+                  permission="Reports.View"
+                  links={[
+                    { to: '/daily-sheet', label: 'Daily Sheet', permission: 'Reports.View' },
+                    { to: '/reports', label: 'Reports Center', permission: 'Reports.View' }
+                  ]}
+                />
+
+                {/* 4. ADMINISTRATION */}
+                <SidebarSection label="Administration" collapsed={isCollapsedResponsive} />
+
+                <SidebarLink to="/rbac" icon={<UserCheck size={17} />} label="Users & Roles" collapsed={isCollapsedResponsive} permission="Users.View" />
+
+                <SidebarDropdown
+                  label="Settings"
+                  icon={<Settings size={17} />}
+                  collapsed={isCollapsedResponsive}
+                  permission="Settings.Update"
+                  links={[
+                    { to: '/settings?tab=company', label: 'Company Settings', permission: 'Settings.Update' },
+                    { to: '/settings?tab=branches', label: 'Branch Settings', permission: 'Settings.Update' },
+                    { to: '/settings?tab=terms', label: 'Terms & Conditions', permission: 'Settings.Update' }
+                  ]}
+                />
+              </nav>
         </div>
 
         {/* Sidebar Footer */}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../lib/db';
-import type { Expense, ExpenseCategory, Branch } from '../../types/database';
+import type { Expense, ExpenseCategory, Branch, Account } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
 import { useNavigate } from 'react-router-dom';
@@ -16,7 +16,9 @@ import {
   Tag,
   DollarSign,
   Briefcase,
-  Download
+  Download,
+  CreditCard,
+  Wallet
 } from 'lucide-react';
 
 export const ExpenseList: React.FC = () => {
@@ -26,6 +28,7 @@ export const ExpenseList: React.FC = () => {
   // Data States
   const [expenses, setExpenses] = useState<(Expense & { category?: ExpenseCategory; branch?: Branch })[]>([]);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'expenses' | 'categories'>('expenses');
 
@@ -35,11 +38,15 @@ export const ExpenseList: React.FC = () => {
     setLoading(true);
     try {
       const branchFilter = activeBranchId === 'all' ? undefined : activeBranchId;
-      const eData = await db.expenses.getAll(branchFilter);
-      const cData = await db.expenseCategories.getAll();
+      const [eData, cData, aData] = await Promise.all([
+        db.expenses.getAll(branchFilter),
+        db.expenseCategories.getAll(),
+        db.accounts.getAll(branchFilter)
+      ]);
       
       setExpenses(eData);
       setCategories(cData);
+      setAccounts(aData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -256,7 +263,17 @@ export const ExpenseList: React.FC = () => {
                                 {e.paid_to || '—'}
                               </td>
                               <td className="text-slate-600 text-xs">
-                                {e.payment_method}
+                                <div>{e.payment_method}</div>
+                                {(() => {
+                                  const acc = accounts.find(a => a.id === e.account_id);
+                                  if (!acc) return null;
+                                  return (
+                                    <div className="text-[10px] font-bold text-primary flex items-center gap-1 mt-0.5">
+                                      {acc.type === 'card' ? <CreditCard size={10} /> : <Wallet size={10} />}
+                                      <span>{acc.name}</span>
+                                    </div>
+                                  );
+                                })()}
                               </td>
                               <td className="text-right font-black text-rose-700 text-xs font-heading">
                                 -{e.amount.toFixed(2)} AED
@@ -266,7 +283,7 @@ export const ExpenseList: React.FC = () => {
                                   {hasPermission('Expenses.Update') && (
                                     <button
                                       onClick={() => navigate(`/expenses/edit/${e.id}`)}
-                                      className="p-1 hover:bg-slate-100 rounded text-slate-600 hover:text-black transition-colors cursor-pointer"
+                                      className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-black flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                                       title="Edit Expense"
                                     >
                                       <Edit2 size={13} />
@@ -275,7 +292,7 @@ export const ExpenseList: React.FC = () => {
                                   {hasPermission('Expenses.Delete') && (
                                     <button
                                       onClick={() => handleDeleteExpense(e.id)}
-                                      className="p-1 hover:bg-rose-50 rounded text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                      className="w-7 h-7 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-500 hover:text-rose-700 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                                       title="Delete Expense"
                                     >
                                       <Trash2 size={13} />

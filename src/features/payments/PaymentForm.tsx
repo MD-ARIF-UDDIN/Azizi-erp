@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../lib/db';
+import type { Account } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, DollarSign, CreditCard, FileText, Receipt, Save } from 'lucide-react';
+import { ChevronLeft, DollarSign, FileText, Receipt, Save, User, Wallet } from 'lucide-react';
 
 export const PaymentForm: React.FC = () => {
   const navigate = useNavigate();
@@ -12,13 +13,15 @@ export const PaymentForm: React.FC = () => {
   // Master Data
   const [unpaidSales, setUnpaidSales] = useState<any[]>([]);
   const [selectedSale, setSelectedSale] = useState<any | null>(null);
+  const [accounts, setAccounts] = useState<Account[]>([]);
 
   // Form States
   const [saleId, setSaleId] = useState(saleIdParam || '');
   const [amount, setAmount] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'Mobile Banking' | 'Bank Transfer'>('Cash');
+  const [accountId, setAccountId] = useState('');
   const [transactionNo, setTransactionNo] = useState('');
   const [notes, setNotes] = useState('');
+  const [personName, setPersonName] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
@@ -28,10 +31,17 @@ export const PaymentForm: React.FC = () => {
     const loadData = async () => {
       setFetching(true);
       try {
-        const allSales = await db.sales.getAll();
+        const [allSales, allAccounts] = await Promise.all([
+          db.sales.getAll(),
+          db.accounts.getAll()
+        ]);
         // Filter sales that are Unpaid or Partially Paid
         const unpaid = allSales.filter(s => s.payment_status !== 'Paid');
         setUnpaidSales(unpaid);
+        setAccounts(allAccounts);
+
+        const drawer = allAccounts.find(a => a.type === 'cash_drawer') || allAccounts[0];
+        if (drawer) setAccountId(drawer.id);
 
         if (saleId) {
           const target = allSales.find(s => s.id === saleId);
@@ -43,6 +53,9 @@ export const PaymentForm: React.FC = () => {
             const remaining = Math.max(0, target.grand_total - totalPaid);
             setSelectedSale({ ...target, remaining, totalPaid });
             setAmount(remaining);
+            if (target.person_name) {
+              setPersonName(target.person_name);
+            }
           }
         }
       } catch (err) {
@@ -56,6 +69,7 @@ export const PaymentForm: React.FC = () => {
 
   const handleSaleChange = async (selectedId: string) => {
     setSaleId(selectedId);
+    setPersonName('');
     if (!selectedId) {
       setSelectedSale(null);
       setAmount(0);
@@ -70,6 +84,9 @@ export const PaymentForm: React.FC = () => {
         const remaining = Math.max(0, target.grand_total - totalPaid);
         setSelectedSale({ ...target, remaining, totalPaid });
         setAmount(remaining);
+        if (target.person_name) {
+          setPersonName(target.person_name);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -98,9 +115,10 @@ export const PaymentForm: React.FC = () => {
       await db.payments.create({
         sale_id: saleId,
         amount,
-        payment_method: paymentMethod,
+        account_id: accountId || undefined,
         transaction_no: transactionNo || undefined,
-        notes: notes || undefined
+        notes: notes || undefined,
+        person_name: personName.trim() || undefined
       });
       navigate('/payments');
     } catch (err: any) {
@@ -200,6 +218,60 @@ export const PaymentForm: React.FC = () => {
             </div>
           )}
 
+          {/* Member / Person Allocation */}
+          {selectedSale && (
+            <div className="space-y-1.5 text-xs bg-muted/20 p-3.5 rounded-xl border border-border">
+              <label className="text-foreground font-bold flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <User size={13} className="text-primary" />
+                  Payment For Member / Applicant
+                </span>
+                <span className="text-[10px] text-muted-foreground font-normal">Select specific member or leave as entire invoice</span>
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
+                {/* Quick Select from Invoice Items */}
+                <div>
+                  <select
+                    value={personName}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setPersonName(val);
+                      const saleItems = selectedSale.items || [];
+                      const matchingItems = saleItems.filter((it: any) => it.person_name === val);
+                      const itemTotal = matchingItems.reduce((s: number, it: any) => s + it.subtotal, 0);
+                      if (itemTotal > 0 && itemTotal <= (selectedSale.remaining || 0)) {
+                        setAmount(itemTotal);
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-xs font-semibold text-foreground cursor-pointer"
+                  >
+                    <option value="">Entire Invoice / All Members</option>
+                    {Array.from(new Set((selectedSale.items || []).map((it: any) => it.person_name).filter(Boolean))).map((m: any, idx: number) => {
+                      const itemTotal = (selectedSale.items || []).filter((it: any) => it.person_name === m).reduce((s: number, it: any) => s + it.subtotal, 0);
+                      return (
+                        <option key={idx} value={m}>
+                          👤 {m} ({itemTotal.toFixed(2)} AED)
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {/* Custom Member Name write-in */}
+                <div>
+                  <input
+                    type="text"
+                    placeholder="Or type specific member name..."
+                    value={personName}
+                    onChange={(e) => setPersonName(e.target.value)}
+                    className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-xs text-foreground font-semibold"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Grid Layout: Amount and Payment Date */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Amount */}
@@ -222,23 +294,24 @@ export const PaymentForm: React.FC = () => {
               />
             </div>
 
-            {/* Payment Method */}
+            {/* Deposit To Account */}
             <div className="space-y-1.5 text-xs">
-              <label htmlFor="method" className="text-muted-foreground font-semibold flex items-center gap-1">
-                <CreditCard size={13} /> Payment Method *
+              <label htmlFor="account" className="text-muted-foreground font-semibold flex items-center gap-1">
+                <Wallet size={13} /> Deposit To Account *
               </label>
               <select
-                id="method"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as any)}
-                className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-sm"
+                id="account"
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-sm font-semibold text-foreground cursor-pointer"
                 required
                 disabled={loading || !selectedSale}
               >
-                <option value="Cash">Cash</option>
-                <option value="Card">Card</option>
-                <option value="Mobile Banking">Mobile Banking (bKash/Nagad)</option>
-                <option value="Bank Transfer">Bank Transfer</option>
+                {accounts.map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)
+                  </option>
+                ))}
               </select>
             </div>
           </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../lib/db';
-import type { OrderStatus } from '../../types/database';
+import type { OrderStatus, Account } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -65,6 +65,7 @@ export const SalesList: React.FC = () => {
   // Data States
   const [sales, setSales] = useState<any[]>([]);
   const [statuses, setStatuses] = useState<OrderStatus[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filter States
@@ -85,25 +86,33 @@ export const SalesList: React.FC = () => {
   const [newStatusId, setNewStatusId] = useState('');
   const [statusRemarks, setStatusRemarks] = useState('');
 
-  // Edit Items Modal States
+  // Edit Invoice & Per-Service Expenses Modal States
   const [editItemsModalOpen, setEditItemsModalOpen] = useState(false);
   const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
   const [editingSale, setEditingSale] = useState<any | null>(null);
   const [editingSaleItems, setEditingSaleItems] = useState<any[]>([]);
+  const [selectedServiceItemId, setSelectedServiceItemId] = useState<string | null>(null);
   const [allServices, setAllServices] = useState<any[]>([]);
   const [addServiceId, setAddServiceId] = useState('');
   const [addQty, setAddQty] = useState(1);
   const [addPrice, setAddPrice] = useState(0);
   const [editSaving, setEditSaving] = useState(false);
 
+  // New Gov Fee / Expense form for selected service:
+  const [svcExpenseAmount, setSvcExpenseAmount] = useState<number>(0);
+  const [svcExpenseAccountId, setSvcExpenseAccountId] = useState('');
+  const [svcExpenseDesc, setSvcExpenseDesc] = useState('');
+  const [svcExpenseSaving, setSvcExpenseSaving] = useState(false);
+
   // Payment Modal States
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [payingSaleId, setPayingSaleId] = useState<string | null>(null);
   const [payingSaleDetails, setPayingSaleDetails] = useState<any | null>(null);
   const [payAmount, setPayAmount] = useState(0);
-  const [payMethod, setPayMethod] = useState<'Cash' | 'Card' | 'Mobile Banking' | 'Bank Transfer'>('Cash');
+  const [payAccountId, setPayAccountId] = useState('');
   const [payTxnNo, setPayTxnNo] = useState('');
   const [payNotes, setPayNotes] = useState('');
+  const [payPersonName, setPayPersonName] = useState('');
   const [paySaving, setPaySaving] = useState(false);
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -130,11 +139,15 @@ export const SalesList: React.FC = () => {
     setLoading(true);
     try {
       const branchFilterVal = activeBranchId === 'all' ? undefined : activeBranchId;
-      const sData = await db.sales.getAll(branchFilterVal);
-      const osData = await db.orderStatuses.getAll();
+      const [sData, osData, aData] = await Promise.all([
+        db.sales.getAll(branchFilterVal),
+        db.orderStatuses.getAll(),
+        db.accounts.getAll(branchFilterVal)
+      ]);
       
       setSales(sData);
       setStatuses(osData);
+      setAccounts(aData);
 
       // Refresh Detail Panel if still actively open
       const currentId = selectedSaleIdRef.current;
@@ -228,20 +241,79 @@ export const SalesList: React.FC = () => {
     window.print();
   };
 
-  const handleOpenEditItems = async (saleId: string) => {
+  const handleOpenEditItems = async (saleId: string, preselectedItemId?: string) => {
     try {
       setEditingSaleId(saleId);
       const detail = await db.sales.getById(saleId);
       setEditingSale(detail);
-      setEditingSaleItems(detail?.items || []);
+      const items = detail?.items || [];
+      setEditingSaleItems(items);
       const svcs = await db.services.getAll();
       setAllServices(svcs.filter(s => s.status === 'Active'));
       setAddServiceId('');
       setAddQty(1);
       setAddPrice(0);
+      
+      const defaultCard = accounts.find(a => a.type === 'card') || accounts[0];
+      setSvcExpenseAccountId(defaultCard?.id || '');
+      setSvcExpenseAmount(0);
+      setSvcExpenseDesc('');
+
+      if (preselectedItemId && items.some((i: any) => i.id === preselectedItemId)) {
+        setSelectedServiceItemId(preselectedItemId);
+      } else if (items.length > 0) {
+        setSelectedServiceItemId(items[0].id);
+      } else {
+        setSelectedServiceItemId(null);
+      }
+
       setEditItemsModalOpen(true);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleAddServiceExpense = async () => {
+    if (!editingSaleId || !selectedServiceItemId || svcExpenseAmount <= 0) return;
+    setSvcExpenseSaving(true);
+    try {
+      await db.sales.addServiceExpense({
+        sale_id: editingSaleId,
+        sale_item_id: selectedServiceItemId,
+        amount: Number(svcExpenseAmount),
+        account_id: svcExpenseAccountId || undefined,
+        description: svcExpenseDesc.trim() || undefined
+      });
+
+      const detail = await db.sales.getById(editingSaleId);
+      setEditingSale(detail);
+      const items = detail?.items || [];
+      setEditingSaleItems(items);
+
+      setSvcExpenseAmount(0);
+      setSvcExpenseDesc('');
+      await fetchSales();
+    } catch (err) {
+      console.error('Failed to add service expense:', err);
+    } finally {
+      setSvcExpenseSaving(false);
+    }
+  };
+
+  const handleDeleteServiceExpense = async (expenseId: string) => {
+    if (!editingSaleId || !window.confirm('Delete this expense? The card/account balance will be restored.')) return;
+    setSvcExpenseSaving(true);
+    try {
+      await db.sales.deleteServiceExpense(expenseId);
+      const detail = await db.sales.getById(editingSaleId);
+      setEditingSale(detail);
+      const items = detail?.items || [];
+      setEditingSaleItems(items);
+      await fetchSales();
+    } catch (err) {
+      console.error('Failed to delete service expense:', err);
+    } finally {
+      setSvcExpenseSaving(false);
     }
   };
 
@@ -249,29 +321,48 @@ export const SalesList: React.FC = () => {
     if (!editingSaleId || !addServiceId || addQty <= 0) return;
     setEditSaving(true);
     try {
-      await db.sales.addItem(editingSaleId, { service_id: addServiceId, quantity: addQty, unit_price: addPrice, staff_id: user?.id });
+      await db.sales.addItem(editingSaleId, {
+        service_id: addServiceId,
+        quantity: addQty,
+        unit_price: addPrice,
+        staff_id: user?.id
+      });
       const detail = await db.sales.getById(editingSaleId);
       setEditingSale(detail);
-      setEditingSaleItems(detail?.items || []);
+      const items = detail?.items || [];
+      setEditingSaleItems(items);
       setAddServiceId('');
       setAddQty(1);
       setAddPrice(0);
+      if (!selectedServiceItemId && items.length > 0) {
+        setSelectedServiceItemId(items[items.length - 1].id);
+      }
       await fetchSales();
-    } catch (err) { console.error(err); }
-    finally { setEditSaving(false); }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   const handleRemoveItem = async (itemId: string) => {
-    if (!editingSaleId || !window.confirm('Remove this item from the invoice?')) return;
+    if (!editingSaleId || !window.confirm('Remove this service item from the invoice? Any linked card expenses will be refunded.')) return;
     setEditSaving(true);
     try {
       await db.sales.removeItem(editingSaleId, itemId);
       const detail = await db.sales.getById(editingSaleId);
       setEditingSale(detail);
-      setEditingSaleItems(detail?.items || []);
+      const items = detail?.items || [];
+      setEditingSaleItems(items);
+      if (selectedServiceItemId === itemId) {
+        setSelectedServiceItemId(items[0]?.id || null);
+      }
       await fetchSales();
-    } catch (err) { console.error(err); }
-    finally { setEditSaving(false); }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   const handleOpenPayModal = async (saleId: string) => {
@@ -281,10 +372,12 @@ export const SalesList: React.FC = () => {
       setPayingSaleDetails(detail);
       const totalPaid = (detail?.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0);
       const due = Math.max(0, (detail?.grand_total || 0) - totalPaid);
+      const defaultDrawer = accounts.find(a => a.type === 'cash_drawer') || accounts[0];
       setPayAmount(parseFloat(due.toFixed(2)));
-      setPayMethod('Cash');
+      setPayAccountId(defaultDrawer?.id || '');
       setPayTxnNo('');
       setPayNotes('');
+      setPayPersonName(detail?.person_name || '');
       setPayModalOpen(true);
     } catch (err) { console.error(err); }
   };
@@ -297,9 +390,10 @@ export const SalesList: React.FC = () => {
       await db.payments.create({
         sale_id: payingSaleId,
         amount: payAmount,
-        payment_method: payMethod,
+        account_id: payAccountId || undefined,
         transaction_no: payTxnNo || undefined,
-        notes: payNotes || undefined
+        notes: payNotes || undefined,
+        person_name: payPersonName.trim() || undefined
       });
       const detail = await db.sales.getById(payingSaleId);
       setPayingSaleDetails(detail);
@@ -308,6 +402,7 @@ export const SalesList: React.FC = () => {
       setPayAmount(parseFloat(due.toFixed(2)));
       setPayTxnNo('');
       setPayNotes('');
+      setPayPersonName('');
       await fetchSales();
     } catch (err) { console.error(err); }
     finally { setPaySaving(false); }
@@ -647,14 +742,14 @@ export const SalesList: React.FC = () => {
 
                               {/* Payment Status & Due */}
                               <td>
-                                {s.payment_status === 'Paid' ? (
+                                {remainingDue <= 0 && (s.grand_total > 0 || (s.payments || []).length > 0) ? (
                                   <span className="badge badge-Paid">
                                     Paid Full
                                   </span>
-                                ) : s.payment_status === 'Partially Paid' ? (
+                                ) : totalPaid > 0 ? (
                                   <div>
                                     <span className="badge badge-Partial">
-                                      Partial
+                                      Partial ({totalPaid.toFixed(2)} AED)
                                     </span>
                                     <div className="text-[11px] font-bold text-amber-700 mt-0.5 font-heading">
                                       Due: {remainingDue.toFixed(2)} AED
@@ -679,23 +774,22 @@ export const SalesList: React.FC = () => {
 
                               {/* Quick Actions */}
                               <td onClick={(e) => e.stopPropagation()}>
-                                <div className="flex items-center justify-center gap-1">
+                                <div className="flex items-center justify-center gap-1.5">
                                   {remainingDue > 0 && (
                                     <button
                                       onClick={() => handleOpenPayModal(s.id)}
-                                      className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer shadow-xs font-heading"
+                                      className="w-7 h-7 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                                       title="Collect Payment"
                                     >
-                                      <CreditCard size={11} />
-                                      <span>Pay</span>
+                                      <CreditCard size={13} />
                                     </button>
                                   )}
                                   <button
                                     onClick={() => handleOpenDetail(s.id)}
-                                    className="p-1.5 bg-muted hover:bg-secondary text-muted-foreground hover:text-foreground rounded-md transition-all cursor-pointer"
+                                    className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-black flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                                     title="View Full Details"
                                   >
-                                    <Clock size={14} />
+                                    <Clock size={13} />
                                   </button>
                                   <button
                                     onClick={async (e) => {
@@ -708,27 +802,27 @@ export const SalesList: React.FC = () => {
                                         window.print();
                                       }, 400);
                                     }}
-                                    className="p-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-white rounded-md transition-all cursor-pointer"
+                                    className="w-7 h-7 rounded-full bg-primary/10 hover:bg-primary text-primary hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                                     title="Print Invoice"
                                   >
-                                    <Printer size={14} />
+                                    <Printer size={13} />
                                   </button>
                                   <button
                                     onClick={async () => {
                                       const detail = await db.sales.getById(s.id);
                                       handleWhatsAppShare(detail);
                                     }}
-                                    className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-600 dark:text-emerald-400 hover:text-white rounded-md transition-all cursor-pointer"
+                                    className="w-7 h-7 rounded-full bg-emerald-500/10 hover:bg-emerald-500 text-emerald-600 dark:text-emerald-400 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                                     title="Send WhatsApp Receipt"
                                   >
-                                    <MessageSquare size={14} />
+                                    <MessageSquare size={13} />
                                   </button>
                                   <button
                                     onClick={() => handleOpenEditItems(s.id)}
-                                    className="p-1.5 bg-muted hover:bg-secondary text-muted-foreground hover:text-foreground rounded-md transition-all cursor-pointer"
+                                    className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-black flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                                     title="Edit Invoice Items"
                                   >
-                                    <Pencil size={14} />
+                                    <Pencil size={13} />
                                   </button>
                                 </div>
                               </td>
@@ -935,12 +1029,17 @@ export const SalesList: React.FC = () => {
                                       <td className="px-3 py-1.5 text-center border-r border-gray-300 text-black font-semibold">{index + 1}</td>
                                       <td className="px-3 py-1.5 text-center border-r border-gray-300 text-black font-medium">{itemDate}</td>
                                       <td className="px-3 py-1.5 border-r border-gray-300 text-black font-bold text-left">
-                                        {item.service?.name}
-                                        {item.person_name ? (
-                                          <span className="ml-1.5 font-normal text-[11px] text-gray-700 italic">
-                                            (For: {item.person_name})
-                                          </span>
-                                        ) : null}
+                                         <div>{item.service?.name}</div>
+                                         {item.person_name && (
+                                           <div className="font-normal text-[11px] text-gray-700 italic">
+                                             👤 For: {item.person_name}
+                                           </div>
+                                         )}
+                                         {item.notes && (
+                                           <div className="font-normal text-[10px] text-gray-600">
+                                             📝 Note / Ref: {item.notes}
+                                           </div>
+                                         )}
                                       </td>
                                       <td className="px-3 py-1.5 text-center border-r border-gray-300 text-black text-[11px] font-medium print:hidden">
                                         <span className="px-2 py-0.5 rounded bg-muted/80 text-foreground font-semibold border border-border/60">
@@ -1222,147 +1321,350 @@ export const SalesList: React.FC = () => {
             </div>
           </div>
         )}
-        {/* EDIT SALE ITEMS MODAL */}
-        {editItemsModalOpen && editingSaleId && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <div className="glass border border-border rounded-2xl p-6 w-full max-w-xl bg-white shadow-2xl relative max-h-[90vh] overflow-y-auto">
-              <button
-                onClick={() => { setEditItemsModalOpen(false); setEditingSaleId(null); }}
-                className="absolute right-4 top-4 p-2 text-muted-foreground hover:text-foreground bg-muted/40 rounded-full transition-colors cursor-pointer"
-              >
-                <X size={16} />
-              </button>
+        {/* EDIT SALE ITEMS & PER-SERVICE EXPENSES MODAL */}
+        {editItemsModalOpen && editingSaleId && (() => {
+          const totalSubtotal = editingSaleItems.reduce((sum: number, item: any) => sum + (Number(item.subtotal) || 0), 0);
+          const totalGovCost = editingSaleItems.reduce((sum: number, item: any) => {
+            const itemExps = item.expenses || [];
+            const itemExpTotal = itemExps.length > 0
+              ? itemExps.reduce((eSum: number, e: any) => eSum + (Number(e.amount) || 0), 0)
+              : Number(item.expense || 0);
+            return sum + itemExpTotal;
+          }, 0);
+          const totalNetProfit = totalSubtotal - totalGovCost;
 
-              <div className="flex items-center gap-2 mb-5">
-                <Pencil size={16} className="text-violet-500" />
-                <div>
-                  <h3 className="text-sm font-bold text-foreground leading-none">Edit Invoice Items</h3>
-                  <span className="text-[10px] text-muted-foreground mt-1 block">Add or remove line items from this sale invoice</span>
-                </div>
-              </div>
+          const selectedItem = editingSaleItems.find((i: any) => i.id === selectedServiceItemId) || editingSaleItems[0];
+          const selectedItemExps: any[] = selectedItem?.expenses || [];
+          const selectedItemExpTotal = selectedItemExps.length > 0
+            ? selectedItemExps.reduce((eSum: number, e: any) => eSum + (Number(e.amount) || 0), 0)
+            : Number(selectedItem?.expense || 0);
+          const selectedItemSubtotal = Number(selectedItem?.subtotal || (selectedItem?.unit_price * selectedItem?.quantity) || 0);
+          const selectedItemProfit = selectedItemSubtotal - selectedItemExpTotal;
 
-              {/* Current Items */}
-              <div className="border border-border rounded-xl overflow-hidden mb-5">
-                <div className="bg-muted/40 px-3 py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border">
-                  Current Items ({editingSaleItems.length})
-                </div>
-                {editingSaleItems.length === 0 ? (
-                  <p className="text-xs text-muted-foreground text-center py-5">No items on this invoice.</p>
-                ) : (
-                  <table className="w-full text-xs">
-                    <thead className="bg-muted/20">
-                      <tr>
-                        <th className="px-3 py-2 text-left text-muted-foreground font-semibold">Service</th>
-                        <th className="px-3 py-2 text-center text-muted-foreground font-semibold">Staff</th>
-                        <th className="px-3 py-2 text-center text-muted-foreground font-semibold">Qty</th>
-                        <th className="px-3 py-2 text-right text-muted-foreground font-semibold">Price</th>
-                        <th className="px-3 py-2 text-right text-muted-foreground font-semibold">Total</th>
-                        <th className="px-2 py-2 w-8"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {editingSaleItems.map((item: any) => (
-                        <tr key={item.id} className="border-t border-border/40">
-                          <td className="px-3 py-2 font-medium text-foreground">
-                            <div>{item.service?.name || 'Service'}</div>
-                            {item.person_name && (
-                              <div className="text-[10px] text-muted-foreground italic">(For: {item.person_name})</div>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-center text-[11px] font-medium text-foreground">
-                            <span className="px-2 py-0.5 rounded bg-muted/80 text-foreground font-semibold border border-border/60">
-                              {item.staff?.name || editingSale?.employee?.name || user?.name || 'Staff'}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-center">{item.quantity}</td>
-                          <td className="px-3 py-2 text-right">{item.unit_price.toFixed(2)}</td>
-                          <td className="px-3 py-2 text-right font-bold">{item.subtotal.toFixed(2)}</td>
-                          <td className="px-2 py-2 text-center">
-                            <button
-                              onClick={() => handleRemoveItem(item.id)}
-                              disabled={editSaving}
-                              className="p-1 text-rose-400 hover:text-rose-600 hover:bg-rose-500/10 rounded transition-colors cursor-pointer"
-                              title="Remove item"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-
-              {/* Add New Item */}
-              <div className="border border-violet-500/20 bg-violet-500/5 rounded-xl p-4 space-y-3">
-                <p className="text-[11px] font-bold text-violet-600 uppercase tracking-wider">Add New Item</p>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Service</label>
-                  <select
-                    value={addServiceId}
-                    onChange={(e) => {
-                      const svc = allServices.find(s => s.id === e.target.value);
-                      setAddServiceId(e.target.value);
-                      if (svc) setAddPrice(svc.price);
-                    }}
-                    className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-violet-500 cursor-pointer"
-                  >
-                    <option value="">-- Select a Service --</option>
-                    {allServices.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} — {s.price.toFixed(2)} AED</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Quantity</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={addQty}
-                      onChange={(e) => setAddQty(parseInt(e.target.value) || 1)}
-                      className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-violet-500"
-                    />
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+              <div className="glass border border-border rounded-2xl p-6 w-full max-w-5xl bg-white shadow-2xl relative max-h-[90vh] flex flex-col space-y-4 overflow-hidden">
+                {/* Header */}
+                <div className="flex items-start justify-between border-b border-border pb-3 shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
+                      <ReceiptText size={18} />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-foreground leading-none">Invoice #{editingSale?.invoice_no}</h3>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Client: <strong className="text-foreground">{editingSale?.customer?.name || 'Walk-in'}</strong>
+                      </p>
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Unit Price (AED)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={addPrice}
-                      onChange={(e) => setAddPrice(parseFloat(e.target.value) || 0)}
-                      className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-violet-500"
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-xs text-muted-foreground font-semibold">
-                    Subtotal: <strong className="text-foreground">{(addQty * addPrice).toFixed(2)} AED</strong>
-                  </span>
                   <button
-                    onClick={handleAddItem}
-                    disabled={editSaving || !addServiceId}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-violet-500 hover:bg-violet-600 text-white text-xs font-bold rounded-xl transition-all shadow-md disabled:opacity-50 cursor-pointer"
+                    onClick={() => { setEditItemsModalOpen(false); setEditingSaleId(null); setSelectedServiceItemId(null); }}
+                    className="p-1.5 text-muted-foreground hover:text-foreground bg-muted/40 rounded-full transition-colors cursor-pointer"
                   >
-                    <Plus size={13} />
-                    Add to Invoice
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {/* KPI Overview Strip */}
+                <div className="grid grid-cols-3 gap-3 shrink-0">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-center">
+                    <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Total Billed</span>
+                    <p className="text-sm font-bold font-mono text-foreground mt-0.5">{totalSubtotal.toFixed(2)} AED</p>
+                  </div>
+                  <div className="bg-rose-50/50 border border-rose-200 rounded-xl p-2.5 text-center">
+                    <span className="text-[10px] uppercase tracking-wider font-bold text-rose-600">Total Gov Costs</span>
+                    <p className="text-sm font-bold font-mono text-rose-600 mt-0.5">-{totalGovCost.toFixed(2)} AED</p>
+                  </div>
+                  <div className="bg-emerald-50/50 border border-emerald-200 rounded-xl p-2.5 text-center">
+                    <span className="text-[10px] uppercase tracking-wider font-bold text-emerald-600">Net Typing Profit</span>
+                    <p className="text-sm font-bold font-mono text-emerald-600 mt-0.5">+{totalNetProfit.toFixed(2)} AED</p>
+                  </div>
+                </div>
+
+                {/* Two-Column Master Detail Body */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 overflow-y-auto min-h-0 pr-1">
+                  {/* Left Column (5 cols): Service Items List */}
+                  <div className="lg:col-span-5 flex flex-col space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-foreground font-heading">
+                        Services on Invoice ({editingSaleItems.length})
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 overflow-y-auto max-h-[320px] pr-1">
+                      {editingSaleItems.length === 0 ? (
+                        <p className="text-xs text-muted-foreground text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                          No service items.
+                        </p>
+                      ) : (
+                        editingSaleItems.map((item: any) => {
+                          const isSelected = selectedItem?.id === item.id;
+                          const itemExps = item.expenses || [];
+                          const itemExpTotal = itemExps.length > 0
+                            ? itemExps.reduce((eSum: number, e: any) => eSum + (Number(e.amount) || 0), 0)
+                            : Number(item.expense || 0);
+                          const itemPrice = Number(item.unit_price || 0) * Number(item.quantity || 1);
+                          const itemProfit = itemPrice - itemExpTotal;
+
+                          return (
+                            <div
+                              key={item.id}
+                              onClick={() => setSelectedServiceItemId(item.id)}
+                              className={`p-3 rounded-xl border transition-all cursor-pointer relative ${
+                                isSelected
+                                  ? 'border-primary ring-2 ring-primary/20 bg-primary/5 shadow-xs'
+                                  : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <h4 className={`text-xs font-bold ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                                    {item.service?.name || 'Service'}
+                                  </h4>
+                                  {item.person_name && (
+                                    <span className="text-[10px] text-muted-foreground italic block">
+                                      For: {item.person_name}
+                                    </span>
+                                  )}
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold border border-slate-200">
+                                      {item.staff?.name || editingSale?.employee?.name || 'Staff'}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground font-mono">
+                                      Qty: <strong>{item.quantity}</strong> × {Number(item.unit_price).toFixed(2)} AED
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleRemoveItem(item.id); }}
+                                  disabled={editSaving}
+                                  className="w-6 h-6 rounded-full flex items-center justify-center bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition-all cursor-pointer shrink-0"
+                                  title="Remove Service"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+
+                              <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 text-[11px] font-mono">
+                                <div>
+                                  Billed: <strong className="text-foreground font-bold">{itemPrice.toFixed(2)} AED</strong>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${itemExpTotal > 0 ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600'}`}>
+                                    Gov: -{itemExpTotal.toFixed(2)}
+                                  </span>
+                                  <span className="text-emerald-600 font-bold">
+                                    +{itemProfit.toFixed(2)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Add Service Section */}
+                    <div className="border border-slate-200 bg-slate-50/80 rounded-xl p-3 space-y-2 mt-auto">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block">
+                        + Add Service Item
+                      </span>
+                      <div className="space-y-1.5">
+                        <select
+                          value={addServiceId}
+                          onChange={(e) => {
+                            const svc = allServices.find(s => s.id === e.target.value);
+                            setAddServiceId(e.target.value);
+                            if (svc) setAddPrice(svc.price);
+                          }}
+                          className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-foreground focus:ring-1 focus:ring-primary outline-none cursor-pointer"
+                        >
+                          <option value="">-- Select a Service --</option>
+                          {allServices.map(s => (
+                            <option key={s.id} value={s.id}>
+                              {s.name} ({s.price.toFixed(2)} AED)
+                            </option>
+                          ))}
+                        </select>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <input
+                              type="number"
+                              min={1}
+                              value={addQty}
+                              onChange={(e) => setAddQty(parseInt(e.target.value) || 1)}
+                              placeholder="Qty"
+                              className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-foreground focus:ring-1 focus:ring-primary outline-none"
+                            />
+                          </div>
+                          <div>
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              value={addPrice}
+                              onChange={(e) => setAddPrice(parseFloat(e.target.value) || 0)}
+                              placeholder="Price (AED)"
+                              className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-foreground focus:ring-1 focus:ring-primary outline-none"
+                            />
+                          </div>
+                        </div>
+                        <button
+                          onClick={handleAddItem}
+                          disabled={editSaving || !addServiceId}
+                          className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-lg transition-all shadow-2xs disabled:opacity-50 cursor-pointer"
+                        >
+                          <Plus size={13} /> Add to Invoice
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column (7 cols): Selected Service Gov Fee & Expense History */}
+                  <div className="lg:col-span-7 flex flex-col space-y-3">
+                    {selectedItem ? (
+                      <div className="border border-amber-500/30 bg-amber-50/20 rounded-xl p-4 flex flex-col flex-1 space-y-3">
+                        <div className="flex items-start justify-between border-b border-amber-500/20 pb-2.5">
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 block">
+                              Service Gov Fees &amp; Card Costs
+                            </span>
+                            <h4 className="text-sm font-bold text-foreground font-heading mt-0.5">
+                              {selectedItem.service?.name}
+                              {selectedItem.person_name && <span className="text-muted-foreground italic text-xs ml-1">(For: {selectedItem.person_name})</span>}
+                            </h4>
+                          </div>
+                          <div className="text-right text-xs font-mono">
+                            <span className="text-muted-foreground block text-[10px]">Net Profit</span>
+                            <span className="font-bold text-emerald-600 text-sm">+{selectedItemProfit.toFixed(2)} AED</span>
+                          </div>
+                        </div>
+
+                        {/* Expense History List */}
+                        <div className="flex-1 space-y-2 overflow-y-auto max-h-[220px]">
+                          <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground block">
+                            Logged Fees ({selectedItemExps.length})
+                          </span>
+
+                          {selectedItemExps.length === 0 ? (
+                            <div className="text-center py-6 bg-white border border-dashed border-slate-200 rounded-xl text-xs text-muted-foreground">
+                              No government fees or expenses logged for this service.
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {selectedItemExps.map((exp: any) => {
+                                const acc = accounts.find(a => a.id === exp.account_id);
+                                const cleanDesc = exp.description?.replace(/\[Item:[^\]]+\]\s*/g, '') || 'Gov Fee';
+
+                                return (
+                                  <div
+                                    key={exp.id}
+                                    className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-lg text-xs"
+                                  >
+                                    <div>
+                                      <div className="font-bold text-foreground">{cleanDesc}</div>
+                                      <div className="text-[10px] text-muted-foreground flex items-center gap-2 mt-0.5">
+                                        <span>{exp.expense_date ? new Date(exp.expense_date).toLocaleDateString() : '—'}</span>
+                                        <span>•</span>
+                                        <span className="font-semibold text-slate-700">
+                                          {acc?.type === 'card' ? '💳' : acc?.type === 'cash_drawer' ? '💵' : '🏦'} {acc?.name || 'Cash Drawer'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                      <span className="font-bold font-mono text-rose-600 text-xs">
+                                        -{Number(exp.amount).toFixed(2)} AED
+                                      </span>
+                                      <button
+                                        onClick={() => handleDeleteServiceExpense(exp.id)}
+                                        disabled={svcExpenseSaving}
+                                        className="w-6 h-6 rounded-full flex items-center justify-center bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition-all cursor-pointer shadow-2xs"
+                                        title="Delete Fee"
+                                      >
+                                        <Trash2 size={11} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Add Gov Fee to this Service Form */}
+                        <div className="bg-white border border-amber-500/30 rounded-xl p-3 space-y-2 mt-auto">
+                          <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider block">
+                            + Record Gov Fee / Card Deduction
+                          </span>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-0.5">Amount (AED)</label>
+                              <input
+                                type="number"
+                                min={0.01}
+                                step={0.01}
+                                value={svcExpenseAmount || ''}
+                                onChange={(e) => setSvcExpenseAmount(parseFloat(e.target.value) || 0)}
+                                placeholder="0.00"
+                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-rose-600 focus:ring-1 focus:ring-amber-500 outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-0.5">Paid From (Card / Drawer)</label>
+                              <select
+                                value={svcExpenseAccountId}
+                                onChange={(e) => setSvcExpenseAccountId(e.target.value)}
+                                className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-foreground focus:ring-1 focus:ring-amber-500 outline-none cursor-pointer"
+                              >
+                                <option value="">-- Select Card / Drawer --</option>
+                                {accounts.map(a => (
+                                  <option key={a.id} value={a.id}>
+                                    {a.type === 'card' ? '💳' : a.type === 'cash_drawer' ? '💵' : '🏦'} {a.name} ({Number(a.balance).toFixed(2)} AED)
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-0.5">Fee Description</label>
+                            <input
+                              type="text"
+                              value={svcExpenseDesc}
+                              onChange={(e) => setSvcExpenseDesc(e.target.value)}
+                              placeholder="E.g. ICP Portal Cancellation Fee, Amer Portal, Medical..."
+                              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-foreground focus:ring-1 focus:ring-amber-500 outline-none"
+                            />
+                          </div>
+                          <button
+                            onClick={handleAddServiceExpense}
+                            disabled={svcExpenseSaving || svcExpenseAmount <= 0}
+                            className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition-all shadow-2xs disabled:opacity-50 cursor-pointer"
+                          >
+                            <Plus size={13} /> {svcExpenseSaving ? 'Saving...' : 'Add Fee to Service'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center flex-1 bg-slate-50 rounded-xl border border-dashed border-slate-200 p-8 text-center text-xs text-muted-foreground">
+                        Select a service from the left to view and record its government fees.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="flex justify-end pt-3 border-t border-border shrink-0">
+                  <button
+                    onClick={() => { setEditItemsModalOpen(false); setEditingSaleId(null); setSelectedServiceItemId(null); }}
+                    className="px-6 py-2 bg-secondary hover:bg-muted text-foreground text-xs font-bold rounded-xl transition-all cursor-pointer"
+                  >
+                    Done
                   </button>
                 </div>
               </div>
-
-              <div className="flex justify-end pt-4 border-t border-border mt-4">
-                <button
-                  onClick={() => { setEditItemsModalOpen(false); setEditingSaleId(null); }}
-                  className="px-4 py-2 bg-secondary hover:bg-muted text-foreground text-xs font-bold rounded-xl transition-all cursor-pointer"
-                >
-                  Done
-                </button>
-              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
         {/* PAYMENT MODAL */}
         {payModalOpen && payingSaleDetails && (() => {
           const totalPaid = (payingSaleDetails.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0);
@@ -1416,8 +1718,10 @@ export const SalesList: React.FC = () => {
                       <thead className="bg-muted/20">
                         <tr>
                           <th className="px-3 py-2 text-left text-muted-foreground font-semibold">Date</th>
+                          <th className="px-3 py-2 text-left text-muted-foreground font-semibold">For Member</th>
                           <th className="px-3 py-2 text-left text-muted-foreground font-semibold">Method</th>
                           <th className="px-3 py-2 text-left text-muted-foreground font-semibold">Txn #</th>
+                          <th className="px-3 py-2 text-left text-muted-foreground font-semibold">Note</th>
                           <th className="px-3 py-2 text-right text-muted-foreground font-semibold">Amount</th>
                         </tr>
                       </thead>
@@ -1425,8 +1729,20 @@ export const SalesList: React.FC = () => {
                         {(payingSaleDetails.payments || []).map((p: any, idx: number) => (
                           <tr key={p.id || idx} className="border-t border-border/40">
                             <td className="px-3 py-2 text-muted-foreground">{new Date(p.payment_date || p.created_at).toLocaleDateString()}</td>
+                            <td className="px-3 py-2">
+                              {p.person_name ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold">
+                                  👤 {p.person_name}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground text-[10px] italic">General</span>
+                              )}
+                            </td>
                             <td className="px-3 py-2 font-medium text-foreground">{p.payment_method}</td>
                             <td className="px-3 py-2 text-muted-foreground font-mono">{p.transaction_no || '—'}</td>
+                            <td className="px-3 py-2 text-muted-foreground text-[11px] max-w-[150px] truncate" title={p.notes}>
+                              {p.notes ? p.notes.replace(/\[Member:\s*[^\]]+\]/g, '').trim() || '—' : '—'}
+                            </td>
                             <td className="px-3 py-2 text-right font-bold text-emerald-600">{p.amount.toFixed(2)}</td>
                           </tr>
                         ))}
@@ -1439,6 +1755,48 @@ export const SalesList: React.FC = () => {
                 {!isPaid ? (
                   <form onSubmit={handleSubmitPayment} className="border border-emerald-500/20 bg-emerald-500/5 rounded-xl p-4 space-y-3">
                     <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Collect Payment</p>
+
+                    {/* Member Allocation Field */}
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                        <span>Payment For Member / Applicant</span>
+                        <span className="text-[9px] font-normal text-muted-foreground">Select member or leave as whole invoice</span>
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <select
+                          value={payPersonName}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setPayPersonName(val);
+                            const saleItems = payingSaleDetails.items || [];
+                            const matching = saleItems.filter((it: any) => it.person_name === val);
+                            const itemTotal = matching.reduce((s: number, it: any) => s + it.subtotal, 0);
+                            if (itemTotal > 0 && itemTotal <= due) {
+                              setPayAmount(parseFloat(itemTotal.toFixed(2)));
+                            }
+                          }}
+                          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                        >
+                          <option value="">Entire Invoice / All Members</option>
+                          {Array.from(new Set((payingSaleDetails.items || []).map((it: any) => it.person_name).filter(Boolean))).map((m: any, idx: number) => {
+                            const itemTotal = (payingSaleDetails.items || []).filter((it: any) => it.person_name === m).reduce((s: number, it: any) => s + it.subtotal, 0);
+                            return (
+                              <option key={idx} value={m}>
+                                👤 {m} ({itemTotal.toFixed(2)} AED)
+                              </option>
+                            );
+                          })}
+                        </select>
+                        <input
+                          type="text"
+                          value={payPersonName}
+                          onChange={(e) => setPayPersonName(e.target.value)}
+                          placeholder="Or type custom member name"
+                          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Amount (AED)</label>
@@ -1454,16 +1812,17 @@ export const SalesList: React.FC = () => {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Method</label>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Deposit To Account</label>
                         <select
-                          value={payMethod}
-                          onChange={(e) => setPayMethod(e.target.value as any)}
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                          value={payAccountId}
+                          onChange={(e) => setPayAccountId(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
                         >
-                          <option value="Cash">Cash</option>
-                          <option value="Card">Card</option>
-                          <option value="Mobile Banking">Mobile Banking</option>
-                          <option value="Bank Transfer">Bank Transfer</option>
+                          {accounts.map(a => (
+                            <option key={a.id} value={a.id}>
+                              {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </div>

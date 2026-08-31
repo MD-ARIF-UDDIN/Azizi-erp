@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { db } from '../../lib/db';
 import { useAuth } from '../../components/AuthProvider';
 import { PermissionGuard } from '../../components/PermissionGuard';
@@ -22,9 +23,28 @@ import {
 
 export const ReportsCenter: React.FC = () => {
   const { activeBranchId } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
   
   // Tab control
   const [activeTab, setActiveTab] = useState<'sales' | 'expenses' | 'services' | 'balance'>('balance');
+
+  useEffect(() => {
+    if (tabParam === 'sales') {
+      setActiveTab('sales');
+    } else if (tabParam === 'expenses') {
+      setActiveTab('expenses');
+    } else if (tabParam === 'services') {
+      setActiveTab('services');
+    } else if (tabParam === 'daily-sheet' || tabParam === 'balance') {
+      setActiveTab('balance');
+    }
+  }, [tabParam]);
+
+  const handleTabChange = (tab: 'sales' | 'expenses' | 'services' | 'balance') => {
+    setActiveTab(tab);
+    setSearchParams({ tab: tab === 'balance' ? 'daily-sheet' : tab });
+  };
 
 
   // Date Filters
@@ -412,7 +432,6 @@ export const ReportsCenter: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground m-0">ERP Reports Center</h1>
-            <p className="text-sm text-muted-foreground">Perform audits, check branch metrics, run tax reports, and compile receipts.</p>
           </div>
 
           <div className="flex gap-2">
@@ -543,36 +562,36 @@ export const ReportsCenter: React.FC = () => {
             </span>
             <div className="bg-background border border-border p-1 rounded-lg flex gap-1 mt-1">
               <button
-                onClick={() => setActiveTab('sales')}
-                className={`flex-1 py-1 px-3 rounded text-[11px] font-semibold transition-all ${
-                  activeTab === 'sales' ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'
+                onClick={() => handleTabChange('balance')}
+                className={`flex-1 py-1.5 px-3 rounded text-[11px] font-semibold transition-all cursor-pointer ${
+                  activeTab === 'balance' ? 'bg-primary text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Daily Sheet
+              </button>
+              <button
+                onClick={() => handleTabChange('sales')}
+                className={`flex-1 py-1.5 px-3 rounded text-[11px] font-semibold transition-all cursor-pointer ${
+                  activeTab === 'sales' ? 'bg-primary text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 Sales Ledger
               </button>
               <button
-                onClick={() => setActiveTab('expenses')}
-                className={`flex-1 py-1 px-3 rounded text-[11px] font-semibold transition-all ${
-                  activeTab === 'expenses' ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'
+                onClick={() => handleTabChange('expenses')}
+                className={`flex-1 py-1.5 px-3 rounded text-[11px] font-semibold transition-all cursor-pointer ${
+                  activeTab === 'expenses' ? 'bg-primary text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 Expense Report
               </button>
               <button
-                onClick={() => setActiveTab('services')}
-                className={`flex-1 py-1 px-3 rounded text-[11px] font-semibold transition-all ${
-                  activeTab === 'services' ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'
+                onClick={() => handleTabChange('services')}
+                className={`flex-1 py-1.5 px-3 rounded text-[11px] font-semibold transition-all cursor-pointer ${
+                  activeTab === 'services' ? 'bg-primary text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 Service Performance
-              </button>
-              <button
-                onClick={() => setActiveTab('balance')}
-                className={`flex-1 py-1 px-3 rounded text-[11px] font-semibold transition-all ${
-                  activeTab === 'balance' ? 'bg-primary text-white' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Overall Balance
               </button>
             </div>
           </div>
@@ -583,7 +602,7 @@ export const ReportsCenter: React.FC = () => {
           <h2 className="text-2xl font-bold text-black uppercase">Azizi Typing, Print & Stamp ERP</h2>
           <div className="text-sm font-semibold text-zinc-700">Financial Audit Statements</div>
           <div className="text-xs text-zinc-600">
-            Report Type: {activeTab === 'sales' ? 'Sales Ledger Statement' : activeTab === 'expenses' ? 'Expenditure Ledger Statement' : activeTab === 'services' ? 'Service Performance Summary' : 'Overall Customer Balance Ledger'}
+            Report Type: {activeTab === 'sales' ? 'Sales Ledger Statement' : activeTab === 'expenses' ? 'Expenditure Ledger Statement' : activeTab === 'services' ? 'Service Performance Summary' : 'Daily Sheet Audit Statement (Cash & Due)'}
           </div>
           <div className="text-xs text-zinc-500">
             Period: {startDate} to {endDate} • Branch ID: {activeBranchId === 'all' ? 'All Branches' : activeBranchId}

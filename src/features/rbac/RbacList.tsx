@@ -234,9 +234,6 @@ export const RbacList: React.FC = () => {
             <h1 className="text-2xl font-bold tracking-tight text-foreground m-0">
               Users & Access Control
             </h1>
-            <p className="text-sm text-muted-foreground">
-              Manage employees, roles, granular permissions, and business branches.
-            </p>
           </div>
 
           {/* TAB TRIGGERS */}
@@ -370,7 +367,7 @@ export const RbacList: React.FC = () => {
                                   {u.status}
                                 </span>
                               </td>
-                              <td className="px-6 py-4 text-right space-x-2">
+                              <td className="px-6 py-4 text-right space-x-1.5">
                                 {hasPermission('Users.Update') && (
                                   <button
                                     onClick={() => {
@@ -388,17 +385,19 @@ export const RbacList: React.FC = () => {
                                       });
                                       setShowUserModal(true);
                                     }}
-                                    className="p-1.5 hover:bg-secondary rounded text-muted-foreground hover:text-foreground transition-colors"
+                                    className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-black inline-flex items-center justify-center transition-all cursor-pointer shadow-2xs"
+                                    title="Edit User"
                                   >
-                                    <Edit2 size={14} />
+                                    <Edit2 size={13} />
                                   </button>
                                 )}
                                 {hasPermission('Users.Delete') && (
                                   <button
                                     onClick={() => handleDeleteUser(u.id)}
-                                    className="p-1.5 hover:bg-destructive/10 rounded text-muted-foreground hover:text-destructive transition-colors"
+                                    className="w-7 h-7 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-500 hover:text-rose-700 inline-flex items-center justify-center transition-all cursor-pointer shadow-2xs"
+                                    title="Delete User"
                                   >
-                                    <Trash2 size={14} />
+                                    <Trash2 size={13} />
                                   </button>
                                 )}
                               </td>

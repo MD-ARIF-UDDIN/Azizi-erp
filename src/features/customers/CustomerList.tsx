@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../lib/db';
-import type { Customer, ClientDocument, Service, Payment } from '../../types/database';
+import type { Customer, ClientDocument, Service } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
 import { useNavigate } from 'react-router-dom';
@@ -31,7 +31,8 @@ import {
   Pencil,
   CheckCircle2,
   ChevronDown,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Coins
 } from 'lucide-react';
 
 const handleWhatsAppShare = (sale: any) => {
@@ -85,6 +86,7 @@ interface QsCartItem {
   quantity: number;
   unit_price: number;
   person_name?: string;
+  notes?: string;
 }
 
 export const CustomerList: React.FC = () => {
@@ -120,11 +122,22 @@ export const CustomerList: React.FC = () => {
   const [qsCart, setQsCart] = useState<QsCartItem[]>([]);
   const [qsDiscount, setQsDiscount] = useState(0);
   const [qsNotes, setQsNotes] = useState('');
-  const [qsHasPayment, setQsHasPayment] = useState(false);
-  const [qsPayAmount, setQsPayAmount] = useState(0);
-  const [qsPayMethod, setQsPayMethod] = useState<'Cash' | 'Card' | 'Mobile Banking' | 'Bank Transfer'>('Cash');
   const [qsSaving, setQsSaving] = useState(false);
   const [qsError, setQsError] = useState('');
+
+  // Quick Sale Advance Modal States
+  const [qsShowAdvanceModal, setQsShowAdvanceModal] = useState(false);
+  const [qsAdvanceEntries, setQsAdvanceEntries] = useState<{
+    saleId: string;
+    invoiceNo: string;
+    memberName: string;
+    grandTotal: number;
+    amount: number;
+    method: 'Cash' | 'Card' | 'Mobile Banking' | 'Bank Transfer';
+    notes: string;
+  }[]>([]);
+  const [qsCreatedSaleIds, setQsCreatedSaleIds] = useState<string[]>([]);
+  const [qsSavingAdvance, setQsSavingAdvance] = useState(false);
 
   // --- Quick Payment State ---
   const [qpCustomer, setQpCustomer] = useState<any | null>(null);
@@ -134,6 +147,7 @@ export const CustomerList: React.FC = () => {
   const [qpMethod, setQpMethod] = useState<'Cash' | 'Card' | 'Mobile Banking' | 'Bank Transfer'>('Cash');
   const [qpTxNo, setQpTxNo] = useState('');
   const [qpNotes, setQpNotes] = useState('');
+  const [qpPersonName, setQpPersonName] = useState('');
   const [qpSaving, setQpSaving] = useState(false);
   const [qpError, setQpError] = useState('');
 
@@ -436,10 +450,10 @@ export const CustomerList: React.FC = () => {
     setQsCart([]);
     setQsDiscount(0);
     setQsNotes('');
-    setQsHasPayment(false);
-    setQsPayAmount(0);
-    setQsPayMethod('Cash');
     setQsError('');
+    setQsShowAdvanceModal(false);
+    setQsAdvanceEntries([]);
+    setQsCreatedSaleIds([]);
   };
 
   const qsFilteredServices = qsServices.filter(s => {
@@ -504,6 +518,21 @@ export const CustomerList: React.FC = () => {
     setQsCart(updated);
   };
 
+  // Member grouping for multi-member split invoices
+  const qsMemberGroups = (() => {
+    const map: Record<string, { memberKey: string; displayName: string; items: QsCartItem[]; subtotal: number }> = {};
+    qsCart.forEach(item => {
+      const key = (item.person_name || '').trim();
+      const displayName = key || (qsCustomer?.customer_type === 'company' ? 'Company General' : qsCustomer?.name || 'Customer');
+      if (!map[key]) {
+        map[key] = { memberKey: key, displayName, items: [], subtotal: 0 };
+      }
+      map[key].items.push(item);
+      map[key].subtotal += item.unit_price * item.quantity;
+    });
+    return Object.values(map);
+  })();
+
   const qsSubmit = async () => {
     if (qsCart.length === 0) { setQsError('Please add at least one service to the invoice.'); return; }
     const branchId = user?.branch_id;
@@ -511,39 +540,107 @@ export const CustomerList: React.FC = () => {
     setQsSaving(true);
     setQsError('');
     try {
-      const subtotal = qsCart.reduce((s, i) => s + i.unit_price * i.quantity, 0);
-      const grandTotal = Math.max(0, subtotal - qsDiscount);
+      const totalSubtotal = qsCart.reduce((s, i) => s + i.unit_price * i.quantity, 0);
+      const groups = qsMemberGroups;
 
-      let initialPaymentPayload: { amount: number; payment_method: Payment['payment_method'] } | undefined = undefined;
-      if (qsHasPayment && qsPayAmount > 0 && grandTotal > 0) {
-        initialPaymentPayload = {
-          amount: Math.min(grandTotal, qsPayAmount),
-          payment_method: qsPayMethod
-        };
+      // Auto-save any newly typed or assigned person names into the existing customer's members list
+      if (qsCustomer?.id) {
+        const existingMembers = qsCustomer.members || [];
+        const existingNames = new Set(existingMembers.map((m: any) => m.name.toLowerCase().trim()));
+        const newNames = Array.from(new Set(
+          qsCart.map(i => i.person_name?.trim()).filter(Boolean) as string[]
+        )).filter(name => !existingNames.has(name.toLowerCase()));
+
+        if (newNames.length > 0) {
+          const updatedMembers = [
+            ...existingMembers,
+            ...newNames.map(name => ({ id: crypto.randomUUID(), name }))
+          ];
+          await db.customers.update(qsCustomer.id, {
+            members: updatedMembers,
+            customer_type: 'company'
+          });
+          setCustomers(prev => prev.map(c => c.id === qsCustomer.id ? { ...c, members: updatedMembers, customer_type: 'company' } : c));
+        }
       }
 
-      const createdSale = await db.sales.create({
-        customer_id: qsCustomer?.id,
-        branch_id: branchId,
-        discount: qsDiscount,
-        notes: qsNotes || undefined,
-        items: qsCart.map(i => ({ 
-          service_id: i.service.id, 
-          quantity: i.quantity, 
+      const createdSales: any[] = [];
+      for (const group of groups) {
+        const groupDiscount = totalSubtotal > 0 ? (group.subtotal / totalSubtotal) * qsDiscount : 0;
+        const groupItems = group.items.map(i => ({
+          service_id: i.service.id,
+          quantity: i.quantity,
           unit_price: i.unit_price,
-          person_name: i.person_name || undefined,
-          staff_id: user?.id
-        })),
-        initialPayment: initialPaymentPayload
-      });
-      // Print immediately
-      await handlePrintSale(createdSale.id);
-      setQsCustomer(null);
+          person_name: group.memberKey || undefined,
+          staff_id: user?.id,
+          notes: i.notes || undefined
+        }));
+
+        const createdSale = await db.sales.create({
+          customer_id: qsCustomer?.id,
+          branch_id: branchId,
+          discount: parseFloat(groupDiscount.toFixed(2)),
+          notes: qsNotes || undefined,
+          person_name: group.memberKey || undefined,
+          items: groupItems
+        });
+        createdSales.push(createdSale);
+      }
+
+      const advanceList = createdSales.map((s, idx) => ({
+        saleId: s.id,
+        invoiceNo: s.invoice_no,
+        memberName: groups[idx]?.displayName || s.person_name || 'Customer',
+        grandTotal: s.grand_total,
+        amount: 0,
+        method: 'Cash' as const,
+        notes: ''
+      }));
+
+      setQsCreatedSaleIds(createdSales.map(s => s.id));
+      setQsAdvanceEntries(advanceList);
+      setQsShowAdvanceModal(true);
       await fetchCustomers();
     } catch (err: any) {
       setQsError(err.message || 'Failed to create sale.');
     } finally {
       setQsSaving(false);
+    }
+  };
+
+  const handleQsSaveAdvance = async () => {
+    setQsSavingAdvance(true);
+    try {
+      for (const entry of qsAdvanceEntries) {
+        if (entry.amount > 0) {
+          await db.payments.create({
+            sale_id: entry.saleId,
+            amount: entry.amount,
+            payment_method: entry.method,
+            person_name: entry.memberName !== 'Company General' ? entry.memberName : undefined,
+            notes: entry.notes || undefined
+          });
+        }
+      }
+      setQsShowAdvanceModal(false);
+      setQsCustomer(null);
+      await fetchCustomers();
+      if (qsCreatedSaleIds.length > 0) {
+        await handlePrintSale(qsCreatedSaleIds[0]);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error recording advance payments');
+    } finally {
+      setQsSavingAdvance(false);
+    }
+  };
+
+  const handleQsSkipAdvance = async () => {
+    setQsShowAdvanceModal(false);
+    setQsCustomer(null);
+    await fetchCustomers();
+    if (qsCreatedSaleIds.length > 0) {
+      await handlePrintSale(qsCreatedSaleIds[0]);
     }
   };
 
@@ -594,6 +691,7 @@ export const CustomerList: React.FC = () => {
       setQpMethod('Cash');
       setQpTxNo('');
       setQpNotes('');
+      setQpPersonName(resolvedSales[0]?.person_name || '');
     } catch (err: any) {
       console.error(err);
       alert('Failed to load unpaid invoices: ' + err.message);
@@ -607,8 +705,10 @@ export const CustomerList: React.FC = () => {
     const sale = qpSales.find(s => s.id === saleId);
     if (sale) {
       setQpAmount(sale.remaining);
+      setQpPersonName(sale.person_name || '');
     } else {
       setQpAmount(0);
+      setQpPersonName('');
     }
   };
 
@@ -635,7 +735,8 @@ export const CustomerList: React.FC = () => {
         amount: qpAmount,
         payment_method: qpMethod,
         transaction_no: qpTxNo || undefined,
-        notes: qpNotes || undefined
+        notes: qpNotes || undefined,
+        person_name: qpPersonName.trim() || undefined
       });
       setQpCustomer(null);
       await fetchCustomers();
@@ -884,10 +985,10 @@ export const CustomerList: React.FC = () => {
                                       e.stopPropagation();
                                       openQuickPayment(c);
                                     }}
-                                    className="px-1.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold transition-all cursor-pointer shadow-xs font-heading"
+                                    className="w-6 h-6 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                                     title="Collect Due Payment"
                                   >
-                                    Pay
+                                    <CreditCard size={11} />
                                   </button>
                                 </div>
                               ) : (
@@ -949,25 +1050,25 @@ export const CustomerList: React.FC = () => {
                                   <button
                                     title="Quick Bill / New Invoice"
                                     onClick={() => openQuickSale(c)}
-                                    className="p-1.5 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-white transition-all cursor-pointer"
+                                    className="w-7 h-7 rounded-full bg-primary/10 hover:bg-primary text-primary hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                                   >
-                                    <ShoppingCart size={14} />
+                                    <ShoppingCart size={13} />
                                   </button>
                                 )}
                                 <button
                                   onClick={() => handleOpenDetail(c)}
-                                  className="p-1.5 rounded-lg bg-secondary hover:bg-secondary-foreground/10 text-foreground transition-all cursor-pointer"
+                                  className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-black flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                                   title="Customer Details & Documents"
                                 >
-                                  <History size={14} />
+                                  <History size={13} />
                                 </button>
                                 {hasPermission('Customer.Update') && (
                                   <button
                                     onClick={() => openEditCustomerModal(c)}
-                                    className="p-1.5 rounded-lg bg-secondary hover:bg-secondary-foreground/10 text-foreground transition-all cursor-pointer"
+                                    className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-black flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                                     title="Edit Profile"
                                   >
-                                    <Pencil size={14} />
+                                    <Pencil size={13} />
                                   </button>
                                 )}
                               </div>
@@ -1517,28 +1618,51 @@ export const CustomerList: React.FC = () => {
 
       {/* QUICK SALE MODAL (SEARCH-WISE FAST BILLING) */}
       {qsCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-md print:hidden overflow-hidden">
-          <div className="bg-card border border-border rounded-2xl shadow-2xl relative w-full max-w-5xl h-[94vh] max-h-[850px] overflow-hidden flex flex-col my-auto animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-md print:hidden overflow-hidden">
+          <div className="bg-card border border-border rounded-2xl shadow-2xl relative w-full max-w-6xl h-[92vh] max-h-[880px] overflow-hidden flex flex-col my-auto animate-in fade-in zoom-in-95 duration-150">
 
             {/* TOP HEADER */}
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-border bg-muted/30 flex-shrink-0">
+            <div className="flex items-center justify-between px-6 py-3.5 border-b border-border bg-muted/30 flex-shrink-0">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-primary/10 rounded-xl text-primary flex items-center justify-center border border-primary/20">
                   <ReceiptText size={18} />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-black uppercase tracking-wider text-primary">Fast Billing</span>
-                    <span className="text-muted-foreground">•</span>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-primary px-2 py-0.5 rounded bg-primary/10 border border-primary/20">
+                      Quick Invoice
+                    </span>
                     <span className="font-bold text-foreground text-sm flex items-center gap-1.5">
-                      {qsCustomer.customer_type === 'company' ? '🏢' : '👤'} {qsCustomer.name}
+                      {qsCustomer.customer_type === 'company' ? <Building2 size={15} className="text-blue-500" /> : <User size={15} className="text-emerald-500" />}
+                      <span>{qsCustomer.name}</span>
                     </span>
                     {qsCustomer.phone && (
-                      <span className="text-xs text-muted-foreground">({qsCustomer.phone})</span>
+                      <span className="text-xs text-muted-foreground font-mono">({qsCustomer.phone})</span>
                     )}
                   </div>
                 </div>
               </div>
+
+              {/* Active Member Selection if Company */}
+              {qsCustomer.customer_type === 'company' && qsCustomer.members && qsCustomer.members.length > 0 && (
+                <div className="hidden sm:flex items-center gap-2 bg-card px-3 py-1.5 rounded-xl border border-border shadow-2xs">
+                  <span className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">
+                    <Users size={13} className="text-primary" /> Active Person:
+                  </span>
+                  <select
+                    value={qsPersonName}
+                    onChange={(e) => setQsPersonName(e.target.value)}
+                    className="text-xs font-bold text-foreground bg-muted/40 border border-border rounded-lg px-2 py-1 outline-none cursor-pointer"
+                  >
+                    <option value="">🏢 Entire Company (General)</option>
+                    {qsCustomer.members.map((m: any) => (
+                      <option key={m.id || m.name} value={m.name}>
+                        👤 {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <button
                 type="button"
@@ -1551,14 +1675,14 @@ export const CustomerList: React.FC = () => {
             </div>
 
             {/* MAIN 2-COLUMN WORKSPACE */}
-            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
 
-              {/* LEFT COLUMN: SEARCH-WISE SERVICES & LINE ITEMS TABLE */}
-              <div className="w-full md:w-7/12 flex flex-col border-r border-border/60 overflow-hidden bg-muted/5 p-4 space-y-3">
+              {/* LEFT COLUMN: SEARCH SERVICES & LINE ITEMS (65% width) */}
+              <div className="w-full lg:w-8/12 flex flex-col border-r border-border/60 overflow-hidden bg-muted/5 p-4 sm:p-5 space-y-3">
                 
                 {/* SEARCH-WISE SERVICE SELECTOR */}
-                <div ref={qsSearchContainerRef} className="relative space-y-2 flex-shrink-0">
-                  <div className="flex gap-2">
+                <div ref={qsSearchContainerRef} className="space-y-2 flex-shrink-0">
+                  <div className="flex gap-2 relative">
                     <div className="relative flex-1">
                       <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                       <input
@@ -1572,7 +1696,7 @@ export const CustomerList: React.FC = () => {
                           setQsHighlightIndex(0);
                         }}
                         onKeyDown={handleQsSearchKeyDown}
-                        placeholder="Search services (e.g. visa, medical, emirates id, stamp...)"
+                        placeholder="Search typing, visa, or document services..."
                         className="w-full pl-10 pr-8 py-2.5 bg-background border-2 border-border focus:border-primary rounded-xl text-xs font-medium text-foreground placeholder:text-muted-foreground shadow-xs outline-none transition-all"
                       />
                       {qsSearch && (
@@ -1593,7 +1717,7 @@ export const CustomerList: React.FC = () => {
                     <select
                       value={qsCategory}
                       onChange={e => setQsCategory(e.target.value)}
-                      className="px-3 py-2 bg-muted/40 border border-border rounded-xl text-xs font-semibold text-foreground cursor-pointer shrink-0 max-w-[140px]"
+                      className="px-3 py-2 bg-muted/40 border border-border rounded-xl text-xs font-semibold text-foreground cursor-pointer shrink-0 max-w-[150px]"
                     >
                       <option value="all">All Categories ({qsServices.length})</option>
                       {qsCategories.map(cat => {
@@ -1606,82 +1730,82 @@ export const CustomerList: React.FC = () => {
                         );
                       })}
                     </select>
-                  </div>
 
-                  {/* SEARCH RESULTS DROPDOWN */}
-                  {qsIsSearchOpen && (
-                    <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-card/95 backdrop-blur-xl border border-border rounded-2xl shadow-2xl overflow-hidden max-h-72 overflow-y-auto">
-                      {qsFilteredServices.length > 0 ? (
-                        <div className="divide-y divide-border/60">
-                          <div className="px-3.5 py-1.5 bg-muted/50 text-[11px] font-semibold text-muted-foreground flex justify-between items-center">
-                            <span>{qsFilteredServices.length} matching services</span>
-                            <span className="text-[10px]">Use ↑↓ to navigate • ↵ Enter to add</span>
+                    {/* SEARCH RESULTS DROPDOWN (Directly under search bar) */}
+                    {qsIsSearchOpen && (
+                      <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-card/95 backdrop-blur-xl border border-border rounded-2xl shadow-2xl overflow-hidden max-h-72 overflow-y-auto">
+                        {qsFilteredServices.length > 0 ? (
+                          <div className="divide-y divide-border/60">
+                            <div className="px-3.5 py-1.5 bg-muted/50 text-[11px] font-semibold text-muted-foreground flex justify-between items-center">
+                              <span>{qsFilteredServices.length} matching services</span>
+                              <span className="text-[10px]">Use ↑↓ to navigate • ↵ Enter to add</span>
+                            </div>
+                            {qsFilteredServices.map((service, idx) => {
+                              const inCartItems = qsCart.filter(i => i.service.id === service.id && i.person_name === (qsPersonName || undefined));
+                              const inCartQty = inCartItems.reduce((sum, i) => sum + i.quantity, 0);
+                              const isHighlighted = idx === qsHighlightIndex;
+                              const catName = qsCategories.find(c => c.id === service.category_id)?.name || (service as any).category?.name || '';
+
+                              return (
+                                <div
+                                  key={service.id}
+                                  onMouseEnter={() => setQsHighlightIndex(idx)}
+                                  onClick={() => {
+                                    qsAddService(service);
+                                    setQsSearch('');
+                                    setQsIsSearchOpen(false);
+                                    qsSearchInputRef.current?.focus();
+                                  }}
+                                  className={`px-4 py-2.5 flex items-center justify-between gap-3 cursor-pointer transition-colors ${
+                                    isHighlighted ? 'bg-primary/10' : 'hover:bg-muted/50'
+                                  }`}
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                      <span className="font-bold text-xs text-foreground truncate">{service.name}</span>
+                                      {catName && (
+                                        <span className="px-2 py-0.2 rounded-full text-[10px] font-semibold bg-muted text-muted-foreground border border-border shrink-0">
+                                          {catName}
+                                        </span>
+                                      )}
+                                      {inCartQty > 0 && (
+                                        <span className="px-2 py-0.2 rounded-full text-[10px] font-black bg-primary/15 text-primary border border-primary/30 shrink-0">
+                                          {inCartQty} in bill
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-2.5 shrink-0">
+                                    <div className="text-right">
+                                      <span className="font-extrabold text-foreground text-xs">{service.price.toFixed(2)}</span>
+                                      <span className="text-[10px] text-muted-foreground font-medium ml-1">AED</span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                                        isHighlighted || inCartQty > 0
+                                          ? 'bg-primary text-white shadow-xs'
+                                          : 'bg-muted/70 text-foreground hover:bg-primary hover:text-white'
+                                      }`}
+                                    >
+                                      <Plus size={12} />
+                                      <span>Add</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
-                          {qsFilteredServices.map((service, idx) => {
-                            const inCartItems = qsCart.filter(i => i.service.id === service.id && i.person_name === (qsPersonName || undefined));
-                            const inCartQty = inCartItems.reduce((sum, i) => sum + i.quantity, 0);
-                            const isHighlighted = idx === qsHighlightIndex;
-                            const catName = qsCategories.find(c => c.id === service.category_id)?.name || (service as any).category?.name || '';
-
-                            return (
-                              <div
-                                key={service.id}
-                                onMouseEnter={() => setQsHighlightIndex(idx)}
-                                onClick={() => {
-                                  qsAddService(service);
-                                  setQsSearch('');
-                                  setQsIsSearchOpen(false);
-                                  qsSearchInputRef.current?.focus();
-                                }}
-                                className={`px-3.5 py-2.5 flex items-center justify-between gap-3 cursor-pointer transition-colors ${
-                                  isHighlighted ? 'bg-primary/10' : 'hover:bg-muted/50'
-                                }`}
-                              >
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-0.5">
-                                    <span className="font-bold text-xs text-foreground truncate">{service.name}</span>
-                                    {catName && (
-                                      <span className="px-2 py-0.2 rounded-full text-[10px] font-semibold bg-muted text-muted-foreground border border-border shrink-0">
-                                        {catName}
-                                      </span>
-                                    )}
-                                    {inCartQty > 0 && (
-                                      <span className="px-2 py-0.2 rounded-full text-[10px] font-black bg-primary/15 text-primary border border-primary/30 shrink-0">
-                                        {inCartQty} in bill
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-2.5 shrink-0">
-                                  <div className="text-right">
-                                    <span className="font-extrabold text-foreground text-xs">{service.price.toFixed(2)}</span>
-                                    <span className="text-[10px] text-muted-foreground font-medium ml-1">AED</span>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                                      isHighlighted || inCartQty > 0
-                                        ? 'bg-primary text-white shadow-xs'
-                                        : 'bg-muted/70 text-foreground hover:bg-primary hover:text-white'
-                                    }`}
-                                  >
-                                    <Plus size={12} />
-                                    <span>Add</span>
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="p-5 text-center text-muted-foreground text-xs">
-                          <div className="mb-1 text-sm font-semibold text-foreground">No services found</div>
-                          <div>No service matches "<span className="text-primary font-bold">{qsSearch}</span>". Try another keyword.</div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                        ) : (
+                          <div className="p-5 text-center text-muted-foreground text-xs">
+                            <div className="mb-1 text-sm font-semibold text-foreground">No services found</div>
+                            <div>No service matches "<span className="text-primary font-bold">{qsSearch}</span>". Try another keyword.</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
                   {/* QUICK ADD FREQUENT CHIPS */}
                   {!qsSearch && qsServices.length > 0 && (
@@ -1713,29 +1837,30 @@ export const CustomerList: React.FC = () => {
                 </div>
 
                 {/* LINE ITEMS TABLE */}
-                <div className="flex-1 border border-border/80 rounded-xl overflow-hidden bg-card flex flex-col">
+                <div className="flex-1 border border-border/80 rounded-xl overflow-hidden bg-card flex flex-col shadow-2xs">
                   <div className="overflow-y-auto flex-1">
                     <table className="w-full text-left">
-                      <thead className="bg-muted/40 text-muted-foreground uppercase text-[10px] font-semibold sticky top-0 z-10 border-b border-border">
+                      <thead className="bg-muted/40 text-muted-foreground uppercase text-[10px] font-bold sticky top-0 z-10 border-b border-border">
                         <tr>
                           <th className="w-8 text-center py-2.5">#</th>
-                          <th className="py-2.5">Service Details</th>
+                          <th className="py-2.5 pl-2">Service Details</th>
                           {qsCustomer.customer_type === 'company' && qsCustomer.members && qsCustomer.members.length > 0 && (
-                            <th className="py-2.5 w-36">Assign To</th>
+                            <th className="py-2.5 w-40">Member / Person</th>
                           )}
-                          <th className="text-center w-24 py-2.5">Quantity</th>
+                          <th className="py-2.5 w-36">Note / Ref</th>
+                          <th className="text-center w-28 py-2.5">Quantity</th>
                           <th className="w-24 text-center py-2.5">Unit Price</th>
-                          <th className="text-right w-24 py-2.5">Subtotal</th>
-                          <th className="text-center w-10 py-2.5"></th>
+                          <th className="text-right w-24 py-2.5 pr-3">Subtotal</th>
+                          <th className="text-center w-8 py-2.5"></th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/50">
                         {qsCart.length === 0 ? (
                           <tr>
-                            <td colSpan={qsCustomer.customer_type === 'company' && qsCustomer.members && qsCustomer.members.length > 0 ? 7 : 6} className="py-12 text-center text-muted-foreground italic">
+                            <td colSpan={qsCustomer.customer_type === 'company' && qsCustomer.members && qsCustomer.members.length > 0 ? 8 : 7} className="py-14 text-center text-muted-foreground italic">
                               <div className="max-w-xs mx-auto space-y-2">
                                 <div className="p-3 rounded-full bg-muted/60 w-fit mx-auto text-muted-foreground">
-                                  <Search size={20} />
+                                  <Search size={22} />
                                 </div>
                                 <div className="text-xs font-semibold text-foreground">No services in invoice yet</div>
                                 <div className="text-[11px] text-muted-foreground">Use the search bar above or Quick Add tags to add services.</div>
@@ -1744,18 +1869,18 @@ export const CustomerList: React.FC = () => {
                           </tr>
                         ) : (
                           qsCart.map((item, idx) => (
-                            <tr key={`${item.service.id}-${item.person_name || 'gen'}-${idx}`} className="hover:bg-primary/5">
+                            <tr key={`${item.service.id}-${item.person_name || 'gen'}-${idx}`} className="hover:bg-primary/5 transition-colors">
                               <td className="text-center font-bold text-xs text-muted-foreground py-2.5">
                                 {idx + 1}
                               </td>
-                              <td className="py-2.5">
+                              <td className="py-2.5 pl-2">
                                 <div className="font-bold text-foreground text-xs">{item.service.name}</div>
                                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                   <span className="text-[10px] text-muted-foreground">
                                     Standard: {item.service.price.toFixed(2)} AED
                                   </span>
                                   <span className="text-[10px] px-1.5 py-0.2 rounded bg-primary/10 text-primary font-semibold border border-primary/20">
-                                    Staff: {user?.name || 'Current Staff'}
+                                    Staff: {user?.name || 'Staff'}
                                   </span>
                                 </div>
                               </td>
@@ -1768,7 +1893,7 @@ export const CustomerList: React.FC = () => {
                                       updated[idx].person_name = e.target.value || undefined;
                                       setQsCart(updated);
                                     }}
-                                    className="w-full text-[11px] font-semibold bg-muted/50 border border-border rounded px-2 py-1 text-foreground cursor-pointer"
+                                    className="w-full text-xs font-semibold bg-muted/50 border border-border rounded-lg px-2.5 py-1.5 text-foreground cursor-pointer outline-none"
                                   >
                                     <option value="">🏢 General Company</option>
                                     {qsCustomer.members.map((m: any) => (
@@ -1779,22 +1904,35 @@ export const CustomerList: React.FC = () => {
                                   </select>
                                 </td>
                               )}
+                              <td className="py-2.5">
+                                <input
+                                  type="text"
+                                  placeholder="Note / Ref..."
+                                  value={item.notes || ''}
+                                  onChange={e => {
+                                    const updated = [...qsCart];
+                                    updated[idx].notes = e.target.value;
+                                    setQsCart(updated);
+                                  }}
+                                  className="w-full text-xs bg-muted/50 border border-border rounded-lg px-2.5 py-1.5 text-foreground placeholder:text-muted-foreground outline-none"
+                                />
+                              </td>
                               <td className="text-center py-2.5">
                                 <div className="flex items-center justify-center gap-1">
                                   <button
                                     type="button"
                                     onClick={() => qsUpdateQty(idx, -1)}
-                                    className="w-5 h-5 rounded border border-border bg-muted/50 flex items-center justify-center hover:bg-secondary text-foreground transition-colors cursor-pointer"
+                                    className="w-6 h-6 rounded border border-border bg-muted/50 flex items-center justify-center hover:bg-secondary text-foreground transition-colors cursor-pointer"
                                   >
-                                    <Minus size={10} />
+                                    <Minus size={11} />
                                   </button>
-                                  <span className="font-bold text-xs w-5 text-center text-foreground">{item.quantity}</span>
+                                  <span className="font-bold text-xs w-6 text-center text-foreground">{item.quantity}</span>
                                   <button
                                     type="button"
                                     onClick={() => qsUpdateQty(idx, 1)}
-                                    className="w-5 h-5 rounded border border-border bg-muted/50 flex items-center justify-center hover:bg-secondary text-foreground transition-colors cursor-pointer"
+                                    className="w-6 h-6 rounded border border-border bg-muted/50 flex items-center justify-center hover:bg-secondary text-foreground transition-colors cursor-pointer"
                                   >
-                                    <Plus size={10} />
+                                    <Plus size={11} />
                                   </button>
                                 </div>
                               </td>
@@ -1804,10 +1942,10 @@ export const CustomerList: React.FC = () => {
                                   min={0}
                                   value={item.unit_price}
                                   onChange={e => qsUpdatePriceOverride(idx, parseFloat(e.target.value) || 0)}
-                                  className="w-16 px-1.5 py-0.5 bg-muted/50 border border-border rounded text-center text-xs font-bold text-foreground"
+                                  className="w-18 px-2 py-1 bg-muted/50 border border-border rounded-lg text-center text-xs font-bold text-foreground outline-none"
                                 />
                               </td>
-                              <td className="text-right font-black text-foreground text-xs py-2.5">
+                              <td className="text-right font-black text-foreground text-xs py-2.5 pr-3">
                                 {(item.unit_price * item.quantity).toFixed(2)} <span className="text-[10px] font-normal text-muted-foreground">AED</span>
                               </td>
                               <td className="text-center py-2.5">
@@ -1830,16 +1968,16 @@ export const CustomerList: React.FC = () => {
 
               </div>
 
-              {/* RIGHT COLUMN: INVOICE TOTALS & 1-CLICK CHECKOUT */}
-              <div className="w-full md:w-5/12 flex flex-col overflow-hidden bg-card">
+              {/* RIGHT COLUMN: INVOICE TOTALS & 1-CLICK CHECKOUT (35% width) */}
+              <div className="w-full lg:w-4/12 flex flex-col overflow-hidden bg-card">
                 
                 {/* Cart Header */}
-                <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-muted/20 flex-shrink-0">
+                <div className="px-5 py-3 border-b border-border flex items-center justify-between bg-muted/20 flex-shrink-0">
                   <div className="flex items-center gap-2">
                     <ReceiptText size={15} className="text-primary" />
                     <span className="font-bold text-xs text-foreground">Checkout Summary</span>
-                    <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-primary text-white">
-                      {qsCart.reduce((sum, i) => sum + i.quantity, 0)} {qsCart.reduce((sum, i) => sum + i.quantity, 0) === 1 ? 'item' : 'items'}
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary text-white">
+                      {qsCart.reduce((sum, i) => sum + i.quantity, 0)} items
                     </span>
                   </div>
                   {qsCart.length > 0 && (
@@ -1854,8 +1992,8 @@ export const CustomerList: React.FC = () => {
                 </div>
 
                 {/* Remarks & Notes */}
-                <div className="p-4 space-y-2 flex-shrink-0 border-b border-border/60">
-                  <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Invoice Notes / Remarks</label>
+                <div className="p-4 space-y-1.5 flex-shrink-0 border-b border-border/60">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Invoice Notes / Remarks</label>
                   <input
                     type="text"
                     value={qsNotes}
@@ -1865,34 +2003,43 @@ export const CustomerList: React.FC = () => {
                   />
                 </div>
 
-                {/* Cart Items Quick List / Preview */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                  <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Item Breakdown</div>
+                {/* Member-Wise Breakdown Preview */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                      {qsMemberGroups.length > 1 ? `Invoices Preview (${qsMemberGroups.length})` : 'Line Items'}
+                    </span>
+                  </div>
+
                   {qsCart.length === 0 ? (
-                    <div className="py-6 text-center text-muted-foreground text-xs italic">
-                      No items selected.
+                    <div className="py-8 text-center text-muted-foreground text-xs italic">
+                      No items added yet.
                     </div>
                   ) : (
-                    qsCart.map((item, idx) => (
-                      <div key={idx} className="flex justify-between items-center text-xs py-1 border-b border-border/40">
-                        <div className="truncate pr-2">
-                          <span className="font-semibold text-foreground">{item.service.name}</span>
-                          <span className="text-muted-foreground text-[11px] ml-1">× {item.quantity}</span>
-                          {item.person_name && <span className="text-[10px] text-primary block truncate">👤 {item.person_name}</span>}
+                    qsMemberGroups.map((group, gIdx) => (
+                      <div key={gIdx} className="p-3 rounded-xl border border-border bg-muted/10 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-foreground">👤 {group.displayName}</span>
+                          <span className="font-extrabold text-primary">{group.subtotal.toFixed(2)} AED</span>
                         </div>
-                        <div className="font-bold text-foreground text-xs shrink-0">
-                          {(item.unit_price * item.quantity).toFixed(2)} AED
+                        <div className="space-y-1 pl-2 text-[11px] text-muted-foreground">
+                          {group.items.map((it, itIdx) => (
+                            <div key={itIdx} className="flex justify-between">
+                              <span className="truncate pr-2">• {it.service.name} (x{it.quantity})</span>
+                              <span className="font-mono shrink-0">{(it.unit_price * it.quantity).toFixed(2)}</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     ))
                   )}
                 </div>
 
-                {/* BOTTOM SUMMARY & 1-CLICK PAY (PINNED) */}
-                <div className="border-t border-border p-4 bg-muted/20 space-y-3 flex-shrink-0">
+                {/* BOTTOM SUMMARY & SUBMIT */}
+                <div className="border-t border-border p-5 bg-muted/20 space-y-3 flex-shrink-0">
                   
                   {/* Subtotal and Discount */}
-                  <div className="space-y-1.5 text-xs">
+                  <div className="space-y-2 text-xs">
                     <div className="flex justify-between items-center text-muted-foreground font-medium">
                       <span>Subtotal</span>
                       <span className="font-bold text-foreground">{qsSubtotal.toFixed(2)} AED</span>
@@ -1902,7 +2049,7 @@ export const CustomerList: React.FC = () => {
                       <span className="text-muted-foreground font-medium flex items-center gap-1">
                         <Percent size={11} /> Discount
                       </span>
-                      <div className="relative w-24">
+                      <div className="relative w-28">
                         <input
                           type="number"
                           min={0}
@@ -1910,83 +2057,19 @@ export const CustomerList: React.FC = () => {
                           value={qsDiscount || ''}
                           onChange={e => setQsDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
                           placeholder="0"
-                          className="w-full px-2 py-0.8 text-right bg-card border border-border rounded-lg text-foreground font-bold text-xs pr-7 outline-none"
+                          className="w-full px-2.5 py-1 text-right bg-card border border-border rounded-lg text-foreground font-bold text-xs pr-8 outline-none"
                         />
                         <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-semibold">AED</span>
                       </div>
                     </div>
 
-                    <div className="pt-2 border-t border-border flex justify-between items-baseline">
+                    <div className="pt-2.5 border-t border-border flex justify-between items-baseline">
                       <span className="text-xs font-bold text-foreground">Grand Total</span>
-                      <span className="text-lg font-black text-primary">
+                      <span className="text-xl font-black text-primary">
                         {qsGrandTotal.toFixed(2)} <span className="text-xs font-bold">AED</span>
                       </span>
                     </div>
                   </div>
-
-                  {/* TAKE PAYMENT (MINIMALIST & SIMPLE) */}
-                  {qsGrandTotal > 0 && (
-                    <div className="pt-2 border-t border-border space-y-2">
-                      {!qsHasPayment ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setQsHasPayment(true);
-                            setQsPayAmount(qsGrandTotal);
-                          }}
-                          className="w-full py-2 bg-muted hover:bg-secondary text-foreground font-bold rounded-xl text-xs transition-colors cursor-pointer border border-border"
-                        >
-                          + Add Payment
-                        </button>
-                      ) : (
-                        <div className="space-y-2 bg-muted/40 p-3 rounded-xl border border-border">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-bold text-foreground">Payment</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setQsHasPayment(false);
-                                setQsPayAmount(0);
-                              }}
-                              className="text-muted-foreground hover:text-destructive text-[11px] font-semibold cursor-pointer"
-                            >
-                              Cancel (Unpaid)
-                            </button>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <div className="relative flex-1">
-                              <input
-                                type="number"
-                                min={1}
-                                max={qsGrandTotal}
-                                value={qsPayAmount || ''}
-                                onChange={e => setQsPayAmount(Math.max(0, parseFloat(e.target.value) || 0))}
-                                placeholder="Amount"
-                                className="w-full px-2.5 py-1.5 bg-card border border-border rounded-lg text-foreground font-bold text-xs text-right pr-9 outline-none focus:ring-1 focus:ring-primary"
-                              />
-                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-semibold">AED</span>
-                            </div>
-                            <select
-                              value={qsPayMethod}
-                              onChange={e => setQsPayMethod(e.target.value as any)}
-                              className="px-2.5 py-1.5 bg-card border border-border rounded-lg text-foreground font-semibold text-xs outline-none cursor-pointer"
-                            >
-                              <option value="Cash">Cash</option>
-                              <option value="Card">Card</option>
-                              <option value="Bank Transfer">Bank Transfer</option>
-                            </select>
-                          </div>
-
-                          {qsGrandTotal - (qsPayAmount || 0) > 0 && (
-                            <div className="text-[11px] text-amber-600 dark:text-amber-400 font-bold text-right">
-                              Due: {Math.max(0, qsGrandTotal - (qsPayAmount || 0)).toFixed(2)} AED
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
 
                   {qsError && (
                     <div className="text-destructive text-xs bg-destructive/10 border border-destructive/20 rounded-lg p-2 font-semibold">
@@ -1999,17 +2082,22 @@ export const CustomerList: React.FC = () => {
                     type="button"
                     onClick={qsSubmit}
                     disabled={qsSaving || qsCart.length === 0}
-                    className="w-full bg-primary hover:bg-primary-hover disabled:opacity-50 text-white py-2.5 rounded-xl font-black text-xs sm:text-sm shadow-md shadow-primary/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    className="w-full bg-primary hover:bg-primary-hover disabled:opacity-50 text-white py-3 rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-primary/25 flex items-center justify-center gap-2 transition-all cursor-pointer mt-2"
                   >
                     {qsSaving ? (
                       <>
                         <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        <span>Processing Invoice...</span>
+                        <span>Generating Invoices...</span>
+                      </>
+                    ) : qsMemberGroups.length > 1 ? (
+                      <>
+                        <Printer size={15} />
+                        <span>Generate {qsMemberGroups.length} Separate Invoices</span>
                       </>
                     ) : (
                       <>
                         <Printer size={15} />
-                        <span>Finalize & Print Invoice</span>
+                        <span>Finalize Sale & Generate Invoice</span>
                       </>
                     )}
                   </button>
@@ -2018,6 +2106,173 @@ export const CustomerList: React.FC = () => {
 
               </div>
 
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* QUICK SALE ADVANCE PAYMENT MODAL */}
+      {qsShowAdvanceModal && (
+        <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+            
+            {/* Modal Header */}
+            <div className="p-5 border-b border-border bg-muted/20 flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                  <Coins size={22} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">
+                    Any Advance / Down Payment Received?
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {qsAdvanceEntries.length > 1
+                      ? `${qsAdvanceEntries.length} Invoices generated. Record advance payments per member or skip.`
+                      : 'Invoice generated successfully. Record advance payment with note, or skip.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto space-y-3.5 flex-1">
+              {qsAdvanceEntries.map((entry, idx) => (
+                <div key={entry.saleId} className="p-4 rounded-xl border border-border bg-muted/10 space-y-3">
+                  
+                  {/* Title */}
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-background border border-border text-foreground">
+                        #{entry.invoiceNo}
+                      </span>
+                      <span className="font-bold text-xs text-foreground">
+                        👤 {entry.memberName}
+                      </span>
+                    </div>
+                    <div className="text-xs font-semibold text-muted-foreground">
+                      Total Due: <strong className="text-foreground">{entry.grandTotal.toFixed(2)} AED</strong>
+                    </div>
+                  </div>
+
+                  {/* Payment Inputs Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1">
+                    
+                    {/* Amount */}
+                    <div className="sm:col-span-4 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Advance Paid (AED)
+                        </label>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = [...qsAdvanceEntries];
+                              updated[idx].amount = entry.grandTotal;
+                              setQsAdvanceEntries(updated);
+                            }}
+                            className="text-[9px] font-bold text-primary hover:underline cursor-pointer"
+                          >
+                            Full
+                          </button>
+                          <span className="text-[9px] text-muted-foreground">|</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = [...qsAdvanceEntries];
+                              updated[idx].amount = 0;
+                              setQsAdvanceEntries(updated);
+                            }}
+                            className="text-[9px] font-bold text-muted-foreground hover:text-foreground cursor-pointer"
+                          >
+                            0
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="number"
+                        min={0}
+                        max={entry.grandTotal}
+                        step={0.01}
+                        placeholder="0.00"
+                        value={entry.amount || ''}
+                        onChange={(e) => {
+                          const val = Math.min(entry.grandTotal, parseFloat(e.target.value) || 0);
+                          const updated = [...qsAdvanceEntries];
+                          updated[idx].amount = val;
+                          setQsAdvanceEntries(updated);
+                        }}
+                        className="w-full px-3 py-2 bg-background border border-border rounded-lg text-xs font-bold text-foreground text-right"
+                      />
+                    </div>
+
+                    {/* Method */}
+                    <div className="sm:col-span-3 space-y-1">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Method
+                      </label>
+                      <select
+                        value={entry.method}
+                        onChange={(e) => {
+                          const updated = [...qsAdvanceEntries];
+                          updated[idx].method = e.target.value as any;
+                          setQsAdvanceEntries(updated);
+                        }}
+                        className="w-full px-2.5 py-2 bg-background border border-border rounded-lg text-xs font-semibold text-foreground cursor-pointer"
+                      >
+                        <option value="Cash">Cash</option>
+                        <option value="Card">Card</option>
+                        <option value="Mobile Banking">Mobile Banking</option>
+                        <option value="Bank Transfer">Bank Transfer</option>
+                      </select>
+                    </div>
+
+                    {/* Note / Remarks */}
+                    <div className="sm:col-span-5 space-y-1">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                        <FileText size={11} />
+                        <span>Payment Note / Ref</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Receipt ref, remarks..."
+                        value={entry.notes}
+                        onChange={(e) => {
+                          const updated = [...qsAdvanceEntries];
+                          updated[idx].notes = e.target.value;
+                          setQsAdvanceEntries(updated);
+                        }}
+                        className="w-full px-3 py-2 bg-background border border-border rounded-lg text-xs font-medium text-foreground"
+                      />
+                    </div>
+
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-border bg-muted/20 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handleQsSkipAdvance}
+                disabled={qsSavingAdvance}
+                className="px-4 py-2.5 rounded-xl border border-border bg-card hover:bg-muted text-xs font-bold text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+              >
+                Skip (No Advance)
+              </button>
+
+              <button
+                type="button"
+                onClick={handleQsSaveAdvance}
+                disabled={qsSavingAdvance}
+                className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Coins size={14} />
+                <span>{qsSavingAdvance ? 'Saving Payments...' : 'Save Payment & Print'}</span>
+              </button>
             </div>
 
           </div>
@@ -2064,6 +2319,53 @@ export const CustomerList: React.FC = () => {
                   ))}
                 </select>
               </div>
+
+              {/* Member / Person Allocation */}
+              {(() => {
+                const currentSale = qpSales.find(s => s.id === qpSelectedSaleId);
+                const items = currentSale?.items || [];
+                const distinctMembers = Array.from(new Set(items.map((it: any) => it.person_name).filter(Boolean)));
+                return (
+                  <div className="space-y-1.5 bg-muted/20 p-2.5 rounded-lg border border-border">
+                    <label className="text-[11px] font-bold text-foreground flex items-center justify-between">
+                      <span>Payment For Member / Applicant</span>
+                      <span className="text-[10px] font-normal text-muted-foreground">Optional</span>
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <select
+                        value={qpPersonName}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setQpPersonName(val);
+                          const matching = items.filter((it: any) => it.person_name === val);
+                          const total = matching.reduce((s: number, it: any) => s + it.subtotal, 0);
+                          if (total > 0 && total <= (currentSale?.remaining || 0)) {
+                            setQpAmount(parseFloat(total.toFixed(2)));
+                          }
+                        }}
+                        className="w-full px-2.5 py-1.5 bg-popover border border-border rounded-lg text-foreground text-xs focus:ring-1 focus:ring-primary outline-none cursor-pointer"
+                      >
+                        <option value="">Entire Invoice / All Members</option>
+                        {distinctMembers.map((m: any, idx: number) => {
+                          const itemTotal = items.filter((it: any) => it.person_name === m).reduce((s: number, it: any) => s + it.subtotal, 0);
+                          return (
+                            <option key={idx} value={m}>
+                              👤 {m} ({itemTotal.toFixed(2)} AED)
+                            </option>
+                          );
+                        })}
+                      </select>
+                      <input
+                        type="text"
+                        placeholder="Or custom member name"
+                        value={qpPersonName}
+                        onChange={e => setQpPersonName(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-muted/50 border border-border rounded-lg text-foreground text-xs focus:ring-1 focus:ring-primary outline-none"
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
