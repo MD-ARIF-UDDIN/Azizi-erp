@@ -17,7 +17,10 @@ import {
   MessageSquare,
   Download,
   Pencil,
-  Trash2
+  Trash2,
+  Wallet,
+  Building2,
+  User
 } from 'lucide-react';
 
 const handleWhatsAppShare = (sale: any) => {
@@ -92,6 +95,7 @@ export const SalesList: React.FC = () => {
   const [editingSale, setEditingSale] = useState<any | null>(null);
   const [editingSaleItems, setEditingSaleItems] = useState<any[]>([]);
   const [selectedServiceItemId, setSelectedServiceItemId] = useState<string | null>(null);
+  const [serviceExpenseModalOpen, setServiceExpenseModalOpen] = useState(false);
   const [allServices, setAllServices] = useState<any[]>([]);
   const [addServiceId, setAddServiceId] = useState('');
   const [addQty, setAddQty] = useState(1);
@@ -253,7 +257,7 @@ export const SalesList: React.FC = () => {
       setAddServiceId('');
       setAddQty(1);
       setAddPrice(0);
-      
+
       const defaultCard = accounts.find(a => a.type === 'card') || accounts[0];
       setSvcExpenseAccountId(defaultCard?.id || '');
       setSvcExpenseAmount(0);
@@ -271,6 +275,15 @@ export const SalesList: React.FC = () => {
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleOpenServiceExpenseModal = (serviceItemId: string) => {
+    setSelectedServiceItemId(serviceItemId);
+    const defaultCard = accounts.find(a => a.type === 'card') || accounts[0];
+    setSvcExpenseAccountId(defaultCard?.id || '');
+    setSvcExpenseAmount(0);
+    setSvcExpenseDesc('');
+    setServiceExpenseModalOpen(true);
   };
 
   const handleAddServiceExpense = async () => {
@@ -321,10 +334,14 @@ export const SalesList: React.FC = () => {
     if (!editingSaleId || !addServiceId || addQty <= 0) return;
     setEditSaving(true);
     try {
+      // Automatically assign the service to this invoice's member
+      const memberName = editingSale?.person_name || editingSaleItems[0]?.person_name || undefined;
+
       await db.sales.addItem(editingSaleId, {
         service_id: addServiceId,
         quantity: addQty,
         unit_price: addPrice,
+        person_name: memberName,
         staff_id: user?.id
       });
       const detail = await db.sales.getById(editingSaleId);
@@ -334,6 +351,7 @@ export const SalesList: React.FC = () => {
       setAddServiceId('');
       setAddQty(1);
       setAddPrice(0);
+
       if (!selectedServiceItemId && items.length > 0) {
         setSelectedServiceItemId(items[items.length - 1].id);
       }
@@ -397,6 +415,10 @@ export const SalesList: React.FC = () => {
       });
       const detail = await db.sales.getById(payingSaleId);
       setPayingSaleDetails(detail);
+      if (editingSaleId && editingSaleId === payingSaleId) {
+        setEditingSale(detail);
+        setEditingSaleItems(detail?.items || []);
+      }
       const totalPaid = (detail?.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0);
       const due = Math.max(0, (detail?.grand_total || 0) - totalPaid);
       setPayAmount(parseFloat(due.toFixed(2)));
@@ -740,9 +762,18 @@ export const SalesList: React.FC = () => {
                                 </span>
                               </td>
 
-                              {/* Payment Status & Due */}
+                              {/* Payment Status & Due / Advance */}
                               <td>
-                                {remainingDue <= 0 && (s.grand_total > 0 || (s.payments || []).length > 0) ? (
+                                {totalPaid > s.grand_total ? (
+                                  <div>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-sky-100 text-sky-900 border border-sky-300 font-heading">
+                                      Advance Paid
+                                    </span>
+                                    <div className="text-[11px] font-black text-sky-800 mt-0.5 font-heading">
+                                      +{(totalPaid - s.grand_total).toFixed(2)} AED
+                                    </div>
+                                  </div>
+                                ) : remainingDue <= 0 && (s.grand_total > 0 || (s.payments || []).length > 0) ? (
                                   <span className="badge badge-Paid">
                                     Paid Full
                                   </span>
@@ -775,15 +806,25 @@ export const SalesList: React.FC = () => {
                               {/* Quick Actions */}
                               <td onClick={(e) => e.stopPropagation()}>
                                 <div className="flex items-center justify-center gap-1.5">
-                                  {remainingDue > 0 && (
-                                    <button
-                                      onClick={() => handleOpenPayModal(s.id)}
-                                      className="w-7 h-7 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs"
-                                      title="Collect Payment"
-                                    >
-                                      <CreditCard size={13} />
-                                    </button>
-                                  )}
+                                  <button
+                                    onClick={() => handleOpenPayModal(s.id)}
+                                    className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-2xs ${
+                                      remainingDue > 0
+                                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                        : totalPaid > s.grand_total
+                                        ? 'bg-sky-600 hover:bg-sky-700 text-white'
+                                        : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                    }`}
+                                    title={
+                                      remainingDue > 0
+                                        ? `Collect Payment (${remainingDue.toFixed(2)} AED Due)`
+                                        : totalPaid > s.grand_total
+                                        ? `Advance Received (+${(totalPaid - s.grand_total).toFixed(2)} AED)`
+                                        : "View Payment History"
+                                    }
+                                  >
+                                    <CreditCard size={13} />
+                                  </button>
                                   <button
                                     onClick={() => handleOpenDetail(s.id)}
                                     className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-black flex items-center justify-center transition-all cursor-pointer shadow-2xs"
@@ -1321,9 +1362,9 @@ export const SalesList: React.FC = () => {
             </div>
           </div>
         )}
-        {/* EDIT SALE ITEMS & PER-SERVICE EXPENSES MODAL */}
+        {/* EDIT INVOICE & SERVICES MODAL */}
         {editItemsModalOpen && editingSaleId && (() => {
-          const totalSubtotal = editingSaleItems.reduce((sum: number, item: any) => sum + (Number(item.subtotal) || 0), 0);
+          const totalSubtotal = editingSaleItems.reduce((sum: number, item: any) => sum + (Number(item.subtotal) || (Number(item.unit_price) * Number(item.quantity)) || 0), 0);
           const totalGovCost = editingSaleItems.reduce((sum: number, item: any) => {
             const itemExps = item.expenses || [];
             const itemExpTotal = itemExps.length > 0
@@ -1332,144 +1373,263 @@ export const SalesList: React.FC = () => {
             return sum + itemExpTotal;
           }, 0);
           const totalNetProfit = totalSubtotal - totalGovCost;
+          const totalPaid = (editingSale?.payments || []).reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+          const remainingDue = Math.max(0, (editingSale?.grand_total || totalSubtotal) - totalPaid);
 
-          const selectedItem = editingSaleItems.find((i: any) => i.id === selectedServiceItemId) || editingSaleItems[0];
-          const selectedItemExps: any[] = selectedItem?.expenses || [];
-          const selectedItemExpTotal = selectedItemExps.length > 0
-            ? selectedItemExps.reduce((eSum: number, e: any) => eSum + (Number(e.amount) || 0), 0)
-            : Number(selectedItem?.expense || 0);
-          const selectedItemSubtotal = Number(selectedItem?.subtotal || (selectedItem?.unit_price * selectedItem?.quantity) || 0);
-          const selectedItemProfit = selectedItemSubtotal - selectedItemExpTotal;
+          // Get the single applicant/member for this invoice
+          const invoiceMember = editingSale?.person_name || editingSaleItems[0]?.person_name || null;
 
           return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-              <div className="glass border border-border rounded-2xl p-6 w-full max-w-5xl bg-white shadow-2xl relative max-h-[90vh] flex flex-col space-y-4 overflow-hidden">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-md">
+              <div className="border border-slate-200/90 rounded-3xl p-5 sm:p-7 w-[96vw] max-w-[1280px] bg-white shadow-2xl relative max-h-[94vh] flex flex-col space-y-4 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
                 {/* Header */}
-                <div className="flex items-start justify-between border-b border-border pb-3 shrink-0">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
-                      <ReceiptText size={18} />
+                <div className="flex items-start justify-between border-b border-slate-100 pb-3.5 shrink-0">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-11 h-11 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-bold shadow-inner">
+                      <ReceiptText size={22} />
                     </div>
                     <div>
-                      <h3 className="text-base font-bold text-foreground leading-none">Invoice #{editingSale?.invoice_no}</h3>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Client: <strong className="text-foreground">{editingSale?.customer?.name || 'Walk-in'}</strong>
-                      </p>
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <h2 className="text-xl sm:text-2xl font-black font-heading text-slate-900 tracking-tight">
+                          Invoice #{editingSale?.invoice_no}
+                        </h2>
+                        {invoiceMember ? (
+                          <span className="text-xs px-3 py-1 rounded-full bg-sky-100 text-sky-900 font-bold font-heading border border-sky-200 inline-flex items-center gap-1.5">
+                            <User size={13} className="text-sky-600" />
+                            <span>Member: <strong>{invoiceMember}</strong></span>
+                          </span>
+                        ) : (
+                          <span className="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-700 font-bold font-heading">
+                            General Invoice
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-500 mt-1 font-sans flex-wrap">
+                        <span className="flex items-center gap-1 text-slate-800 font-semibold">
+                          <Building2 size={14} className="text-slate-400" />
+                          <span>Client: {editingSale?.customer?.name || 'Walk-in Client'}</span>
+                        </span>
+                        {editingSale?.customer?.phone && (
+                          <span className="text-slate-400 font-sans">({editingSale.customer.phone})</span>
+                        )}
+                        <span>•</span>
+                        <span>Date: <strong className="text-slate-700">{new Date(editingSale?.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</strong></span>
+                      </div>
                     </div>
                   </div>
                   <button
                     onClick={() => { setEditItemsModalOpen(false); setEditingSaleId(null); setSelectedServiceItemId(null); }}
-                    className="p-1.5 text-muted-foreground hover:text-foreground bg-muted/40 rounded-full transition-colors cursor-pointer"
+                    className="p-2 text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full transition-all cursor-pointer"
+                    title="Close"
                   >
-                    <X size={16} />
+                    <X size={18} />
                   </button>
                 </div>
 
-                {/* KPI Overview Strip */}
-                <div className="grid grid-cols-3 gap-3 shrink-0">
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-center">
-                    <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Total Billed</span>
-                    <p className="text-sm font-bold font-mono text-foreground mt-0.5">{totalSubtotal.toFixed(2)} AED</p>
+                {/* Sleek Financial Summary Ribbon */}
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 shrink-0 bg-slate-50/80 p-2.5 rounded-2xl border border-slate-200/80">
+                  <div className="bg-white rounded-xl p-2.5 border border-slate-200/60 shadow-2xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 font-heading block">Total Billed</span>
+                    <p className="text-base sm:text-lg font-black font-heading text-slate-900 mt-0.5">
+                      {totalSubtotal.toFixed(2)} <span className="text-[10px] font-bold text-slate-400">AED</span>
+                    </p>
                   </div>
-                  <div className="bg-rose-50/50 border border-rose-200 rounded-xl p-2.5 text-center">
-                    <span className="text-[10px] uppercase tracking-wider font-bold text-rose-600">Total Gov Costs</span>
-                    <p className="text-sm font-bold font-mono text-rose-600 mt-0.5">-{totalGovCost.toFixed(2)} AED</p>
+
+                  <div className="bg-white rounded-xl p-2.5 border border-rose-100 shadow-2xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 font-heading block">Gov / Card Costs</span>
+                    <p className="text-base sm:text-lg font-black font-heading text-rose-600 mt-0.5">
+                      -{totalGovCost.toFixed(2)} <span className="text-[10px] font-bold text-rose-400">AED</span>
+                    </p>
                   </div>
-                  <div className="bg-emerald-50/50 border border-emerald-200 rounded-xl p-2.5 text-center">
-                    <span className="text-[10px] uppercase tracking-wider font-bold text-emerald-600">Net Typing Profit</span>
-                    <p className="text-sm font-bold font-mono text-emerald-600 mt-0.5">+{totalNetProfit.toFixed(2)} AED</p>
+
+                  <div className="bg-white rounded-xl p-2.5 border border-emerald-100 shadow-2xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 font-heading block">Net Typing Profit</span>
+                    <p className="text-base sm:text-lg font-black font-heading text-emerald-700 mt-0.5">
+                      +{totalNetProfit.toFixed(2)} <span className="text-[10px] font-bold text-emerald-500">AED</span>
+                    </p>
                   </div>
+
+                  <div className="bg-white rounded-xl p-2.5 border border-sky-100 shadow-2xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-sky-700 font-heading block">Total Collected</span>
+                    <p className="text-base sm:text-lg font-black font-heading text-sky-800 mt-0.5">
+                      {totalPaid.toFixed(2)} <span className="text-[10px] font-bold text-sky-400">AED</span>
+                    </p>
+                  </div>
+
+                  {(() => {
+                    const invoiceGrandTotal = editingSale?.grand_total || totalSubtotal;
+                    const advanceCredit = Math.max(0, totalPaid - invoiceGrandTotal);
+                    const isDue = remainingDue > 0;
+
+                    return (
+                      <div className={`rounded-xl p-2.5 border shadow-2xs col-span-2 sm:col-span-1 ${
+                        advanceCredit > 0
+                          ? 'bg-sky-50/90 border-sky-300'
+                          : isDue
+                          ? 'bg-amber-50/70 border-amber-200'
+                          : 'bg-emerald-50/70 border-emerald-200'
+                      }`}>
+                        <span className={`text-[10px] font-bold uppercase tracking-wider font-heading block ${
+                          advanceCredit > 0 ? 'text-sky-900 font-black' : isDue ? 'text-amber-800' : 'text-emerald-800'
+                        }`}>
+                          {advanceCredit > 0 ? '✨ Advance Credit' : isDue ? 'Balance Due' : 'Status'}
+                        </span>
+                        <p className={`text-base sm:text-lg font-black font-heading mt-0.5 ${
+                          advanceCredit > 0 ? 'text-sky-900' : isDue ? 'text-amber-800' : 'text-emerald-700'
+                        }`}>
+                          {advanceCredit > 0 ? `+${advanceCredit.toFixed(2)} AED` : isDue ? `${remainingDue.toFixed(2)} AED` : 'Fully Settled'}
+                        </p>
+                      </div>
+                    );
+                  })()}
                 </div>
 
-                {/* Two-Column Master Detail Body */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 overflow-y-auto min-h-0 pr-1">
-                  {/* Left Column (5 cols): Service Items List */}
-                  <div className="lg:col-span-5 flex flex-col space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase tracking-wider text-foreground font-heading">
+                {/* SERVICES TABLE */}
+                <div className="flex-1 overflow-hidden flex flex-col space-y-2.5 min-h-0">
+                  <div className="flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm sm:text-base font-black font-heading text-slate-900 tracking-wide uppercase">
                         Services on Invoice ({editingSaleItems.length})
-                      </span>
+                      </h3>
+                      {invoiceMember && (
+                        <span className="text-xs text-slate-500 font-medium">
+                          for {invoiceMember}
+                        </span>
+                      )}
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenPayModal(editingSaleId)}
+                      className="text-xs font-bold font-heading text-primary hover:text-primary-hover flex items-center gap-1.5 cursor-pointer bg-primary/10 hover:bg-primary/15 px-3 py-1.5 rounded-xl border border-primary/20 transition-all shadow-2xs"
+                    >
+                      <CreditCard size={14} />
+                      <span>Payment History ({(editingSale?.payments || []).length})</span>
+                    </button>
+                  </div>
 
-                    <div className="space-y-2 overflow-y-auto max-h-[320px] pr-1">
-                      {editingSaleItems.length === 0 ? (
-                        <p className="text-xs text-muted-foreground text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                          No service items.
-                        </p>
-                      ) : (
-                        editingSaleItems.map((item: any) => {
-                          const isSelected = selectedItem?.id === item.id;
-                          const itemExps = item.expenses || [];
-                          const itemExpTotal = itemExps.length > 0
-                            ? itemExps.reduce((eSum: number, e: any) => eSum + (Number(e.amount) || 0), 0)
-                            : Number(item.expense || 0);
-                          const itemPrice = Number(item.unit_price || 0) * Number(item.quantity || 1);
-                          const itemProfit = itemPrice - itemExpTotal;
+                  {/* Services Table */}
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden flex-1 overflow-y-auto bg-white shadow-xs">
+                    <table className="w-full text-left text-sm border-collapse font-sans">
+                      <thead className="bg-slate-100 text-slate-700 font-bold font-heading text-xs uppercase tracking-wider sticky top-0 z-10 border-b border-slate-200">
+                        <tr>
+                          <th className="text-center py-3 px-3 w-10">#</th>
+                          <th className="py-3 px-4 min-w-[240px]">Service Name</th>
+                          <th className="text-center py-3 px-3 w-16">Qty</th>
+                          <th className="text-right py-3 px-4 w-28">Rate</th>
+                          <th className="text-right py-3 px-4 w-32">Total Billed</th>
+                          <th className="text-right py-3 px-4 w-40">Gov Costs &amp; Deductions</th>
+                          <th className="text-right py-3 px-4 w-32">Net Profit</th>
+                          <th className="text-center py-3 px-3 w-14"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {editingSaleItems.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="py-12 text-center text-slate-500">
+                              <div className="max-w-md mx-auto space-y-1">
+                                <ReceiptText size={24} className="mx-auto text-slate-400 opacity-60" />
+                                <div className="font-bold font-heading text-slate-700 text-sm">
+                                  No services on this invoice yet
+                                </div>
+                                <div className="text-xs text-slate-400 font-sans">Use the form below to add a service item.</div>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          editingSaleItems.map((item: any, idx: number) => {
+                            const itemExps = item.expenses || [];
+                            const itemExpTotal = itemExps.length > 0
+                              ? itemExps.reduce((eSum: number, e: any) => eSum + (Number(e.amount) || 0), 0)
+                              : Number(item.expense || 0);
+                            const itemPrice = Number(item.subtotal || (Number(item.unit_price || 0) * Number(item.quantity || 1)));
+                            const itemProfit = itemPrice - itemExpTotal;
 
-                          return (
-                            <div
-                              key={item.id}
-                              onClick={() => setSelectedServiceItemId(item.id)}
-                              className={`p-3 rounded-xl border transition-all cursor-pointer relative ${
-                                isSelected
-                                  ? 'border-primary ring-2 ring-primary/20 bg-primary/5 shadow-xs'
-                                  : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50'
-                              }`}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div>
-                                  <h4 className={`text-xs font-bold ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                            return (
+                              <tr key={item.id} className="hover:bg-slate-50/90 transition-colors">
+                                <td className="text-center font-bold font-heading text-slate-400 py-3.5 px-3">
+                                  {idx + 1}
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <div className="font-bold font-heading text-slate-900 text-sm leading-snug">
                                     {item.service?.name || 'Service'}
-                                  </h4>
-                                  {item.person_name && (
-                                    <span className="text-[10px] text-muted-foreground italic block">
-                                      For: {item.person_name}
-                                    </span>
-                                  )}
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold border border-slate-200">
-                                      {item.staff?.name || editingSale?.employee?.name || 'Staff'}
-                                    </span>
-                                    <span className="text-[10px] text-muted-foreground font-mono">
-                                      Qty: <strong>{item.quantity}</strong> × {Number(item.unit_price).toFixed(2)} AED
-                                    </span>
                                   </div>
-                                </div>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleRemoveItem(item.id); }}
-                                  disabled={editSaving}
-                                  className="w-6 h-6 rounded-full flex items-center justify-center bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition-all cursor-pointer shrink-0"
-                                  title="Remove Service"
-                                >
-                                  <Trash2 size={12} />
-                                </button>
-                              </div>
+                                  <div className="text-[11px] text-slate-400 font-medium mt-0.5">
+                                    Staff: {item.staff?.name || editingSale?.employee?.name || 'Staff'}
+                                  </div>
+                                </td>
+                                <td className="text-center py-3.5 px-3">
+                                  <span className="inline-block px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-800 font-bold font-heading text-xs">
+                                    {item.quantity}
+                                  </span>
+                                </td>
+                                <td className="text-right font-heading font-semibold text-slate-700 py-3.5 px-4 whitespace-nowrap">
+                                  {Number(item.unit_price).toFixed(2)}
+                                </td>
+                                <td className="text-right font-heading font-bold text-slate-900 py-3.5 px-4 whitespace-nowrap">
+                                  {itemPrice.toFixed(2)} <span className="text-[10px] text-slate-400">AED</span>
+                                </td>
+                                <td className="text-right py-3.5 px-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenServiceExpenseModal(item.id)}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold font-heading transition-all inline-flex items-center gap-1.5 cursor-pointer border ${
+                                      itemExpTotal > 0
+                                        ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200 shadow-2xs'
+                                        : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200'
+                                    }`}
+                                    title="View & Record Government Fees and Card Deductions for this service"
+                                  >
+                                    <Wallet size={13} className={itemExpTotal > 0 ? 'text-rose-600' : 'text-slate-400'} />
+                                    <span>{itemExpTotal > 0 ? `-${itemExpTotal.toFixed(2)} AED` : '+ Log Fee'}</span>
+                                    {itemExps.length > 0 && (
+                                      <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-200 text-rose-900">
+                                        {itemExps.length}
+                                      </span>
+                                    )}
+                                  </button>
+                                </td>
+                                <td className="text-right font-heading font-black text-emerald-600 py-3.5 px-4 whitespace-nowrap">
+                                  +{itemProfit.toFixed(2)} <span className="text-[10px] text-emerald-700">AED</span>
+                                </td>
+                                <td className="text-center py-3.5 px-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveItem(item.id)}
+                                    disabled={editSaving}
+                                    className="p-1 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                    title="Remove Service from Invoice"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
 
-                              <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 text-[11px] font-mono">
-                                <div>
-                                  Billed: <strong className="text-foreground font-bold">{itemPrice.toFixed(2)} AED</strong>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${itemExpTotal > 0 ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600'}`}>
-                                    Gov: -{itemExpTotal.toFixed(2)}
-                                  </span>
-                                  <span className="text-emerald-600 font-bold">
-                                    +{itemProfit.toFixed(2)}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })
+                  {/* SIMPLE & DIRECT ADD SERVICE SECTION FOR THIS MEMBER */}
+                  <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3.5 shrink-0 shadow-2xs">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold font-heading uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                        <Plus size={14} className="text-primary font-bold" />
+                        <span>Add Service to this Invoice</span>
+                      </span>
+                      {invoiceMember && (
+                        <span className="text-xs font-semibold text-slate-500">
+                          Adding for: <strong className="text-sky-800">👤 {invoiceMember}</strong>
+                        </span>
                       )}
                     </div>
 
-                    {/* Add Service Section */}
-                    <div className="border border-slate-200 bg-slate-50/80 rounded-xl p-3 space-y-2 mt-auto">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block">
-                        + Add Service Item
-                      </span>
-                      <div className="space-y-1.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                      {/* Service Selector */}
+                      <div className="sm:col-span-6">
+                        <label className="text-[10px] font-bold font-heading uppercase tracking-wider text-slate-600 block mb-1">
+                          Select Service
+                        </label>
                         <select
                           value={addServiceId}
                           onChange={(e) => {
@@ -1477,186 +1637,82 @@ export const SalesList: React.FC = () => {
                             setAddServiceId(e.target.value);
                             if (svc) setAddPrice(svc.price);
                           }}
-                          className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-foreground focus:ring-1 focus:ring-primary outline-none cursor-pointer"
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold font-sans text-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none cursor-pointer"
                         >
-                          <option value="">-- Select a Service --</option>
+                          <option value="">-- Choose a Service --</option>
                           {allServices.map(s => (
                             <option key={s.id} value={s.id}>
                               {s.name} ({s.price.toFixed(2)} AED)
                             </option>
                           ))}
                         </select>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <input
-                              type="number"
-                              min={1}
-                              value={addQty}
-                              onChange={(e) => setAddQty(parseInt(e.target.value) || 1)}
-                              placeholder="Qty"
-                              className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-foreground focus:ring-1 focus:ring-primary outline-none"
-                            />
-                          </div>
-                          <div>
-                            <input
-                              type="number"
-                              min={0}
-                              step={0.01}
-                              value={addPrice}
-                              onChange={(e) => setAddPrice(parseFloat(e.target.value) || 0)}
-                              placeholder="Price (AED)"
-                              className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-foreground focus:ring-1 focus:ring-primary outline-none"
-                            />
-                          </div>
-                        </div>
+                      </div>
+
+                      {/* Qty */}
+                      <div className="sm:col-span-2">
+                        <label className="text-[10px] font-bold font-heading uppercase tracking-wider text-slate-600 block mb-1 text-center">
+                          Qty
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={addQty}
+                          onChange={(e) => setAddQty(parseInt(e.target.value) || 1)}
+                          className="w-full px-2 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold font-heading text-slate-800 text-center focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                        />
+                      </div>
+
+                      {/* Rate */}
+                      <div className="sm:col-span-2">
+                        <label className="text-[10px] font-bold font-heading uppercase tracking-wider text-slate-600 block mb-1">
+                          Rate (AED)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={addPrice}
+                          onChange={(e) => setAddPrice(parseFloat(e.target.value) || 0)}
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold font-heading text-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                        />
+                      </div>
+
+                      {/* Add Button */}
+                      <div className="sm:col-span-2">
                         <button
+                          type="button"
                           onClick={handleAddItem}
                           disabled={editSaving || !addServiceId}
-                          className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-lg transition-all shadow-2xs disabled:opacity-50 cursor-pointer"
+                          className="w-full flex items-center justify-center gap-1.5 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold font-heading rounded-xl transition-all shadow-md hover:shadow-lg disabled:opacity-50 cursor-pointer"
                         >
-                          <Plus size={13} /> Add to Invoice
+                          <Plus size={14} />
+                          <span>Add Item</span>
                         </button>
                       </div>
                     </div>
                   </div>
-
-                  {/* Right Column (7 cols): Selected Service Gov Fee & Expense History */}
-                  <div className="lg:col-span-7 flex flex-col space-y-3">
-                    {selectedItem ? (
-                      <div className="border border-amber-500/30 bg-amber-50/20 rounded-xl p-4 flex flex-col flex-1 space-y-3">
-                        <div className="flex items-start justify-between border-b border-amber-500/20 pb-2.5">
-                          <div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 block">
-                              Service Gov Fees &amp; Card Costs
-                            </span>
-                            <h4 className="text-sm font-bold text-foreground font-heading mt-0.5">
-                              {selectedItem.service?.name}
-                              {selectedItem.person_name && <span className="text-muted-foreground italic text-xs ml-1">(For: {selectedItem.person_name})</span>}
-                            </h4>
-                          </div>
-                          <div className="text-right text-xs font-mono">
-                            <span className="text-muted-foreground block text-[10px]">Net Profit</span>
-                            <span className="font-bold text-emerald-600 text-sm">+{selectedItemProfit.toFixed(2)} AED</span>
-                          </div>
-                        </div>
-
-                        {/* Expense History List */}
-                        <div className="flex-1 space-y-2 overflow-y-auto max-h-[220px]">
-                          <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground block">
-                            Logged Fees ({selectedItemExps.length})
-                          </span>
-
-                          {selectedItemExps.length === 0 ? (
-                            <div className="text-center py-6 bg-white border border-dashed border-slate-200 rounded-xl text-xs text-muted-foreground">
-                              No government fees or expenses logged for this service.
-                            </div>
-                          ) : (
-                            <div className="space-y-1.5">
-                              {selectedItemExps.map((exp: any) => {
-                                const acc = accounts.find(a => a.id === exp.account_id);
-                                const cleanDesc = exp.description?.replace(/\[Item:[^\]]+\]\s*/g, '') || 'Gov Fee';
-
-                                return (
-                                  <div
-                                    key={exp.id}
-                                    className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-lg text-xs"
-                                  >
-                                    <div>
-                                      <div className="font-bold text-foreground">{cleanDesc}</div>
-                                      <div className="text-[10px] text-muted-foreground flex items-center gap-2 mt-0.5">
-                                        <span>{exp.expense_date ? new Date(exp.expense_date).toLocaleDateString() : '—'}</span>
-                                        <span>•</span>
-                                        <span className="font-semibold text-slate-700">
-                                          {acc?.type === 'card' ? '💳' : acc?.type === 'cash_drawer' ? '💵' : '🏦'} {acc?.name || 'Cash Drawer'}
-                                        </span>
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                      <span className="font-bold font-mono text-rose-600 text-xs">
-                                        -{Number(exp.amount).toFixed(2)} AED
-                                      </span>
-                                      <button
-                                        onClick={() => handleDeleteServiceExpense(exp.id)}
-                                        disabled={svcExpenseSaving}
-                                        className="w-6 h-6 rounded-full flex items-center justify-center bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition-all cursor-pointer shadow-2xs"
-                                        title="Delete Fee"
-                                      >
-                                        <Trash2 size={11} />
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Add Gov Fee to this Service Form */}
-                        <div className="bg-white border border-amber-500/30 rounded-xl p-3 space-y-2 mt-auto">
-                          <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider block">
-                            + Record Gov Fee / Card Deduction
-                          </span>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-0.5">Amount (AED)</label>
-                              <input
-                                type="number"
-                                min={0.01}
-                                step={0.01}
-                                value={svcExpenseAmount || ''}
-                                onChange={(e) => setSvcExpenseAmount(parseFloat(e.target.value) || 0)}
-                                placeholder="0.00"
-                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-rose-600 focus:ring-1 focus:ring-amber-500 outline-none"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-0.5">Paid From (Card / Drawer)</label>
-                              <select
-                                value={svcExpenseAccountId}
-                                onChange={(e) => setSvcExpenseAccountId(e.target.value)}
-                                className="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-foreground focus:ring-1 focus:ring-amber-500 outline-none cursor-pointer"
-                              >
-                                <option value="">-- Select Card / Drawer --</option>
-                                {accounts.map(a => (
-                                  <option key={a.id} value={a.id}>
-                                    {a.type === 'card' ? '💳' : a.type === 'cash_drawer' ? '💵' : '🏦'} {a.name} ({Number(a.balance).toFixed(2)} AED)
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          </div>
-                          <div>
-                            <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-0.5">Fee Description</label>
-                            <input
-                              type="text"
-                              value={svcExpenseDesc}
-                              onChange={(e) => setSvcExpenseDesc(e.target.value)}
-                              placeholder="E.g. ICP Portal Cancellation Fee, Amer Portal, Medical..."
-                              className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-foreground focus:ring-1 focus:ring-amber-500 outline-none"
-                            />
-                          </div>
-                          <button
-                            onClick={handleAddServiceExpense}
-                            disabled={svcExpenseSaving || svcExpenseAmount <= 0}
-                            className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition-all shadow-2xs disabled:opacity-50 cursor-pointer"
-                          >
-                            <Plus size={13} /> {svcExpenseSaving ? 'Saving...' : 'Add Fee to Service'}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center flex-1 bg-slate-50 rounded-xl border border-dashed border-slate-200 p-8 text-center text-xs text-muted-foreground">
-                        Select a service from the left to view and record its government fees.
-                      </div>
-                    )}
-                  </div>
                 </div>
 
                 {/* Footer */}
-                <div className="flex justify-end pt-3 border-t border-border shrink-0">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2.5 border-t border-slate-100 shrink-0">
                   <button
+                    type="button"
+                    onClick={() => handleOpenPayModal(editingSaleId)}
+                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-bold font-heading text-slate-800 transition-all cursor-pointer shadow-2xs w-full sm:w-auto justify-center"
+                  >
+                    <CreditCard size={15} className="text-emerald-600" />
+                    <span>Payment History &amp; Record Payment</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-lg font-bold ${
+                      remainingDue > 0 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      {remainingDue > 0 ? `${remainingDue.toFixed(2)} AED Due` : 'Fully Paid'}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => { setEditItemsModalOpen(false); setEditingSaleId(null); setSelectedServiceItemId(null); }}
-                    className="px-6 py-2 bg-secondary hover:bg-muted text-foreground text-xs font-bold rounded-xl transition-all cursor-pointer"
+                    className="px-7 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold font-heading rounded-xl transition-all shadow-md hover:shadow-lg cursor-pointer w-full sm:w-auto text-center"
                   >
                     Done
                   </button>
@@ -1665,12 +1721,210 @@ export const SalesList: React.FC = () => {
             </div>
           );
         })()}
-        {/* PAYMENT MODAL */}
+
+        {/* SERVICE GOV FEE & EXPENSE HISTORY SUB-MODAL */}
+        {serviceExpenseModalOpen && selectedServiceItemId && (() => {
+          const selectedItem = editingSaleItems.find((i: any) => i.id === selectedServiceItemId);
+          if (!selectedItem) return null;
+
+          const selectedItemExps: any[] = selectedItem.expenses || [];
+          const selectedItemExpTotal = selectedItemExps.length > 0
+            ? selectedItemExps.reduce((eSum: number, e: any) => eSum + (Number(e.amount) || 0), 0)
+            : Number(selectedItem.expense || 0);
+          const selectedItemSubtotal = Number(selectedItem.subtotal || (Number(selectedItem.unit_price || 0) * Number(selectedItem.quantity || 1)));
+          const selectedItemProfit = selectedItemSubtotal - selectedItemExpTotal;
+
+          return (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+              <div className="border border-slate-200 rounded-3xl p-5 sm:p-6 w-full max-w-2xl bg-white shadow-2xl relative max-h-[90vh] flex flex-col space-y-4 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                {/* Header */}
+                <div className="flex items-start justify-between border-b border-slate-100 pb-3 shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold">
+                      <Wallet size={20} />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold font-heading text-slate-900 leading-tight">
+                        {selectedItem.service?.name}
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5 font-sans flex items-center gap-2 flex-wrap">
+                        <span>Invoice #{editingSale?.invoice_no}</span>
+                        {selectedItem.person_name && (
+                          <>
+                            <span>•</span>
+                            <span className="font-semibold text-slate-800 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+                              👤 Member: {selectedItem.person_name}
+                            </span>
+                          </>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setServiceExpenseModalOpen(false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full transition-all cursor-pointer"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {/* Mini Summary Cards */}
+                <div className="grid grid-cols-3 gap-2.5 shrink-0">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-center">
+                    <span className="text-[10px] uppercase font-bold font-heading text-slate-500">Service Billed</span>
+                    <p className="text-base font-black font-heading text-slate-900 mt-0.5">{selectedItemSubtotal.toFixed(2)} <span className="text-[10px] text-slate-500">AED</span></p>
+                  </div>
+                  <div className="bg-rose-50/70 border border-rose-200 rounded-xl p-2.5 text-center">
+                    <span className="text-[10px] uppercase font-bold font-heading text-rose-600">Gov Fees Logged</span>
+                    <p className="text-base font-black font-heading text-rose-600 mt-0.5">-{selectedItemExpTotal.toFixed(2)} <span className="text-[10px] text-rose-400">AED</span></p>
+                  </div>
+                  <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-2.5 text-center">
+                    <span className="text-[10px] uppercase font-bold font-heading text-emerald-700">Net Profit</span>
+                    <p className="text-base font-black font-heading text-emerald-700 mt-0.5">+{selectedItemProfit.toFixed(2)} <span className="text-[10px] text-emerald-500">AED</span></p>
+                  </div>
+                </div>
+
+                {/* Logged Expenses List */}
+                <div className="flex-1 overflow-hidden flex flex-col space-y-2 min-h-0">
+                  <div className="flex items-center justify-between shrink-0">
+                    <span className="text-xs font-bold font-heading uppercase tracking-wider text-slate-800">
+                      Logged Gov Fees &amp; Card Deductions ({selectedItemExps.length})
+                    </span>
+                  </div>
+
+                  <div className="border border-slate-200 rounded-xl overflow-hidden flex-1 overflow-y-auto bg-white shadow-2xs">
+                    {selectedItemExps.length === 0 ? (
+                      <div className="text-center py-8 text-slate-500 text-xs italic">
+                        No government fees or expenses logged for this service yet.
+                      </div>
+                    ) : (
+                      <table className="w-full text-left text-xs sm:text-sm border-collapse font-sans">
+                        <thead className="bg-slate-100 text-slate-700 font-bold font-heading text-[11px] uppercase tracking-wider sticky top-0 border-b border-slate-200">
+                          <tr>
+                            <th className="py-2 px-3">Date</th>
+                            <th className="py-2 px-3">Fee Description</th>
+                            <th className="py-2 px-3">Paid From (Card / Drawer)</th>
+                            <th className="py-2 px-3 text-right">Amount</th>
+                            <th className="py-2 px-3 text-center w-10"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {selectedItemExps.map((exp: any) => {
+                            const acc = accounts.find(a => a.id === exp.account_id);
+                            const cleanDesc = exp.description?.replace(/\[Item:[^\]]+\]\s*/g, '') || 'Gov Fee';
+
+                            return (
+                              <tr key={exp.id} className="hover:bg-slate-50/80 transition-colors">
+                                <td className="py-2 px-3 text-slate-500 whitespace-nowrap text-xs">
+                                  {exp.expense_date ? new Date(exp.expense_date).toLocaleDateString() : '—'}
+                                </td>
+                                <td className="py-2 px-3 font-semibold text-slate-900 text-xs sm:text-sm">
+                                  {cleanDesc}
+                                </td>
+                                <td className="py-2 px-3 text-slate-700 font-medium text-xs sm:text-sm">
+                                  <span className="inline-flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                                    <span>{acc?.type === 'card' ? '💳' : acc?.type === 'cash_drawer' ? '💵' : '🏦'}</span>
+                                    <span>{acc?.name || 'Cash Drawer'}</span>
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3 text-right font-heading font-black text-rose-600 whitespace-nowrap text-xs sm:text-sm">
+                                  -{Number(exp.amount).toFixed(2)} AED
+                                </td>
+                                <td className="py-2 px-3 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteServiceExpense(exp.id)}
+                                    disabled={svcExpenseSaving}
+                                    className="p-1 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
+                                    title="Delete Fee (restores balance)"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+
+                {/* Add Gov Fee Form */}
+                <div className="bg-amber-50/40 border border-amber-400/30 rounded-2xl p-3.5 space-y-2 shrink-0 shadow-2xs">
+                  <span className="text-xs font-bold font-heading text-amber-900 uppercase tracking-wider block">
+                    + Record Gov Fee / Card Deduction
+                  </span>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="text-[10px] font-bold font-heading uppercase text-slate-600 block mb-0.5">Amount (AED)</label>
+                      <input
+                        type="number"
+                        min={0.01}
+                        step={0.01}
+                        value={svcExpenseAmount || ''}
+                        onChange={(e) => setSvcExpenseAmount(parseFloat(e.target.value) || 0)}
+                        placeholder="0.00"
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm font-heading font-bold text-rose-600 focus:ring-2 focus:ring-amber-500 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold font-heading uppercase text-slate-600 block mb-0.5">Paid From (Card / Drawer)</label>
+                      <select
+                        value={svcExpenseAccountId}
+                        onChange={(e) => setSvcExpenseAccountId(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm font-semibold font-sans text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none cursor-pointer"
+                      >
+                        <option value="">-- Select Card / Drawer --</option>
+                        {accounts.map(a => (
+                          <option key={a.id} value={a.id}>
+                            {a.type === 'card' ? '💳' : a.type === 'cash_drawer' ? '💵' : '🏦'} {a.name} ({Number(a.balance).toFixed(2)} AED)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold font-heading uppercase text-slate-600 block mb-0.5">Fee Description</label>
+                    <input
+                      type="text"
+                      value={svcExpenseDesc}
+                      onChange={(e) => setSvcExpenseDesc(e.target.value)}
+                      placeholder="E.g. ICP Portal Fee, Amer Cancellation, Medical..."
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm font-medium font-sans text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddServiceExpense}
+                    disabled={svcExpenseSaving || svcExpenseAmount <= 0}
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold font-heading rounded-xl transition-all shadow-md hover:shadow-lg disabled:opacity-50 cursor-pointer"
+                  >
+                    <Plus size={14} /> {svcExpenseSaving ? 'Saving Fee...' : 'Add Fee to Service'}
+                  </button>
+                </div>
+
+                {/* Footer */}
+                <div className="flex justify-end pt-2 border-t border-slate-100 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setServiceExpenseModalOpen(false)}
+                    className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold font-heading rounded-xl transition-all cursor-pointer"
+                  >
+                    Back to Invoice
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+        {/* PAYMENT & ADVANCE MODAL */}
         {payModalOpen && payingSaleDetails && (() => {
           const totalPaid = (payingSaleDetails.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0);
           const grandTotal = payingSaleDetails.grand_total || 0;
           const due = Math.max(0, grandTotal - totalPaid);
-          const isPaid = due <= 0;
+          const advanceCredit = Math.max(0, totalPaid - grandTotal);
+          const isPaid = totalPaid >= grandTotal;
 
           return (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -1683,9 +1937,9 @@ export const SalesList: React.FC = () => {
                 </button>
 
                 <div className="flex items-center gap-2 mb-5">
-                  <CreditCard size={16} className="text-emerald-600" />
+                  <CreditCard size={18} className="text-emerald-600" />
                   <div>
-                    <h3 className="text-sm font-bold text-foreground leading-none">Payment — #{payingSaleDetails.invoice_no}</h3>
+                    <h3 className="text-sm font-bold text-foreground leading-none">Payments &amp; Advance — #{payingSaleDetails.invoice_no}</h3>
                     <span className="text-[10px] text-muted-foreground mt-1 block">{payingSaleDetails.customer?.name || 'Walk-in Customer'}</span>
                   </div>
                 </div>
@@ -1697,12 +1951,26 @@ export const SalesList: React.FC = () => {
                     <div className="text-sm font-bold text-foreground">{grandTotal.toFixed(2)} <span className="text-[10px] text-muted-foreground">AED</span></div>
                   </div>
                   <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-3 text-center">
-                    <div className="text-[10px] font-bold text-emerald-600/70 uppercase tracking-wider mb-1">Total Paid</div>
+                    <div className="text-[10px] font-bold text-emerald-600/70 uppercase tracking-wider mb-1">Total Collected</div>
                     <div className="text-sm font-bold text-emerald-600">{totalPaid.toFixed(2)} <span className="text-[10px]">AED</span></div>
                   </div>
-                  <div className={`border rounded-xl p-3 text-center ${isPaid ? 'bg-blue-500/5 border-blue-500/20' : 'bg-rose-500/5 border-rose-500/20'}`}>
-                    <div className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${isPaid ? 'text-blue-500/70' : 'text-rose-500/70'}`}>Outstanding Due</div>
-                    <div className={`text-sm font-bold ${isPaid ? 'text-blue-500' : 'text-rose-500'}`}>{due.toFixed(2)} <span className="text-[10px]">AED</span></div>
+                  <div className={`border rounded-xl p-3 text-center ${
+                    advanceCredit > 0
+                      ? 'bg-sky-500/10 border-sky-500/30'
+                      : isPaid
+                      ? 'bg-emerald-500/10 border-emerald-500/30'
+                      : 'bg-rose-500/10 border-rose-500/30'
+                  }`}>
+                    <div className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${
+                      advanceCredit > 0 ? 'text-sky-700' : isPaid ? 'text-emerald-700' : 'text-rose-700'
+                    }`}>
+                      {advanceCredit > 0 ? '✨ Advance Credit' : isPaid ? 'Status' : 'Outstanding Due'}
+                    </div>
+                    <div className={`text-sm font-black ${
+                      advanceCredit > 0 ? 'text-sky-800' : isPaid ? 'text-emerald-700' : 'text-rose-600'
+                    }`}>
+                      {advanceCredit > 0 ? `+${advanceCredit.toFixed(2)} AED` : isPaid ? 'Fully Paid' : `${due.toFixed(2)} AED`}
+                    </div>
                   </div>
                 </div>
 
@@ -1751,117 +2019,134 @@ export const SalesList: React.FC = () => {
                   )}
                 </div>
 
-                {/* Collect Payment Form */}
-                {!isPaid ? (
-                  <form onSubmit={handleSubmitPayment} className="border border-emerald-500/20 bg-emerald-500/5 rounded-xl p-4 space-y-3">
-                    <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Collect Payment</p>
-
-                    {/* Member Allocation Field */}
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
-                        <span>Payment For Member / Applicant</span>
-                        <span className="text-[9px] font-normal text-muted-foreground">Select member or leave as whole invoice</span>
-                      </label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <select
-                          value={payPersonName}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setPayPersonName(val);
-                            const saleItems = payingSaleDetails.items || [];
-                            const matching = saleItems.filter((it: any) => it.person_name === val);
-                            const itemTotal = matching.reduce((s: number, it: any) => s + it.subtotal, 0);
-                            if (itemTotal > 0 && itemTotal <= due) {
-                              setPayAmount(parseFloat(itemTotal.toFixed(2)));
-                            }
-                          }}
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
-                        >
-                          <option value="">Entire Invoice / All Members</option>
-                          {Array.from(new Set((payingSaleDetails.items || []).map((it: any) => it.person_name).filter(Boolean))).map((m: any, idx: number) => {
-                            const itemTotal = (payingSaleDetails.items || []).filter((it: any) => it.person_name === m).reduce((s: number, it: any) => s + it.subtotal, 0);
-                            return (
-                              <option key={idx} value={m}>
-                                👤 {m} ({itemTotal.toFixed(2)} AED)
-                              </option>
-                            );
-                          })}
-                        </select>
-                        <input
-                          type="text"
-                          value={payPersonName}
-                          onChange={(e) => setPayPersonName(e.target.value)}
-                          placeholder="Or type custom member name"
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-emerald-500"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Amount (AED)</label>
-                        <input
-                          type="number"
-                          min={0.01}
-                          step={0.01}
-                          max={due}
-                          value={payAmount}
-                          onChange={(e) => setPayAmount(parseFloat(e.target.value) || 0)}
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-emerald-500"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Deposit To Account</label>
-                        <select
-                          value={payAccountId}
-                          onChange={(e) => setPayAccountId(e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
-                        >
-                          {accounts.map(a => (
-                            <option key={a.id} value={a.id}>
-                              {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Transaction / Reference No.</label>
-                      <input
-                        type="text"
-                        value={payTxnNo}
-                        onChange={(e) => setPayTxnNo(e.target.value)}
-                        placeholder="Optional — e.g. bank ref, receipt no"
-                        className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-emerald-500"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Notes</label>
-                      <input
-                        type="text"
-                        value={payNotes}
-                        onChange={(e) => setPayNotes(e.target.value)}
-                        placeholder="Optional remarks about this payment"
-                        className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-emerald-500"
-                      />
-                    </div>
-                    <div className="flex justify-end pt-1">
-                      <button
-                        type="submit"
-                        disabled={paySaving || payAmount <= 0}
-                        className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-md disabled:opacity-50 cursor-pointer"
-                      >
-                        <CreditCard size={13} />
-                        Record Payment
-                      </button>
-                    </div>
-                  </form>
-                ) : (
-                  <div className="text-center py-3 text-xs font-bold text-emerald-600 bg-emerald-500/5 border border-emerald-500/20 rounded-xl">
-                    ✓ Invoice fully paid. No outstanding balance.
+                {/* Collect / Advance Payment Form */}
+                <form onSubmit={handleSubmitPayment} className="border border-emerald-500/20 bg-emerald-500/5 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
+                      {isPaid ? '+ Record Advance / Additional Payment' : 'Collect Payment'}
+                    </p>
+                    {isPaid && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-sky-100 text-sky-900 rounded-md border border-sky-200">
+                        Will be saved as Advance
+                      </span>
+                    )}
                   </div>
-                )}
+
+                  {/* Member Allocation Field */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                      <span>Payment For Member / Applicant</span>
+                      <span className="text-[9px] font-normal text-muted-foreground">Select member or whole invoice</span>
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <select
+                        value={payPersonName}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPayPersonName(val);
+                          const saleItems = payingSaleDetails.items || [];
+                          const matching = saleItems.filter((it: any) => it.person_name === val);
+                          const itemTotal = matching.reduce((s: number, it: any) => s + it.subtotal, 0);
+                          if (itemTotal > 0) {
+                            setPayAmount(parseFloat(itemTotal.toFixed(2)));
+                          }
+                        }}
+                        className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                      >
+                        <option value="">Entire Invoice / All Members</option>
+                        {Array.from(new Set((payingSaleDetails.items || []).map((it: any) => it.person_name).filter(Boolean))).map((m: any, idx: number) => {
+                          const itemTotal = (payingSaleDetails.items || []).filter((it: any) => it.person_name === m).reduce((s: number, it: any) => s + it.subtotal, 0);
+                          return (
+                            <option key={idx} value={m}>
+                              👤 {m} ({itemTotal.toFixed(2)} AED)
+                            </option>
+                          );
+                        })}
+                      </select>
+                      <input
+                        type="text"
+                        value={payPersonName}
+                        onChange={(e) => setPayPersonName(e.target.value)}
+                        placeholder="Or type custom member name"
+                        className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Amount (AED)</label>
+                      <input
+                        type="number"
+                        min={0.01}
+                        step={0.01}
+                        value={payAmount || ''}
+                        onChange={(e) => setPayAmount(parseFloat(e.target.value) || 0)}
+                        placeholder="0.00"
+                        className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-emerald-500"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Deposit To Account</label>
+                      <select
+                        value={payAccountId}
+                        onChange={(e) => setPayAccountId(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                      >
+                        {accounts.map(a => (
+                          <option key={a.id} value={a.id}>
+                            {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Advance Notification Callout */}
+                  {payAmount > due && due > 0 && (
+                    <div className="text-xs font-bold font-heading text-sky-900 bg-sky-50 border border-sky-200 px-3 py-2 rounded-xl">
+                      Taking advance: +{(payAmount - due).toFixed(2)} AED
+                    </div>
+                  )}
+
+                  {isPaid && payAmount > 0 && (
+                    <div className="text-xs font-bold font-heading text-sky-900 bg-sky-50 border border-sky-200 px-3 py-2 rounded-xl">
+                      Taking advance: +{payAmount.toFixed(2)} AED
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Transaction / Reference No.</label>
+                    <input
+                      type="text"
+                      value={payTxnNo}
+                      onChange={(e) => setPayTxnNo(e.target.value)}
+                      placeholder="Optional — e.g. bank ref, receipt no"
+                      className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Notes</label>
+                    <input
+                      type="text"
+                      value={payNotes}
+                      onChange={(e) => setPayNotes(e.target.value)}
+                      placeholder="Optional remarks about this payment (e.g. advance for medical & visa)"
+                      className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="submit"
+                      disabled={paySaving || payAmount <= 0}
+                      className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-md disabled:opacity-50 cursor-pointer"
+                    >
+                      <CreditCard size={13} />
+                      {paySaving ? 'Recording...' : payAmount > due || isPaid ? 'Record Advance Payment' : 'Record Payment'}
+                    </button>
+                  </div>
+                </form>
 
                 <div className="flex justify-end pt-4 border-t border-border mt-4">
                   <button
