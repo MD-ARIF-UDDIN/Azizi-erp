@@ -1,37 +1,55 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../lib/db';
 import type { Service, Customer, TermsConditions } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  ShoppingCart,
+  FileText,
+  Search,
+  X,
   Plus,
   Minus,
   Trash2,
   User,
+  Building,
   Building2,
   Users,
-  FileText,
-  Percent,
   ChevronLeft,
-  Calendar
+  Calendar,
+  Percent,
+  AlertCircle
 } from 'lucide-react';
 
 interface CartItem {
   service: Service;
   quantity: number;
   unit_price: number;
-  assigned_customer_id?: string;
+  person_name?: string;
+  service_date?: string;
+  staff_id?: string;
+  notes?: string;
 }
 
 export const CreateQuotation: React.FC = () => {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, availableBranches } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   // Master Data
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [termsList, setTermsList] = useState<TermsConditions[]>([]);
+  const [selectedTermIds, setSelectedTermIds] = useState<string[]>([]);
+
+  // Catalog Search & Category Filter
+  const [serviceSearch, setServiceSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [highlightIndex, setHighlightIndex] = useState(0);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Form States
   const [customerType, setCustomerType] = useState<'existing' | 'new'>('existing');
@@ -44,78 +62,216 @@ export const CreateQuotation: React.FC = () => {
   const [newCompanyMembers, setNewCompanyMembers] = useState<{ id?: string; name: string; phone?: string; email?: string }[]>([]);
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberPhone, setNewMemberPhone] = useState('');
+  const [newMemberForExisting, setNewMemberForExisting] = useState('');
   const [branchId, setBranchId] = useState('');
   const [discount, setDiscount] = useState(0);
-  const [notes, setNotes] = useState('');
   const [validUntil, setValidUntil] = useState('');
+  const [notes, setNotes] = useState('');
 
   // Cart
   const [cart, setCart] = useState<CartItem[]>([]);
 
+  // Floating Toast State
+  const [toast, setToast] = useState<{ message: string; type: 'warning' | 'error' | 'success'; id: number } | null>(null);
+  const toastTimerRef = useRef<any>(null);
+
+  const showToast = (message: string, type: 'warning' | 'error' | 'success' = 'warning') => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    const id = Date.now();
+    setToast({ message, type, id });
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null);
+    }, 4500);
+  };
+
   const [errorMsg, setErrorMsg] = useState('');
   const [saving, setSaving] = useState(false);
-  const [termsList, setTermsList] = useState<TermsConditions[]>([]);
-  const [selectedTermIds, setSelectedTermIds] = useState<string[]>([]);
 
-  const selectedCustomerRecord = customers.find(c => c.id === customerId);
+  const selectedCustomer = customers.find(c => c.id === customerId);
+  const selectedCustomerRecord = selectedCustomer;
   const isCompanySelected = customerType === 'existing'
-    ? selectedCustomerRecord?.customer_type === 'company'
+    ? selectedCustomer?.customer_type === 'company'
     : newCustomerType === 'company';
   const companyEmployees = customerType === 'existing'
-    ? (isCompanySelected && selectedCustomerRecord?.members ? selectedCustomerRecord.members : [])
+    ? (selectedCustomer?.members || [])
     : (newCustomerType === 'company' ? newCompanyMembers : []);
+
+  const [selectedPersonName, setSelectedPersonName] = useState<string>(searchParams.get('person_name') || '');
 
   useEffect(() => {
     setCart([]);
+    setSelectedPersonName(searchParams.get('person_name') || '');
   }, [customerId, customerType, newCustomerType]);
 
   useEffect(() => {
-    const loadData = async () => {
+    const init = async () => {
       try {
-        const cData = await db.customers.getAll();
-        const sData = await db.services.getAll();
-        
-        setCustomers(cData);
-        setServices(sData.filter(s => s.status === 'Active'));
+        const [c, s, cats, terms] = await Promise.all([
+          db.customers.getAll(),
+          db.services.getAll(),
+          db.serviceCategories.getAll(),
+          db.termsConditions.getAll()
+        ]);
+        setCustomers(c);
+        setServices(s.filter(srv => srv.status === 'Active'));
+        setCategories(cats);
+        setTermsList(terms);
 
-        if (user) {
-          setBranchId(user.branch_id);
+        const paramCustId = searchParams.get('customer_id');
+        if (paramCustId) {
+          const match = c.find(item => item.id === paramCustId);
+          if (match) {
+            setCustomerId(match.id);
+            setCustomerType('existing');
+          }
         }
 
-        const walkin = cData.find(c => c.name.toLowerCase().includes('walk-in'));
-        if (walkin) {
-          setCustomerId(walkin.id);
+        if (user && user.branch_id) {
+          setBranchId(user.branch_id);
+        } else if (availableBranches.length > 0) {
+          setBranchId(availableBranches[0].id);
         }
 
         // Set default valid until date to 30 days from now
         const defaultDate = new Date();
         defaultDate.setDate(defaultDate.getDate() + 30);
         setValidUntil(defaultDate.toISOString().split('T')[0]);
-
-        const tData = await db.termsConditions.getAll();
-        setTermsList(tData);
       } catch (err) {
         console.error(err);
       }
     };
-    loadData();
-  }, [user]);
+    init();
+  }, [user, availableBranches, searchParams]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setIsSearchOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        setIsSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
+  const handleQuickSelectWalkIn = () => {
+    const walkin = customers.find(c => c.name.toLowerCase().includes('walk-in') || c.name.toLowerCase().includes('walkin') || c.name.toLowerCase().includes('walk in'));
+    if (walkin) {
+      setCustomerId(walkin.id);
+      setCustomerType('existing');
+    } else {
+      setCustomerType('new');
+      setNewCustomerType('individual');
+      setNewCustomerName('Walk-In Customer');
+    }
+    setErrorMsg('');
+  };
+  const handleSelectWalkin = handleQuickSelectWalkIn;
+
+  const filteredCatalogServices = services.filter(s => {
+    const matchesCategory = selectedCategory === 'all' || s.category_id === selectedCategory;
+    const categoryName = (s as any).category?.name || '';
+    const matchesSearch = !serviceSearch.trim() ||
+      s.name.toLowerCase().includes(serviceSearch.toLowerCase()) ||
+      categoryName.toLowerCase().includes(serviceSearch.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+  const handlePersonChange = (name: string) => {
+    setSelectedPersonName(name);
+    setCart(prev => prev.map(item => ({
+      ...item,
+      person_name: name.trim() || undefined
+    })));
+  };
+
+  const handleAddMemberToExisting = async () => {
+    if (!newMemberForExisting.trim() || !selectedCustomer) return;
+    const memberName = newMemberForExisting.trim();
+    const existingMembers = selectedCustomer.members || [];
+    if (existingMembers.some(m => m.name.toLowerCase() === memberName.toLowerCase())) {
+      handlePersonChange(memberName);
+      setNewMemberForExisting('');
+      return;
+    }
+    const updatedMembers = [
+      ...existingMembers,
+      { id: crypto.randomUUID(), name: memberName }
+    ];
+    try {
+      await db.customers.update(selectedCustomer.id, {
+        members: updatedMembers,
+        customer_type: 'company'
+      });
+      setCustomers(prev => prev.map(c => c.id === selectedCustomer.id ? { ...c, members: updatedMembers, customer_type: 'company' } : c));
+      handlePersonChange(memberName);
+      setNewMemberForExisting('');
+      showToast(`Added ${memberName} as member`, 'success');
+    } catch (err) {
+      console.error('Failed to add member to existing customer:', err);
+    }
+  };
 
   const addServiceToCart = (service: Service) => {
-    const defaultAssignedId = customerId;
-    const existingIndex = cart.findIndex(item => item.service.id === service.id && item.assigned_customer_id === defaultAssignedId);
-    
-    if (!isCompanySelected && existingIndex !== -1) {
+    const hasSelectedCustomer = (customerType === 'existing' && !!customerId) || (customerType === 'new' && !!newCustomerName.trim());
+    if (!hasSelectedCustomer) {
+      showToast('Please select a customer first.', 'warning');
+      return;
+    }
+
+    const assignedPerson = selectedPersonName.trim() || undefined;
+    const existingIndex = cart.findIndex(item => item.service.id === service.id && item.person_name === assignedPerson);
+    if (existingIndex !== -1) {
       const updated = [...cart];
       updated[existingIndex].quantity += 1;
       setCart(updated);
     } else {
-      setCart([...cart, { 
-        service, 
-        quantity: 1, 
-        unit_price: service.price, 
-        assigned_customer_id: defaultAssignedId || undefined 
+      setCart([...cart, {
+        service,
+        quantity: 1,
+        unit_price: service.price,
+        person_name: assignedPerson,
+        service_date: new Date().toISOString().split('T')[0],
+        staff_id: user?.id
       }]);
+    }
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isSearchOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      setIsSearchOpen(true);
+      return;
+    }
+    if (filteredCatalogServices.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightIndex(prev => (prev + 1) % filteredCatalogServices.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightIndex(prev => (prev - 1 + filteredCatalogServices.length) % filteredCatalogServices.length);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const targetService = filteredCatalogServices[highlightIndex] || filteredCatalogServices[0];
+      if (targetService) {
+        addServiceToCart(targetService);
+        setServiceSearch('');
+        setIsSearchOpen(false);
+      }
+    } else if (e.key === 'Escape') {
+      setIsSearchOpen(false);
+      searchInputRef.current?.blur();
     }
   };
 
@@ -140,6 +296,30 @@ export const CreateQuotation: React.FC = () => {
   // Calculations
   const subtotal = cart.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
   const grandTotal = Math.max(0, subtotal - discount);
+
+  // Memoized Member Groups with Proportionate Grand Total
+  const memberGroups = React.useMemo(() => {
+    const map = new Map<string, { memberKey: string; displayName: string; items: CartItem[]; subtotal: number; grandTotal: number }>();
+
+    cart.forEach(item => {
+      const key = (item.person_name || '').trim();
+      if (!map.has(key)) {
+        map.set(key, {
+          memberKey: key,
+          displayName: key || (customerType === 'existing' && selectedCustomerRecord?.name ? `${selectedCustomerRecord.name} (General)` : 'General / Main'),
+          items: [],
+          subtotal: 0,
+          grandTotal: 0
+        });
+      }
+      const group = map.get(key)!;
+      group.items.push(item);
+      group.subtotal += item.unit_price * item.quantity;
+      group.grandTotal = group.subtotal;
+    });
+
+    return Array.from(map.values());
+  }, [cart, customerType, selectedCustomerRecord]);
 
   const handleSave = async (status: 'Draft' | 'Sent') => {
     if (!branchId) {
@@ -171,7 +351,7 @@ export const CreateQuotation: React.FC = () => {
           phone: newCustomerPhone.trim() || undefined,
           email: newCustomerEmail.trim() || undefined,
           address: newCustomerAddress.trim() || undefined,
-          notes: 'Registered via billing counter.',
+          notes: 'Registered via quotation desk.',
           customer_type: newCustomerType
         };
         if (newCustomerType === 'company') {
@@ -184,46 +364,53 @@ export const CreateQuotation: React.FC = () => {
         }
         const createdCust = await db.customers.create(custPayload);
         finalCustomerId = createdCust.id;
+      } else if (customerType === 'existing' && finalCustomerId) {
+        // Auto-save any newly typed or assigned person names into the existing customer's members list
+        const existingCust = customers.find(c => c.id === finalCustomerId);
+        if (existingCust) {
+          const existingMembers = existingCust.members || [];
+          const existingNames = new Set(existingMembers.map(m => m.name.toLowerCase().trim()));
+          const newNames = Array.from(new Set(
+            cart.map(item => item.person_name?.trim()).filter(Boolean) as string[]
+          )).filter(name => !existingNames.has(name.toLowerCase()));
+
+          if (newNames.length > 0) {
+            const updatedMembers = [
+              ...existingMembers,
+              ...newNames.map(name => ({ id: crypto.randomUUID(), name }))
+            ];
+            await db.customers.update(finalCustomerId, {
+              members: updatedMembers,
+              customer_type: 'company'
+            });
+            setCustomers(prev => prev.map(c => c.id === finalCustomerId ? { ...c, members: updatedMembers, customer_type: 'company' } : c));
+          }
+        }
       }
 
-      // Group cart items by assigned member
-      const groups: Record<string, CartItem[]> = {};
-      cart.forEach(item => {
-        const assignedId = item.assigned_customer_id || finalCustomerId;
-        if (!groups[assignedId]) groups[assignedId] = [];
-        groups[assignedId].push(item);
-      });
-
-      const groupKeys = Object.keys(groups);
-      const total_subtotal = cart.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
-
-      // Distribute discount proportionally
+      // Distribute discount proportionally across member groups
       let remainingDiscount = discount;
-      let remainingSubtotal = total_subtotal;
+      let remainingSubtotal = subtotal;
       const groupDiscounts: Record<string, number> = {};
 
-      groupKeys.forEach((key, idx) => {
-        if (idx === groupKeys.length - 1) {
-          groupDiscounts[key] = remainingDiscount;
+      memberGroups.forEach((group, idx) => {
+        if (idx === memberGroups.length - 1) {
+          groupDiscounts[group.memberKey] = remainingDiscount;
         } else {
-          const groupSub = groups[key].reduce((s, i) => s + i.unit_price * i.quantity, 0);
-          const groupDisc = remainingSubtotal > 0 
-            ? Math.round((discount * (groupSub / total_subtotal)) * 100) / 100 
+          const groupDisc = remainingSubtotal > 0
+            ? Math.round((discount * (group.subtotal / subtotal)) * 100) / 100
             : 0;
-          groupDiscounts[key] = Math.min(remainingDiscount, groupDisc);
-          remainingDiscount -= groupDiscounts[key];
-          remainingSubtotal -= groupSub;
+          groupDiscounts[group.memberKey] = Math.min(remainingDiscount, groupDisc);
+          remainingDiscount -= groupDiscounts[group.memberKey];
+          remainingSubtotal -= group.subtotal;
         }
       });
 
       const createdQuotationIds: string[] = [];
-      for (const key of groupKeys) {
-        const groupItems = groups[key];
-        const groupDisc = groupDiscounts[key];
-        
-        const memberObj = key !== finalCustomerId 
-          ? companyEmployees.find(emp => emp.id === key) 
-          : undefined;
+
+      for (const group of memberGroups) {
+        const groupDisc = groupDiscounts[group.memberKey] || 0;
+        const memberObj = companyEmployees.find((emp: any) => emp.name === group.memberKey);
 
         const createdQuote = await db.quotations.create({
           customer_id: finalCustomerId || undefined,
@@ -233,19 +420,20 @@ export const CreateQuotation: React.FC = () => {
           valid_until: validUntil || undefined,
           notes: notes ? `${notes}` : undefined,
           terms_conditions_ids: selectedTermIds,
-          items: groupItems.map(item => ({
+          person_name: group.memberKey || undefined,
+          person_phone: memberObj?.phone,
+          person_email: memberObj?.email,
+          items: group.items.map(item => ({
             service_id: item.service.id,
             quantity: item.quantity,
             unit_price: item.unit_price
-          })),
-          person_name: memberObj?.name,
-          person_phone: memberObj?.phone,
-          person_email: memberObj?.email
+          }))
         });
+
         createdQuotationIds.push(createdQuote.id);
       }
 
-      navigate(`/quotations?highlight=${createdQuotationIds.join(',')}`);
+      navigate(`/quotations?created_count=${createdQuotationIds.length}&highlight=${createdQuotationIds.join(',')}`);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to record quotation.');
     } finally {
@@ -253,10 +441,15 @@ export const CreateQuotation: React.FC = () => {
     }
   };
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleSave('Sent');
+  };
+
   return (
     <PermissionGuard permission="Sales.Create" fallback="ui">
       <div className="space-y-6">
-        
+
         {/* TOP BAR */}
         <div className="flex items-center gap-3">
           <button
@@ -266,7 +459,7 @@ export const CreateQuotation: React.FC = () => {
             <ChevronLeft size={16} />
           </button>
           <div>
-            <div className="text-xs font-bold text-primary uppercase tracking-wider mb-0.5">eQuotations</div>
+            <div className="text-xs font-bold text-primary uppercase tracking-wider mb-0.5">Quotations</div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground m-0">Create</h1>
           </div>
         </div>
@@ -277,159 +470,340 @@ export const CreateQuotation: React.FC = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* LEFT SECTION: CART & SERVICE SELECTION (2 cols) */}
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+          {/* LEFT SECTION: SERVICES SEARCH & QUOTATION ITEMS (2 cols) */}
           <div className="lg:col-span-2 space-y-4">
-            <div className="glass border border-border rounded-2xl p-6 space-y-6 shadow-xl">
-              
-              <div className="flex items-center gap-2 border-b border-border pb-3">
-                <ShoppingCart className="text-primary" size={20} />
-                <h2 className="font-bold text-foreground text-lg m-0">Quotation Items Catalog</h2>
+            <div className="glass border border-border rounded-2xl p-5 space-y-4 shadow-xl">
+
+              {/* HEADER WITH STATS */}
+              <div className="flex items-center justify-between border-b border-border/80 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
+                    <FileText size={18} />
+                  </div>
+                  <div>
+                    <h2 className="font-bold text-foreground text-base m-0">Quotation Line Items</h2>
+                  </div>
+                </div>
+                {cart.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
+                      {cart.length} {cart.length === 1 ? 'item' : 'items'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCart([])}
+                      className="text-xs text-muted-foreground hover:text-destructive px-2 py-1 rounded-lg hover:bg-muted transition-colors cursor-pointer"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {/* Service Cards Grid */}
-              {services.length > 0 ? (
-                <div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                    {services.map(service => {
-                      const cartItem = cart.find(item => item.service.id === service.id);
-                      const inCart = !!cartItem;
+              {/* SEARCH-WISE SERVICE SELECTOR */}
+              <div ref={searchContainerRef} className="space-y-2.5">
+                <div className="flex gap-2 relative">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      placeholder="Type to search service (e.g. Visa, Emirates ID, Stamp, MOHRE...)"
+                      value={serviceSearch}
+                      onFocus={() => setIsSearchOpen(true)}
+                      onChange={(e) => {
+                        setServiceSearch(e.target.value);
+                        setIsSearchOpen(true);
+                        setHighlightIndex(0);
+                      }}
+                      onKeyDown={handleSearchKeyDown}
+                      className="w-full pl-10 pr-10 py-2.5 bg-background border-2 border-border focus:border-primary rounded-xl text-sm font-medium text-foreground placeholder:text-muted-foreground shadow-xs transition-all outline-none"
+                    />
+                    {serviceSearch ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setServiceSearch('');
+                          searchInputRef.current?.focus();
+                        }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
+                      >
+                        <X size={14} />
+                      </button>
+                    ) : (
+                      <kbd className="hidden sm:inline-flex absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
+                        /
+                      </kbd>
+                    )}
+                  </div>
+
+                  {/* Category Filter Dropdown */}
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="px-3 py-2 bg-muted/40 border border-border rounded-xl text-xs font-semibold text-foreground cursor-pointer shrink-0 max-w-[160px]"
+                  >
+                    <option value="all">All Categories ({services.length})</option>
+                    {categories.map(cat => {
+                      const count = services.filter(s => s.category_id === cat.id).length;
+                      if (count === 0) return null;
+                      return (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name} ({count})
+                        </option>
+                      );
+                    })}
+                  </select>
+
+                  {/* SEARCH RESULTS DROPDOWN (Directly below search input bar) */}
+                  {isSearchOpen && (
+                    <div className="absolute z-50 left-0 right-0 top-full mt-1.5 bg-card/95 backdrop-blur-xl border border-border rounded-2xl shadow-2xl overflow-hidden max-h-80 overflow-y-auto">
+                      {filteredCatalogServices.length > 0 ? (
+                        <div className="divide-y divide-border/60">
+                          <div className="px-3.5 py-1.5 bg-muted/50 text-[11px] font-semibold text-muted-foreground flex justify-between items-center">
+                            <span>{filteredCatalogServices.length} matching services</span>
+                            <span className="text-[10px]">Use ↑↓ to navigate • ↵ Enter to add</span>
+                          </div>
+                          {filteredCatalogServices.map((service, idx) => {
+                            const cartItem = cart.find(item => item.service.id === service.id && item.person_name === (selectedPersonName || undefined));
+                            const inCart = !!cartItem;
+                            const isHighlighted = idx === highlightIndex;
+                            const catName = categories.find(c => c.id === service.category_id)?.name || (service as any).category?.name || '';
+
+                            return (
+                              <div
+                                key={service.id}
+                                onMouseEnter={() => setHighlightIndex(idx)}
+                                onClick={() => {
+                                  addServiceToCart(service);
+                                  setServiceSearch('');
+                                  setIsSearchOpen(false);
+                                  searchInputRef.current?.focus();
+                                }}
+                                className={`px-4 py-3 flex items-center justify-between gap-3 cursor-pointer transition-colors ${
+                                  isHighlighted ? 'bg-primary/10' : 'hover:bg-muted/50'
+                                }`}
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-0.5">
+                                    <span className="font-bold text-xs text-foreground truncate">{service.name}</span>
+                                    {catName && (
+                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-muted text-muted-foreground border border-border shrink-0">
+                                        {catName}
+                                      </span>
+                                    )}
+                                    {inCart && (
+                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-primary/15 text-primary border border-primary/30 shrink-0">
+                                        {cartItem.quantity} in quote
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 shrink-0">
+                                  <div className="text-right">
+                                    <span className="font-extrabold text-foreground text-sm">{service.price.toFixed(2)}</span>
+                                    <span className="text-[10px] text-muted-foreground font-medium ml-1">AED</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                                      isHighlighted || inCart
+                                        ? 'bg-primary text-white shadow-xs'
+                                        : 'bg-muted/70 text-foreground hover:bg-primary hover:text-white'
+                                    }`}
+                                  >
+                                    <Plus size={13} />
+                                    <span>Add</span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="p-6 text-center text-muted-foreground text-xs">
+                          <div className="mb-1 text-sm font-semibold text-foreground">No services found</div>
+                          <div>No service matches "<span className="text-primary font-bold">{serviceSearch}</span>". Try another keyword.</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* QUICK ADD FREQUENT CHIPS */}
+                {!serviceSearch && services.length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                    <span className="text-[11px] font-bold text-muted-foreground mr-1">
+                      Quick Add:
+                    </span>
+                    {services.slice(0, 5).map(service => {
+                      const inCart = cart.some(i => i.service.id === service.id);
                       return (
                         <button
                           key={service.id}
                           type="button"
                           onClick={() => addServiceToCart(service)}
-                          style={inCart ? { background: 'color-mix(in srgb, var(--color-primary) 8%, transparent)' } : undefined}
-                          className={`
-                            relative text-left p-3 rounded-xl border transition-all duration-150 group cursor-pointer
-                            ${inCart
-                              ? 'border-primary/50 shadow-sm'
-                              : 'border-border bg-muted/20 hover:border-primary/40 hover:bg-muted/40 hover:shadow-sm'
-                            }
-                          `}
+                          className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
+                            inCart
+                              ? 'border-primary/40 bg-primary/10 text-primary font-semibold'
+                              : 'border-border bg-muted/30 hover:bg-muted hover:border-primary/40 text-foreground'
+                          }`}
                         >
-                          {inCart && (
-                            <span className="absolute top-1.5 right-1.5 bg-primary text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 leading-none">
-                              {cartItem.quantity}
-                            </span>
-                          )}
-
-                          <div className={`text-[11px] font-bold leading-snug mb-1 ${inCart ? 'text-primary' : 'text-foreground group-hover:text-primary'} transition-colors`}>
-                            {service.name}
-                          </div>
-                          <div className={`text-[11px] font-semibold ${inCart ? 'text-primary/80' : 'text-muted-foreground'}`}>
-                            {service.price.toFixed(2)} AED
-                          </div>
-
-                          {!inCart && (
-                            <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Plus size={11} className="text-primary" />
-                            </div>
-                          )}
+                          <span>{service.name}</span>
+                          <span className="text-[10px] opacity-75 font-bold">({service.price.toFixed(0)} AED)</span>
+                          <Plus size={11} className="text-primary" />
                         </button>
                       );
                     })}
                   </div>
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground italic text-center py-4">
-                  No active services found. Please add services in the Services module.
-                </p>
-              )}
+                )}
+              </div>
 
-              {/* Cart Table Grid */}
-              <div className="border border-border/80 rounded-xl overflow-hidden">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-muted/50 text-muted-foreground uppercase font-semibold border-b border-border">
+              {/* QUOTATION LINE ITEMS TABLE */}
+              <div className="border border-border/80 rounded-xl overflow-hidden mt-4 shadow-2xs">
+                <table className="w-full text-left">
+                  <thead>
                     <tr>
-                      <th className="px-4 py-3">Service Details</th>
-                      {isCompanySelected && <th className="px-4 py-3 w-48">Assign To</th>}
-                      <th className="px-4 py-3 text-center w-32">Qty</th>
-                      <th className="px-4 py-3 w-32">Unit Price</th>
-                      <th className="px-4 py-3 text-right">Subtotal</th>
-                      <th className="px-4 py-3 text-center w-16"></th>
+                      <th className="w-10 text-center">#</th>
+                      <th>Service Details</th>
+                      <th className="w-32 text-center">Service Date</th>
+                      <th className="w-40">Member / Person</th>
+                      <th className="w-44">Note / Remarks</th>
+                      <th className="text-center w-28">Quantity</th>
+                      <th className="w-24 text-center">Unit Price</th>
+                      <th className="text-right w-24">Subtotal</th>
+                      <th className="text-center w-10"></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border/60">
+                  <tbody className="divide-y divide-border/50">
                     {cart.length === 0 ? (
                       <tr>
-                        <td colSpan={isCompanySelected ? 6 : 5} className="px-4 py-10 text-center text-muted-foreground italic">
-                          Shopping cart is empty. Tap a service card above to add items.
+                        <td colSpan={9} className="py-12 text-center text-muted-foreground italic">
+                          <div className="max-w-xs mx-auto space-y-2">
+                            <div className="p-3 rounded-full bg-muted/60 w-fit mx-auto text-muted-foreground">
+                              <Search size={22} />
+                            </div>
+                            <div className="text-xs font-semibold text-foreground">No services added yet</div>
+                            <div className="text-[11px] text-muted-foreground">Use the search bar above or click a Quick Add tag to add services to this quotation.</div>
+                          </div>
                         </td>
                       </tr>
                     ) : (
                       cart.map((item, index) => (
-                        <tr key={index} className="hover:bg-muted/10">
-                          <td className="px-4 py-3">
-                            <div className="font-semibold text-foreground">{item.service.name}</div>
-                            <div className="text-[10px] text-muted-foreground mt-0.5">
-                              Standard: {item.service.price.toFixed(2)} AED
+                        <tr key={index} className="hover:bg-primary/5 transition-colors">
+                          <td className="text-center font-bold text-xs text-muted-foreground">
+                            {index + 1}
+                          </td>
+                          <td>
+                            <div className="font-bold text-foreground text-xs">{item.service.name}</div>
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              <span className="text-[10px] text-muted-foreground">
+                                Standard: {item.service.price.toFixed(2)} AED
+                              </span>
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-muted text-muted-foreground font-semibold border border-border">
+                                Staff: {user?.name || 'Current Staff'}
+                              </span>
                             </div>
                           </td>
-                          {isCompanySelected && (
-                            <td className="px-4 py-3">
+                          <td className="text-center">
+                            <input
+                              type="date"
+                              value={item.service_date || new Date().toISOString().split('T')[0]}
+                              onChange={(e) => {
+                                const updated = [...cart];
+                                updated[index].service_date = e.target.value;
+                                setCart(updated);
+                              }}
+                              className="px-2 py-1 bg-muted/50 border border-border rounded text-xs font-semibold text-foreground cursor-pointer"
+                            />
+                          </td>
+                          <td>
+                            {isCompanySelected && companyEmployees.length > 0 ? (
                               <select
-                                value={item.assigned_customer_id || customerId}
+                                value={item.person_name || ''}
                                 onChange={(e) => {
                                   const updated = [...cart];
-                                  updated[index].assigned_customer_id = e.target.value;
+                                  updated[index].person_name = e.target.value || undefined;
                                   setCart(updated);
                                 }}
-                                className="w-full px-2 py-1 bg-muted/50 border border-border rounded text-xs text-foreground animate-none"
+                                className="w-full px-2 py-1 bg-muted/50 border border-border rounded text-xs font-semibold text-foreground cursor-pointer"
                               >
-                                <option value={customerId}>Company Account (Direct)</option>
-                                {companyEmployees.map(emp => (
-                                  <option key={emp.id} value={emp.id}>
-                                    {emp.name}
+                                <option value="">🏢 General / Company</option>
+                                {companyEmployees.map((emp: any, idx: number) => (
+                                  <option key={emp.id || idx} value={emp.name}>
+                                    👤 {emp.name}
                                   </option>
                                 ))}
                               </select>
-                            </td>
-                          )}
-                          <td className="px-4 py-3">
+                            ) : (
+                              <input
+                                type="text"
+                                placeholder="Person / Member Name"
+                                value={item.person_name || ''}
+                                onChange={(e) => {
+                                  const updated = [...cart];
+                                  updated[index].person_name = e.target.value || undefined;
+                                  setCart(updated);
+                                }}
+                                className="w-full px-2 py-1 bg-muted/50 border border-border rounded text-xs font-medium text-foreground"
+                              />
+                            )}
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              placeholder="Note / Ref..."
+                              value={item.notes || ''}
+                              onChange={(e) => {
+                                const updated = [...cart];
+                                updated[index].notes = e.target.value;
+                                setCart(updated);
+                              }}
+                              className="w-full px-2 py-1 bg-muted/50 border border-border rounded text-xs font-medium text-foreground placeholder:text-muted-foreground outline-none"
+                            />
+                          </td>
+                          <td className="text-center">
                             <div className="flex items-center justify-center gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => updateQuantity(index, -1)}
-                                className="p-1 border border-border hover:bg-secondary rounded text-muted-foreground hover:text-foreground cursor-pointer"
+                                className="h-6 w-6 rounded border border-border bg-muted/50 flex items-center justify-center hover:bg-secondary transition-colors cursor-pointer"
                               >
-                                <Minus size={10} />
+                                <Minus size={11} />
                               </button>
                               <span className="font-bold text-xs w-6 text-center text-foreground">{item.quantity}</span>
                               <button
                                 type="button"
                                 onClick={() => updateQuantity(index, 1)}
-                                className="p-1 border border-border hover:bg-secondary rounded text-muted-foreground hover:text-foreground cursor-pointer"
+                                className="h-6 w-6 rounded border border-border bg-muted/50 flex items-center justify-center hover:bg-secondary transition-colors cursor-pointer"
                               >
-                                <Plus size={10} />
+                                <Plus size={11} />
                               </button>
                             </div>
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="text-center">
                             <input
                               type="number"
-                              min="0"
-                              step="0.01"
+                              min={0}
                               value={item.unit_price}
                               onChange={(e) => updatePriceOverride(index, parseFloat(e.target.value) || 0)}
-                              className="w-full px-2 py-1 bg-muted/50 border border-border rounded text-xs text-foreground text-right"
+                              className="w-20 px-2 py-1 bg-muted/50 border border-border rounded text-center text-xs font-bold text-foreground"
                             />
                           </td>
-                          <td className="px-4 py-3 text-right font-bold text-foreground">
-                            {(item.unit_price * item.quantity).toFixed(2)} AED
+                          <td className="text-right font-black text-foreground text-xs">
+                            {(item.unit_price * item.quantity).toFixed(2)} <span className="text-[10px] font-normal text-muted-foreground">AED</span>
                           </td>
-                          <td className="px-4 py-3 text-center">
+                          <td className="text-center">
                             <button
                               type="button"
-                              onClick={() => {
-                                const updated = [...cart];
-                                updated.splice(index, 1);
-                                setCart(updated);
-                              }}
-                              className="p-1 hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded transition-colors cursor-pointer"
+                              onClick={() => updateQuantity(index, -item.quantity)}
+                              className="text-muted-foreground hover:text-destructive p-1 rounded transition-colors cursor-pointer"
+                              title="Remove line item"
                             >
-                              <Trash2 size={12} />
+                              <Trash2 size={13} />
                             </button>
                           </td>
                         </tr>
@@ -438,27 +812,34 @@ export const CreateQuotation: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+
             </div>
+
           </div>
 
-          {/* RIGHT SECTION: DETAILS & ACTION PANEL (1 col) */}
-          <div className="space-y-4">
-            
-            {/* Customer Details Box */}
-            <div className="glass border border-border rounded-2xl p-6 space-y-4 shadow-xl">
-              <div className="flex items-center gap-2 border-b border-border pb-3">
-                <User className="text-primary" size={18} />
-                <h2 className="font-bold text-foreground text-sm m-0">Customer Assignment</h2>
+          {/* RIGHT SECTION: CUSTOMER, TOTALS & ACTIONS (1 col) */}
+          <div className="lg:col-span-1 space-y-4">
+            <div className="glass border border-border rounded-2xl p-5 space-y-4 shadow-xl">
+
+              <div className="flex items-center justify-between border-b border-border/80 pb-3">
+                <h3 className="font-bold text-foreground text-sm m-0">Customer & Details</h3>
+                <button
+                  type="button"
+                  onClick={handleSelectWalkin}
+                  className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  Walk-in Customer (1-Click)
+                </button>
               </div>
 
-              {/* Selector for new vs existing */}
-              <div className="flex bg-muted/55 rounded-lg p-1">
+              {/* Customer Type Selector */}
+              <div className="flex rounded-lg bg-muted/50 p-1 border border-border">
                 <button
                   type="button"
                   onClick={() => setCustomerType('existing')}
-                  className={`flex-1 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                  className={`flex-1 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
                     customerType === 'existing'
-                      ? 'bg-card text-foreground shadow-xs'
+                      ? 'bg-primary text-white shadow-xs'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
@@ -467,37 +848,96 @@ export const CreateQuotation: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setCustomerType('new')}
-                  className={`flex-1 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                  className={`flex-1 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
                     customerType === 'new'
-                      ? 'bg-card text-foreground shadow-xs'
+                      ? 'bg-primary text-white shadow-xs'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  New Register
+                  New Customer
                 </button>
               </div>
 
+              {/* Customer input fields */}
               {customerType === 'existing' ? (
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground">Select Customer</label>
+                <div className="space-y-1.5 text-xs">
+                  <label className="text-muted-foreground font-semibold flex items-center gap-1">
+                    <User size={13} /> Select Customer Profile *
+                  </label>
                   <select
                     value={customerId}
                     onChange={(e) => setCustomerId(e.target.value)}
-                    className="w-full px-3 py-2 bg-muted/30 border border-border rounded-lg text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground text-xs font-medium"
+                    required={customerType === 'existing'}
                   >
-                    <option value="">Select Customer...</option>
+                    <option value="">-- Choose Customer --</option>
                     {customers.map(c => (
                       <option key={c.id} value={c.id}>
-                        {c.name} {c.phone ? `(${c.phone})` : ''} {c.customer_type === 'company' ? ' [Company]' : ''}
+                        {c.customer_type === 'company' ? `${c.name} (Company)` : c.name} {c.phone ? `(${c.phone})` : ''}
                       </option>
                     ))}
                   </select>
+
+                  {selectedCustomer && (
+                    <div className="mt-2.5 p-3 rounded-xl border border-border bg-muted/20 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-foreground flex items-center gap-1">
+                          <Users size={12} className="text-primary" />
+                          <span>Persons / Members ({companyEmployees.length})</span>
+                        </span>
+                      </div>
+
+                      {/* Add new member to this customer inline */}
+                      <div className="flex items-center gap-1.5 pt-0.5">
+                        <input
+                          type="text"
+                          placeholder="Add new person / member..."
+                          value={newMemberForExisting}
+                          onChange={(e) => setNewMemberForExisting(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddMemberToExisting();
+                            }
+                          }}
+                          className="flex-1 px-2.5 py-1.5 bg-background border border-border rounded-lg text-xs font-medium text-foreground outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddMemberToExisting}
+                          disabled={!newMemberForExisting.trim()}
+                          className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-hover disabled:opacity-50 text-white font-bold text-xs transition-all cursor-pointer shrink-0"
+                        >
+                          + Add
+                        </button>
+                      </div>
+
+                      {companyEmployees.length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-1 max-h-24 overflow-y-auto">
+                          {companyEmployees.map((emp: any, idx: number) => (
+                            <span
+                              key={emp.id || idx}
+                              onClick={() => handlePersonChange(emp.name)}
+                              className={`text-[10px] px-2 py-0.5 rounded-md font-semibold border cursor-pointer transition-all ${
+                                selectedPersonName === emp.name
+                                  ? 'bg-primary text-white border-primary shadow-xs'
+                                  : 'bg-card text-muted-foreground border-border hover:border-primary/40'
+                              }`}
+                              title="Click to assign to active line items"
+                            >
+                              👤 {emp.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="space-y-3 pt-2">
+                <div className="space-y-3 border border-border p-3.5 rounded-xl bg-slate-50">
                   {/* Company vs Individual Toggle */}
                   <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-extrabold text-black">Account Type *</label>
+                    <label className="text-[11px] text-black font-bold uppercase tracking-wider">Account Type *</label>
                     <div className="flex rounded-lg bg-white p-0.5 border border-slate-200 gap-1">
                       <button
                         type="button"
@@ -524,51 +964,51 @@ export const CreateQuotation: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-extrabold text-black">
+                  <div className="space-y-1 text-xs">
+                    <label className="text-black font-semibold">
                       {newCustomerType === 'company' ? 'Company / Trade Name *' : 'Full Name *'}
                     </label>
                     <input
                       type="text"
-                      placeholder={newCustomerType === 'company' ? 'E.g. Al Safa Transport LLC' : 'E.g. Mohammed Ali'}
+                      required={customerType === 'new'}
                       value={newCustomerName}
                       onChange={(e) => setNewCustomerName(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-md text-xs font-medium text-black"
+                      placeholder={newCustomerType === 'company' ? 'E.g. Al Safa Transport LLC' : 'E.g. Mohammed Ali'}
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-md text-black text-xs font-medium"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <label className="text-[10px] uppercase tracking-wider font-extrabold text-black">Phone</label>
+                    <div className="space-y-1 text-xs">
+                      <label className="text-black font-semibold">Phone Number</label>
                       <input
                         type="text"
-                        placeholder="+971 50 000 0000"
                         value={newCustomerPhone}
                         onChange={(e) => setNewCustomerPhone(e.target.value)}
-                        className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-md text-xs font-medium text-black"
+                        placeholder="+971 50 000 0000"
+                        className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-md text-black text-xs font-medium"
                       />
                     </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[10px] uppercase tracking-wider font-extrabold text-black">Email</label>
+                    <div className="space-y-1 text-xs">
+                      <label className="text-black font-semibold">Email</label>
                       <input
                         type="email"
-                        placeholder="client@gmail.com"
                         value={newCustomerEmail}
                         onChange={(e) => setNewCustomerEmail(e.target.value)}
-                        className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-md text-xs font-medium text-black"
+                        placeholder="info@domain.com"
+                        className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-md text-black text-xs font-medium"
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-extrabold text-black">Address</label>
+                  <div className="space-y-1 text-xs">
+                    <label className="text-black font-semibold">Address / Office Location</label>
                     <input
                       type="text"
-                      placeholder="Musaffah M37, Abu Dhabi"
                       value={newCustomerAddress}
                       onChange={(e) => setNewCustomerAddress(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-md text-xs font-medium text-black"
+                      placeholder="Dubai, UAE / Office No."
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-md text-black text-xs font-medium"
                     />
                   </div>
 
@@ -576,7 +1016,7 @@ export const CreateQuotation: React.FC = () => {
                   {newCustomerType === 'company' && (
                     <div className="pt-2 border-t border-slate-200 space-y-2">
                       <div className="flex items-center justify-between">
-                        <label className="text-[10px] uppercase tracking-wider font-extrabold text-black flex items-center gap-1">
+                        <label className="text-[11px] font-bold text-black flex items-center gap-1">
                           <Users size={12} className="text-primary" />
                           <span>Persons / Staff Under Company</span>
                         </label>
@@ -644,81 +1084,121 @@ export const CreateQuotation: React.FC = () => {
                   )}
                 </div>
               )}
-            </div>
 
-            {/* Quotation Parameters Box */}
-            <div className="glass border border-border rounded-2xl p-6 space-y-4 shadow-xl">
-              <div className="flex items-center gap-2 border-b border-border pb-3">
-                <FileText className="text-primary" size={18} />
-                <h2 className="font-bold text-foreground text-sm m-0">Quotation Summary</h2>
-              </div>
+              {/* MEMBER / APPLICANT AUTO-ASSIGN FOR QUICK SEARCH */}
+              {(customerId || customerType === 'new') && (
+                <div className="space-y-1.5 p-3 rounded-xl border border-border bg-muted/20">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-foreground flex items-center gap-1.5">
+                      <User size={13} className="text-primary" />
+                      <span>Default Member for Adding Services</span>
+                    </label>
+                    <span className="text-[9px] font-semibold text-muted-foreground">Quick Select</span>
+                  </div>
 
-              {/* Branch Selector */}
-              {isAdmin && (
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground">Branch Store</label>
-                  <select
-                    value={branchId}
-                    onChange={(e) => setBranchId(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-muted/30 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                  >
-                    <option value="">Select Branch...</option>
-                    {user?.branch_id && (
-                      <option value={user.branch_id}>My Branch ({user.branch?.name})</option>
-                    )}
-                  </select>
+                  {isCompanySelected && companyEmployees.length > 0 ? (
+                    <div className="space-y-1.5">
+                      <select
+                        value={selectedPersonName}
+                        onChange={(e) => setSelectedPersonName(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-popover border border-border rounded-lg text-foreground text-xs font-semibold cursor-pointer"
+                      >
+                        <option value="">🏢 General / Main Company</option>
+                        {companyEmployees.map((emp, idx) => (
+                          <option key={emp.id || idx} value={emp.name}>
+                            👤 {emp.name} {emp.phone ? `(${emp.phone})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        placeholder="Or custom member name"
+                        value={selectedPersonName}
+                        onChange={(e) => setSelectedPersonName(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-background border border-border rounded-lg text-foreground text-xs font-medium"
+                      />
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      placeholder="Applicant / Person Name"
+                      value={selectedPersonName}
+                      onChange={(e) => setSelectedPersonName(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-background border border-border rounded-lg text-foreground text-xs font-medium"
+                    />
+                  )}
+                  <p className="text-[10px] text-muted-foreground leading-tight">
+                    Each member in the cart will automatically get a separate quotation generated upon saving.
+                  </p>
                 </div>
               )}
 
-              {/* Valid Until Selector */}
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground flex items-center gap-1">
-                  <Calendar size={11} className="text-primary" />
-                  Valid Until *
+              {/* Destination Branch */}
+              <div className="space-y-1 text-xs">
+                <label className="text-muted-foreground font-semibold flex items-center gap-1">
+                  <Building size={13} /> Branch *
+                </label>
+                <select
+                  value={branchId}
+                  onChange={(e) => setBranchId(e.target.value)}
+                  disabled={!isAdmin}
+                  className="w-full px-3 py-1.5 bg-popover border border-border rounded-lg text-foreground text-xs font-medium disabled:opacity-75 disabled:cursor-not-allowed"
+                  required
+                >
+                  <option value="">-- Select Branch --</option>
+                  {availableBranches.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Valid Until Date Picker */}
+              <div className="space-y-1 text-xs">
+                <label className="text-muted-foreground font-semibold flex items-center gap-1">
+                  <Calendar size={13} className="text-primary" /> Valid Until *
                 </label>
                 <input
                   type="date"
                   value={validUntil}
                   onChange={(e) => setValidUntil(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-muted/30 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full px-3 py-1.5 bg-popover border border-border rounded-lg text-foreground text-xs font-medium"
+                  required
                 />
               </div>
 
               {/* Discount */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground flex items-center gap-1">
-                  <Percent size={11} className="text-primary" />
-                  Discount (AED)
+              <div className="space-y-1 text-xs">
+                <label className="text-muted-foreground font-semibold flex items-center gap-1">
+                  <Percent size={13} className="text-primary" /> Discount (AED)
                 </label>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
-                  value={discount}
+                  value={discount || ''}
                   onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
-                  className="w-full px-3 py-1.5 bg-muted/30 border border-border rounded-lg text-xs text-foreground font-semibold"
+                  placeholder="0.00"
+                  className="w-full px-3 py-1.5 bg-popover border border-border rounded-lg text-foreground text-xs font-medium"
                 />
               </div>
 
-              {/* Notes */}
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground">Notes / Remarks</label>
+              {/* Notes / Remarks */}
+              <div className="space-y-1 text-xs">
+                <label className="text-muted-foreground font-semibold">Notes / Remarks</label>
                 <textarea
                   rows={2}
-                  placeholder="Terms, details, stamp blueprints..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-muted/30 border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  placeholder="Quotation notes, scope of work, etc."
+                  className="w-full px-3 py-1.5 bg-popover border border-border rounded-lg text-foreground text-xs font-medium"
                 />
               </div>
 
-              {/* Terms & Conditions Selection */}
-              <div className="space-y-2 border-t border-border/80 pt-3">
-                <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground block">Apply Terms & Conditions</label>
-                {termsList.length === 0 ? (
-                  <p className="text-[11px] text-muted-foreground italic">No terms configured in global settings.</p>
-                ) : (
-                  <div className="space-y-1.5 max-h-[150px] overflow-y-auto pr-1">
+              {/* Apply Terms & Conditions */}
+              {termsList.length > 0 && (
+                <div className="space-y-2 border-t border-border/80 pt-3">
+                  <label className="text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground block">Apply Terms & Conditions</label>
+                  <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
                     {termsList.map(t => {
                       const isSelected = selectedTermIds.includes(t.id);
                       return (
@@ -743,51 +1223,93 @@ export const CreateQuotation: React.FC = () => {
                       );
                     })}
                   </div>
-                )}
-              </div>
-
-              {/* Summary Calculations */}
-              <div className="space-y-2 pt-2 border-t border-border/80">
-                <div className="flex justify-between text-xs font-semibold text-muted-foreground">
-                  <span>Cart Subtotal:</span>
-                  <span>{subtotal.toFixed(2)} AED</span>
                 </div>
+              )}
+
+              {/* Totals Summary Panel */}
+              <div className="bg-muted/30 p-3.5 rounded-xl border border-border space-y-2.5 text-xs">
+                <div className="flex justify-between items-center text-muted-foreground">
+                  <span>Subtotal</span>
+                  <span className="font-bold text-foreground">{subtotal.toFixed(2)} AED</span>
+                </div>
+
                 {discount > 0 && (
-                  <div className="flex justify-between text-xs font-semibold text-rose-400">
-                    <span>Discount Deduction:</span>
+                  <div className="flex justify-between items-center text-rose-500 font-semibold">
+                    <span>Discount</span>
                     <span>- {discount.toFixed(2)} AED</span>
                   </div>
                 )}
-                <div className="flex justify-between text-sm font-black border-t border-dashed border-border/50 pt-2 text-foreground">
-                  <span>GRAND TOTAL:</span>
-                  <span className="text-primary">{grandTotal.toFixed(2)} AED</span>
+
+                <div className="border-t border-border pt-2 flex justify-between items-center">
+                  <span className="font-bold text-foreground text-sm">Grand Total</span>
+                  <span className="font-black text-primary text-base">{grandTotal.toFixed(2)} AED</span>
                 </div>
               </div>
 
-              {/* Actions */}
-              <div className="grid grid-cols-2 gap-2 pt-3">
+              {/* Action Buttons */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => handleSave('Draft')}
-                  disabled={saving}
+                  disabled={saving || cart.length === 0}
                   className="w-full bg-secondary hover:bg-muted text-foreground px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm border border-border cursor-pointer disabled:opacity-50 text-center"
                 >
                   Save as Draft
                 </button>
-                <button
-                  type="button"
-                  onClick={() => handleSave('Sent')}
-                  disabled={saving}
-                  className="w-full bg-primary hover:bg-primary-hover text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50 text-center"
-                >
-                  {saving ? 'Saving...' : 'Save & Send'}
-                </button>
+                {(() => {
+                  const distinctMembersCount = memberGroups.length;
+                  return (
+                    <button
+                      type="submit"
+                      disabled={saving || cart.length === 0}
+                      className="w-full bg-primary hover:bg-primary-hover text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer disabled:opacity-50 text-center"
+                    >
+                      {saving
+                        ? 'Saving...'
+                        : distinctMembersCount > 1
+                        ? `Create ${distinctMembersCount} Quotes`
+                        : 'Create & Send'}
+                    </button>
+                  );
+                })()}
               </div>
-            </div>
 
+            </div>
           </div>
 
-        </div>
+        </form>
+
+        {/* FLOATING TOAST NOTIFICATION */}
+        {toast && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-200 pointer-events-auto">
+            <div className="flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl border border-primary/30 bg-card/95 text-foreground backdrop-blur-xl ring-1 ring-primary/20">
+              <div className="w-7 h-7 rounded-full bg-red-500/15 text-red-500 border border-red-500/30 flex items-center justify-center shrink-0">
+                <AlertCircle size={16} />
+              </div>
+              <span className="text-xs font-bold text-foreground">
+                {toast.message}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  handleQuickSelectWalkIn();
+                  setToast(null);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold text-xs shadow-md shadow-primary/25 transition-all cursor-pointer shrink-0 ml-1"
+              >
+                Select Walk-In
+              </button>
+              <button
+                type="button"
+                onClick={() => setToast(null)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors cursor-pointer shrink-0 ml-0.5"
+                title="Dismiss"
+              >
+                <X size={15} />
+              </button>
+            </div>
+          </div>
+        )}
 
       </div>
     </PermissionGuard>
