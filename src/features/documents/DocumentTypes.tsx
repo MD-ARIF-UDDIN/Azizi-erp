@@ -306,9 +306,12 @@ export const DocumentTypes: React.FC = () => {
               <tbody className="divide-y divide-border/60 text-foreground">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">
-                      <div className="inline-block h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin mb-2" />
-                      <p>Loading document types...</p>
+                    <td colSpan={6} className="px-4 py-16 text-center text-muted-foreground">
+                      <div className="flex flex-col items-center justify-center gap-3">
+                        <div className="h-8 w-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
+                        <span className="text-xs font-bold tracking-wider uppercase text-primary animate-pulse">Loading...</span>
+                        <p className="text-[11px] text-muted-foreground font-medium">Please wait while document types are being loaded...</p>
+                      </div>
                     </td>
                   </tr>
                 ) : filteredTypes.length === 0 ? (

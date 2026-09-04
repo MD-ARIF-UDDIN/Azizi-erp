@@ -197,10 +197,11 @@ export const JournalList: React.FC = () => {
               <tbody className="divide-y divide-border/60 text-foreground">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
-                      <div className="flex items-center justify-center gap-2">
-                        <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                        <span>Loading journal ledger records...</span>
+                    <td colSpan={8} className="px-4 py-16 text-center text-muted-foreground">
+                      <div className="flex flex-col items-center justify-center gap-3">
+                        <div className="h-8 w-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
+                        <span className="text-xs font-bold tracking-wider uppercase text-primary animate-pulse">Loading...</span>
+                        <p className="text-[11px] text-muted-foreground font-medium">Please wait while journal ledger records are being loaded...</p>
                       </div>
                     </td>
                   </tr>

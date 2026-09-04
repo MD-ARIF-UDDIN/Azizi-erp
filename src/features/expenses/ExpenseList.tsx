@@ -138,11 +138,14 @@ export const ExpenseList: React.FC = () => {
           </div>
         </div>
 
-        {/* LOADING SKELETON */}
+        {/* LOADING STATE */}
         {loading ? (
-          <div className="space-y-3">
-            <div className="h-10 bg-muted/30 rounded-xl animate-pulse" />
-            <div className="h-32 bg-muted/30 rounded-xl animate-pulse" />
+          <div className="table-container p-12 text-center bg-card border border-border rounded-xl">
+            <div className="flex flex-col items-center justify-center gap-3">
+              <div className="h-8 w-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-bold tracking-wider uppercase text-primary animate-pulse">Loading...</span>
+              <p className="text-[11px] text-muted-foreground font-medium">Please wait while expenses are being loaded...</p>
+            </div>
           </div>
         ) : (
           <>

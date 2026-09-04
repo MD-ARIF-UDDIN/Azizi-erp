@@ -8,7 +8,6 @@ import {
   User,
   Printer,
   Download,
-  TrendingDown,
   CreditCard,
   Layers
 } from 'lucide-react';
@@ -83,11 +82,11 @@ export const DailySheet: React.FC = () => {
     return e.user_id === selectedStaffId || e.created_by === selectedStaffId;
   });
 
-  // ── Aggregate Metrics ──
   let totalGrossSales = 0;
   let totalSalesExpense = 0;
   let totalDiscount = 0;
   let totalCollected = 0;
+  let totalRefunded = 0;
   let totalDue = 0;
   let totalProfit = 0;
 
@@ -103,12 +102,16 @@ export const DailySheet: React.FC = () => {
     const saleCost = s.items?.reduce((sum: number, it: any) => sum + (Number(it.quantity || 1) * Number(it.service?.expense || 0)), 0) || 0;
     totalSalesExpense += saleCost;
     
-    // Resolve payments
+    // Resolve payments & refunds
     const sPayments = s.payments || [];
-    const sPaid = sPayments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
-    totalCollected += sPaid;
+    const sCollected = sPayments.filter((p: any) => !p.is_refund && Number(p.amount) > 0).reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+    const sRefunded = sPayments.filter((p: any) => p.is_refund || Number(p.amount) < 0).reduce((sum: number, p: any) => sum + Math.abs(Number(p.amount)), 0);
+    const sNetPaid = sCollected - sRefunded;
+
+    totalCollected += sCollected;
+    totalRefunded += sRefunded;
     
-    const sDue = Math.max(0, sGrandTotal - sPaid);
+    const sDue = Math.max(0, sGrandTotal - sNetPaid);
     totalDue += sDue;
 
     // Profit calculation: Grand Total - Expense
@@ -156,14 +159,18 @@ export const DailySheet: React.FC = () => {
       'Grand Total (AED)',
       'Expense / Cost (AED)',
       'Paid (AED)',
+      'Returned (AED)',
       'Due (AED)',
       'Profit (AED)',
       'Payment Method'
     ];
 
     const rows = filteredSales.map((s, idx) => {
-      const sPaid = s.payments?.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0) || 0;
-      const sDue = Math.max(0, Number(s.grand_total || 0) - sPaid);
+      const sPayments = s.payments || [];
+      const sCollected = sPayments.filter((p: any) => !p.is_refund && Number(p.amount) > 0).reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+      const sRefunded = sPayments.filter((p: any) => p.is_refund || Number(p.amount) < 0).reduce((sum: number, p: any) => sum + Math.abs(Number(p.amount)), 0);
+      const sNetPaid = sCollected - sRefunded;
+      const sDue = Math.max(0, Number(s.grand_total || 0) - sNetPaid);
       
       const companyName = s.customer?.customer_type === 'company' 
         ? s.customer.name 
@@ -193,7 +200,8 @@ export const DailySheet: React.FC = () => {
         staffName,
         sGrandTotal.toFixed(2),
         saleCost.toFixed(2),
-        sPaid.toFixed(2),
+        sCollected.toFixed(2),
+        sRefunded.toFixed(2),
         sDue.toFixed(2),
         invoiceProfit.toFixed(2),
         methods
@@ -203,7 +211,7 @@ export const DailySheet: React.FC = () => {
     const csvContent = [
       `"AZIZI TYPING & STAMP MAKING - DAILY CLOSING STATEMENT"`,
       `"Date: ${selectedDate}","Staff: ${selectedStaffName}","Branch: ${activeBranchName}"`,
-      `"Total Sales: ${totalGrossSales.toFixed(2)} AED","Total Invoice Expense: ${totalSalesExpense.toFixed(2)} AED","Total Profit: ${totalProfit.toFixed(2)} AED","Total Collected: ${totalCollected.toFixed(2)} AED","Total Expenses: ${totalExpenseAmount.toFixed(2)} AED","Net Cash: ${netCashInHand.toFixed(2)} AED"`,
+      `"Total Sales: ${totalGrossSales.toFixed(2)} AED","Total Invoice Expense: ${totalSalesExpense.toFixed(2)} AED","Total Profit: ${totalProfit.toFixed(2)} AED","Total Collected: ${totalCollected.toFixed(2)} AED","Total Returned: ${totalRefunded.toFixed(2)} AED","Total Expenses: ${totalExpenseAmount.toFixed(2)} AED","Net Cash: ${netCashInHand.toFixed(2)} AED"`,
       '',
       headers.join(','),
       ...rows.map(r => r.map(val => `"${val.replace(/"/g, '""')}"`).join(','))
@@ -561,39 +569,47 @@ export const DailySheet: React.FC = () => {
           <div className="overflow-x-auto print:overflow-visible">
             <table className="daily-report-table w-full text-left text-xs border-collapse">
               <thead className="bg-muted/60 text-muted-foreground font-semibold border-b border-border print:bg-slate-100 print:text-slate-900">
-                <tr>
-                  <th style={{ width: '3%' }} className="px-2 py-2 text-center">#</th>
-                  <th style={{ width: '5%' }} className="px-2 py-2">Time</th>
-                  <th style={{ width: '7%' }} className="px-2 py-2">Invoice #</th>
-                  <th style={{ width: '16%' }} className="px-2 py-2">Company / Client</th>
-                  <th style={{ width: '13%' }} className="px-2 py-2">Member Name</th>
-                  <th style={{ width: '18%' }} className="px-2 py-2">Services Rendered</th>
-                  <th style={{ width: '7%' }} className="px-2 py-2">Staff</th>
-                  <th style={{ width: '6%' }} className="px-2 py-2 text-right">Total</th>
-                  <th style={{ width: '6%' }} className="px-2 py-2 text-right">Expense</th>
-                  <th style={{ width: '6%' }} className="px-2 py-2 text-right">Paid</th>
-                  <th style={{ width: '6%' }} className="px-2 py-2 text-right">Due</th>
-                  <th style={{ width: '7%' }} className="px-2 py-2 text-right">Profit</th>
+                <tr className="divide-x divide-border/60">
+                  <th style={{ width: '3%' }} className="px-2 py-2 text-center border-r border-border/60">#</th>
+                  <th style={{ width: '5%' }} className="px-2 py-2 border-r border-border/60">Time</th>
+                  <th style={{ width: '7%' }} className="px-2 py-2 border-r border-border/60">Invoice #</th>
+                  <th style={{ width: '15%' }} className="px-2 py-2 border-r border-border/60">Company / Client</th>
+                  <th style={{ width: '12%' }} className="px-2 py-2 border-r border-border/60">Member Name</th>
+                  <th style={{ width: '16%' }} className="px-2 py-2 border-r border-border/60">Services Rendered</th>
+                  <th style={{ width: '6%' }} className="px-2 py-2 border-r border-border/60">Staff</th>
+                  <th style={{ width: '6%' }} className="px-2 py-2 text-right border-r border-border/60">Total</th>
+                  <th style={{ width: '6%' }} className="px-2 py-2 text-right border-r border-border/60">Expense</th>
+                  <th style={{ width: '6%' }} className="px-2 py-2 text-right border-r border-border/60">Paid</th>
+                  <th style={{ width: '6%' }} className="px-2 py-2 text-right border-r border-border/60">Returned</th>
+                  <th style={{ width: '6%' }} className="px-2 py-2 text-right border-r border-border/60">Due</th>
+                  <th style={{ width: '6%' }} className="px-2 py-2 text-right">Profit</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60 text-foreground print:divide-slate-300 print:text-slate-900">
                 {loading ? (
                   <tr>
-                    <td colSpan={12} className="px-4 py-12 text-center text-muted-foreground">
-                      <div className="inline-block h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin mb-2" />
-                      <p>Loading daily sheet transactions...</p>
+                    <td colSpan={13} className="px-4 py-16 text-center text-muted-foreground">
+                      <div className="flex flex-col items-center justify-center gap-3">
+                        <div className="h-8 w-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
+                        <span className="text-xs font-bold tracking-wider uppercase text-primary animate-pulse">Loading...</span>
+                        <p className="text-[11px] text-muted-foreground font-medium">Please wait while transaction data is being loaded...</p>
+                      </div>
                     </td>
                   </tr>
                 ) : filteredSales.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="px-4 py-12 text-center text-muted-foreground italic">
+                    <td colSpan={13} className="px-4 py-12 text-center text-muted-foreground italic">
                       No invoices recorded for {selectedDate} with the selected staff filter.
                     </td>
                   </tr>
                 ) : (
                   filteredSales.map((s, idx) => {
-                    const sPaid = s.payments?.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0) || 0;
-                    const sDue = Math.max(0, Number(s.grand_total || 0) - sPaid);
+                    const sPayments = s.payments || [];
+                    const sCollected = sPayments.filter((p: any) => !p.is_refund && Number(p.amount) > 0).reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+                    const sRefunded = sPayments.filter((p: any) => p.is_refund || Number(p.amount) < 0).reduce((sum: number, p: any) => sum + Math.abs(Number(p.amount)), 0);
+                    const sNetPaid = sCollected - sRefunded;
+                    const sDue = Math.max(0, Number(s.grand_total || 0) - sNetPaid);
+
                     const staffName = s.employee?.name || s.items?.[0]?.staff?.name || 'Staff';
                     const timeStr = s.created_at ? new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
                     const methods = Array.from(new Set(s.payments?.map((p: any) => p.payment_method) || [])).join(', ') || 'Unpaid';
@@ -611,15 +627,15 @@ export const DailySheet: React.FC = () => {
                     const invoiceProfit = sGrandTotal - saleCost;
 
                     return (
-                      <tr key={s.id} className="hover:bg-muted/40 transition-colors print:hover:bg-transparent print-avoid-break">
-                        <td className="px-2 py-1.5 text-center font-mono text-muted-foreground print:text-slate-700">{idx + 1}</td>
-                        <td className="px-2 py-1.5 font-mono text-muted-foreground print:text-slate-700 whitespace-nowrap">{timeStr}</td>
-                        <td className="px-2 py-1.5 font-bold font-mono text-foreground print:text-slate-900 whitespace-nowrap">
+                      <tr key={s.id} className="divide-x divide-border/60 hover:bg-muted/40 transition-colors print:hover:bg-transparent print-avoid-break">
+                        <td className="px-2 py-1.5 text-center font-mono text-muted-foreground print:text-slate-700 border-r border-border/60">{idx + 1}</td>
+                        <td className="px-2 py-1.5 font-mono text-muted-foreground print:text-slate-700 whitespace-nowrap border-r border-border/60">{timeStr}</td>
+                        <td className="px-2 py-1.5 font-bold font-mono text-foreground print:text-slate-900 whitespace-nowrap border-r border-border/60">
                           {s.invoice_no}
                         </td>
                         
                         {/* Company Column */}
-                        <td className="px-2 py-1.5">
+                        <td className="px-2 py-1.5 border-r border-border/60">
                           {companyName ? (
                             <div>
                               <span className="font-semibold text-foreground print:text-slate-900">{companyName}</span>
@@ -633,7 +649,7 @@ export const DailySheet: React.FC = () => {
                         </td>
 
                         {/* Member Name Column */}
-                        <td className="px-2 py-1.5">
+                        <td className="px-2 py-1.5 border-r border-border/60">
                           <div className="font-medium text-foreground print:text-slate-900 leading-tight">
                             {memberNames || '—'}
                           </div>
@@ -643,7 +659,7 @@ export const DailySheet: React.FC = () => {
                         </td>
 
                         {/* Service Column */}
-                        <td className="px-2 py-1.5">
+                        <td className="px-2 py-1.5 border-r border-border/60">
                           <div className="space-y-0.5">
                             {s.items?.map((it: any, iIdx: number) => (
                               <div key={iIdx} className="text-[9.5pt] print:text-[7pt] leading-tight flex items-start gap-1">
@@ -658,30 +674,39 @@ export const DailySheet: React.FC = () => {
                         </td>
 
                         {/* Staff Column */}
-                        <td className="px-2 py-1.5 whitespace-nowrap">
+                        <td className="px-2 py-1.5 whitespace-nowrap border-r border-border/60">
                           <span className="inline-block px-1.5 py-0.5 rounded bg-muted print:bg-slate-100 text-foreground print:text-slate-900 font-medium text-[10px]">
                             {staffName}
                           </span>
                         </td>
 
                         {/* Total Financials */}
-                        <td className="px-2 py-1.5 text-right font-bold text-foreground print:text-slate-900 whitespace-nowrap font-mono">
+                        <td className="px-2 py-1.5 text-right font-bold text-foreground print:text-slate-900 whitespace-nowrap font-mono border-r border-border/60">
                           {sGrandTotal.toFixed(2)}
                         </td>
 
                         {/* Expense Column */}
-                        <td className="px-2 py-1.5 text-right font-semibold text-rose-600 print:text-slate-800 whitespace-nowrap font-mono">
+                        <td className="px-2 py-1.5 text-right font-semibold text-rose-600 print:text-slate-800 whitespace-nowrap font-mono border-r border-border/60">
                           {saleCost.toFixed(2)}
                         </td>
 
                         {/* Paid Column */}
-                        <td className="px-2 py-1.5 text-right font-semibold text-emerald-600 print:text-slate-900 whitespace-nowrap font-mono">
-                          <div>{sPaid > 0 ? `+${sPaid.toFixed(2)}` : '0.00'}</div>
+                        <td className="px-2 py-1.5 text-right font-semibold text-emerald-600 print:text-slate-900 whitespace-nowrap font-mono border-r border-border/60">
+                          <div>{sCollected > 0 ? `+${sCollected.toFixed(2)}` : '0.00'}</div>
                           <div className="text-[8px] text-muted-foreground print:text-slate-500 font-normal truncate">{methods}</div>
                         </td>
 
+                        {/* Returned Column */}
+                        <td className="px-2 py-1.5 text-right font-semibold whitespace-nowrap font-mono border-r border-border/60">
+                          {sRefunded > 0 ? (
+                            <span className="text-rose-600 print:text-rose-700 font-bold">-{sRefunded.toFixed(2)}</span>
+                          ) : (
+                            <span className="text-muted-foreground print:text-slate-400">0.00</span>
+                          )}
+                        </td>
+
                         {/* Due Column */}
-                        <td className="px-2 py-1.5 text-right font-semibold whitespace-nowrap font-mono">
+                        <td className="px-2 py-1.5 text-right font-semibold whitespace-nowrap font-mono border-r border-border/60">
                           {sDue > 0 ? (
                             <span className="text-amber-600 print:text-rose-700 font-bold">{sDue.toFixed(2)}</span>
                           ) : (
@@ -704,20 +729,23 @@ export const DailySheet: React.FC = () => {
               {/* Table Footer Totals */}
               {filteredSales.length > 0 && (
                 <tfoot className="bg-muted/80 font-bold border-t-2 border-border text-foreground print:bg-slate-200 print:text-slate-900 print-avoid-break">
-                  <tr>
-                    <td colSpan={7} className="px-2 py-2 text-right uppercase tracking-wider text-[8.5pt] font-extrabold font-heading">
+                  <tr className="divide-x divide-border/60">
+                    <td colSpan={7} className="px-2 py-2 text-right uppercase tracking-wider text-[8.5pt] font-extrabold font-heading border-r border-border/60">
                       Daily Ledger Totals ({filteredSales.length} Invoices):
                     </td>
-                    <td className="px-2 py-2 text-right text-[8.5pt] font-black text-primary print:text-slate-900 font-mono">
+                    <td className="px-2 py-2 text-right text-[8.5pt] font-black text-primary print:text-slate-900 font-mono border-r border-border/60">
                       {totalGrossSales.toFixed(2)}
                     </td>
-                    <td className="px-2 py-2 text-right text-[8.5pt] font-black text-rose-600 print:text-slate-900 font-mono">
+                    <td className="px-2 py-2 text-right text-[8.5pt] font-black text-rose-600 print:text-slate-900 font-mono border-r border-border/60">
                       {totalSalesExpense.toFixed(2)}
                     </td>
-                    <td className="px-2 py-2 text-right text-[8.5pt] font-black text-emerald-600 print:text-slate-900 font-mono">
+                    <td className="px-2 py-2 text-right text-[8.5pt] font-black text-emerald-600 print:text-slate-900 font-mono border-r border-border/60">
                       +{totalCollected.toFixed(2)}
                     </td>
-                    <td className="px-2 py-2 text-right text-[8.5pt] font-black text-amber-600 print:text-slate-900 font-mono">
+                    <td className="px-2 py-2 text-right text-[8.5pt] font-black text-rose-600 print:text-slate-900 font-mono border-r border-border/60">
+                      {totalRefunded > 0 ? `-${totalRefunded.toFixed(2)}` : '0.00'}
+                    </td>
+                    <td className="px-2 py-2 text-right text-[8.5pt] font-black text-amber-600 print:text-slate-900 font-mono border-r border-border/60">
                       {totalDue.toFixed(2)}
                     </td>
                     <td className="px-2 py-2 text-right text-[8.5pt] font-black text-emerald-600 print:text-slate-900 font-mono">

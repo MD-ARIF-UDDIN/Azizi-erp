@@ -354,7 +354,13 @@ export const ExpiryTracker: React.FC = () => {
 
         {/* Document Grid */}
         {loading ? (
-          <div className="h-60 bg-muted/10 border border-dashed border-border rounded-2xl animate-pulse" />
+          <div className="p-12 text-center bg-card border border-border rounded-2xl">
+            <div className="flex flex-col items-center justify-center gap-3">
+              <div className="h-8 w-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-bold tracking-wider uppercase text-primary animate-pulse">Loading...</span>
+              <p className="text-[11px] text-muted-foreground font-medium">Please wait while tracked documents are being loaded...</p>
+            </div>
+          </div>
         ) : filteredDocs.length === 0 ? (
           <div className="text-center py-12 bg-card rounded-2xl border border-border flex flex-col items-center justify-center p-6 space-y-3">
             <Clock size={36} className="text-muted-foreground" />
