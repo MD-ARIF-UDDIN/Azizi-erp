@@ -523,12 +523,20 @@ export const QuotationsList: React.FC = () => {
                                 const companyName = quote.customer.customer_type === 'company' 
                                   ? quote.customer.name 
                                   : (quote.customer.company?.name || quote.customer.name);
+                                const companyPhone = quote.customer.customer_type === 'company'
+                                  ? quote.customer.phone
+                                  : (quote.customer.company?.phone || quote.customer.phone);
                                 return (
                                   <div className="flex flex-col">
                                     <span className="font-black text-black text-[13px] uppercase">{companyName}</span>
-                                    {quote.customer.trn && (
-                                      <span className="text-[10px] text-gray-600 font-mono mt-0.5">TRN: {quote.customer.trn}</span>
-                                    )}
+                                    <div className="flex items-center gap-4 text-[10px] text-gray-700 font-medium mt-0.5">
+                                      {companyPhone && (
+                                        <span><strong className="text-gray-900">Phone:</strong> {companyPhone}</span>
+                                      )}
+                                      {quote.customer.trn && (
+                                        <span><strong className="text-gray-900">TRN:</strong> {quote.customer.trn}</span>
+                                      )}
+                                    </div>
                                   </div>
                                 );
                               })()}
@@ -544,14 +552,7 @@ export const QuotationsList: React.FC = () => {
                                   || (quote.customer?.customer_type !== 'company' ? quote.customer?.name : '') 
                                   || '—';
                                 return (
-                                  <div className="flex flex-col">
-                                    <span className="font-bold text-black text-[12px]">{memberName}</span>
-                                    {(quote.person_phone || quote.customer?.phone) && (
-                                      <span className="text-[10px] text-gray-600 font-mono">
-                                        {quote.person_phone || quote.customer?.phone}
-                                      </span>
-                                    )}
-                                  </div>
+                                  <span className="font-bold text-black text-[12px]">{memberName}</span>
                                 );
                               })()}
                             </td>

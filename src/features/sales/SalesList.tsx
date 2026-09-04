@@ -20,7 +20,9 @@ import {
   Trash2,
   Wallet,
   Building2,
-  User
+  User,
+  Undo2,
+  CheckCircle2
 } from 'lucide-react';
 
 const handleWhatsAppShare = (sale: any) => {
@@ -108,8 +110,9 @@ export const SalesList: React.FC = () => {
   const [svcExpenseDesc, setSvcExpenseDesc] = useState('');
   const [svcExpenseSaving, setSvcExpenseSaving] = useState(false);
 
-  // Payment Modal States
+  // Payment & Refund Modal States
   const [payModalOpen, setPayModalOpen] = useState(false);
+  const [payModalTab, setPayModalTab] = useState<'collect' | 'refund'>('collect');
   const [payingSaleId, setPayingSaleId] = useState<string | null>(null);
   const [payingSaleDetails, setPayingSaleDetails] = useState<any | null>(null);
   const [payAmount, setPayAmount] = useState(0);
@@ -117,6 +120,8 @@ export const SalesList: React.FC = () => {
   const [payTxnNo, setPayTxnNo] = useState('');
   const [payNotes, setPayNotes] = useState('');
   const [payPersonName, setPayPersonName] = useState('');
+  const [refundReason, setRefundReason] = useState('');
+  const [refundVoucherData, setRefundVoucherData] = useState<any | null>(null);
   const [paySaving, setPaySaving] = useState(false);
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -395,7 +400,27 @@ export const SalesList: React.FC = () => {
       setPayAccountId(defaultDrawer?.id || '');
       setPayTxnNo('');
       setPayNotes('');
+      setRefundReason('');
       setPayPersonName(detail?.person_name || '');
+      setPayModalTab('collect');
+      setPayModalOpen(true);
+    } catch (err) { console.error(err); }
+  };
+
+  const handleOpenRefundModal = async (saleId: string) => {
+    try {
+      const detail = await db.sales.getById(saleId);
+      setPayingSaleId(saleId);
+      setPayingSaleDetails(detail);
+      const totalPaid = (detail?.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0);
+      const defaultDrawer = accounts.find(a => a.type === 'cash_drawer') || accounts[0];
+      setPayAmount(Math.max(0, parseFloat(totalPaid.toFixed(2))));
+      setPayAccountId(defaultDrawer?.id || '');
+      setPayTxnNo('');
+      setPayNotes('');
+      setRefundReason('');
+      setPayPersonName(detail?.person_name || '');
+      setPayModalTab('refund');
       setPayModalOpen(true);
     } catch (err) { console.error(err); }
   };
@@ -419,6 +444,9 @@ export const SalesList: React.FC = () => {
         setEditingSale(detail);
         setEditingSaleItems(detail?.items || []);
       }
+      if (selectedSaleId && selectedSaleId === payingSaleId) {
+        setSelectedSaleDetails(detail);
+      }
       const totalPaid = (detail?.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0);
       const due = Math.max(0, (detail?.grand_total || 0) - totalPaid);
       setPayAmount(parseFloat(due.toFixed(2)));
@@ -428,6 +456,55 @@ export const SalesList: React.FC = () => {
       await fetchSales();
     } catch (err) { console.error(err); }
     finally { setPaySaving(false); }
+  };
+
+  const handleSubmitRefund = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!payingSaleId || payAmount <= 0) return;
+    if (!refundReason.trim()) {
+      alert('Please specify the reason for the refund / money return.');
+      return;
+    }
+    setPaySaving(true);
+    try {
+      const refundRecord = await (db.payments as any).refund({
+        sale_id: payingSaleId,
+        amount: payAmount,
+        account_id: payAccountId || undefined,
+        reason: refundReason.trim(),
+        person_name: payPersonName.trim() || undefined
+      });
+      const detail = await db.sales.getById(payingSaleId);
+      setPayingSaleDetails(detail);
+      if (editingSaleId && editingSaleId === payingSaleId) {
+        setEditingSale(detail);
+        setEditingSaleItems(detail?.items || []);
+      }
+      if (selectedSaleId && selectedSaleId === payingSaleId) {
+        setSelectedSaleDetails(detail);
+      }
+
+      setRefundVoucherData({
+        sale: detail,
+        refund: refundRecord,
+        account: accounts.find(a => a.id === payAccountId),
+        amount: payAmount,
+        reason: refundReason.trim(),
+        personName: payPersonName.trim() || detail?.person_name || detail?.customer?.name,
+        date: new Date().toISOString()
+      });
+
+      const totalPaid = (detail?.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0);
+      setPayAmount(Math.max(0, parseFloat(totalPaid.toFixed(2))));
+      setRefundReason('');
+      setPayPersonName('');
+      await fetchSales();
+    } catch (err: any) {
+      alert(err.message || 'Failed to process refund.');
+      console.error(err);
+    } finally {
+      setPaySaving(false);
+    }
   };
 
   // Sort & Filter
@@ -865,6 +942,15 @@ export const SalesList: React.FC = () => {
                                   >
                                     <Pencil size={13} />
                                   </button>
+                                  {totalPaid > 0 && hasPermission('Payments.Create') && (
+                                    <button
+                                      onClick={() => handleOpenRefundModal(s.id)}
+                                      className="w-7 h-7 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
+                                      title="Return / Refund Money"
+                                    >
+                                      <Undo2 size={13} />
+                                    </button>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -910,6 +996,18 @@ export const SalesList: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {hasPermission('Payments.Create') && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenRefundModal(mainSale.id)}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                          title="Return / Refund Money"
+                        >
+                          <Undo2 size={13} />
+                          <span>Refund / Return</span>
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={handlePrint}
@@ -942,8 +1040,11 @@ export const SalesList: React.FC = () => {
                   {/* PRINTABLE INVOICE PAPER SHEET */}
                   <div className="print-invoice-sheet bg-white text-black p-6 sm:p-8 rounded-2xl shadow-2xl border border-border/80 print:border-none print:shadow-none print:p-0 print:rounded-none space-y-8 print:space-y-0 text-xs font-sans">
                     {salesListForPrint.map((saleItem, idx) => {
-                      const totalPaid = saleItem.payments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0;
-                      const due = Math.max(0, saleItem.grand_total - totalPaid);
+                      const allPayments = saleItem.payments || [];
+                      const totalCollected = allPayments.filter((p: any) => p.amount > 0).reduce((sum: number, p: any) => sum + p.amount, 0);
+                      const totalRefunded = Math.abs(allPayments.filter((p: any) => p.amount < 0 || p.is_refund).reduce((sum: number, p: any) => sum + p.amount, 0));
+                      const netPaid = totalCollected - totalRefunded;
+                      const due = Math.max(0, saleItem.grand_total - netPaid);
 
                       return (
                         <div 
@@ -992,12 +1093,20 @@ export const SalesList: React.FC = () => {
                                       const companyName = saleItem.customer.customer_type === 'company' 
                                         ? saleItem.customer.name 
                                         : (saleItem.customer.company?.name || saleItem.customer.name);
+                                      const companyPhone = saleItem.customer.customer_type === 'company'
+                                        ? saleItem.customer.phone
+                                        : (saleItem.customer.company?.phone || saleItem.customer.phone);
                                       return (
                                         <div className="flex flex-col">
                                           <span className="font-black text-black text-[13px] uppercase">{companyName}</span>
-                                          {saleItem.customer.trn && (
-                                            <span className="text-[10px] text-gray-600 font-mono mt-0.5">TRN: {saleItem.customer.trn}</span>
-                                          )}
+                                          <div className="flex items-center gap-4 text-[10px] text-gray-700 font-medium mt-0.5">
+                                            {companyPhone && (
+                                              <span><strong className="text-gray-900">Phone:</strong> {companyPhone}</span>
+                                            )}
+                                            {saleItem.customer.trn && (
+                                              <span><strong className="text-gray-900">TRN:</strong> {saleItem.customer.trn}</span>
+                                            )}
+                                          </div>
                                         </div>
                                       );
                                     })()}
@@ -1014,12 +1123,7 @@ export const SalesList: React.FC = () => {
                                         || saleItem.items?.[0]?.person_name 
                                         || '—';
                                       return (
-                                        <div className="flex flex-col">
-                                          <span className="font-bold text-black text-[12px]">{memberName}</span>
-                                          {saleItem.customer?.phone && (
-                                            <span className="text-[10px] text-gray-600 font-mono">{saleItem.customer.phone}</span>
-                                          )}
-                                        </div>
+                                        <span className="font-bold text-black text-[12px]">{memberName}</span>
                                       );
                                     })()}
                                   </td>
@@ -1034,66 +1138,43 @@ export const SalesList: React.FC = () => {
                                   <td className="bg-gray-50 text-gray-800 font-bold px-3 py-1.5 border border-gray-300 w-[22%]">
                                     Invoice No:
                                   </td>
-                                  <td className="px-3 py-1.5 border border-gray-300 text-black font-bold font-mono w-[28%]">
+                                  <td className="px-3 py-1.5 border border-gray-300 text-black font-bold font-mono w-[78%]" colSpan={3}>
                                     {saleItem.invoice_no}
-                                  </td>
-                                  <td className="bg-gray-50 text-gray-800 font-bold px-3 py-1.5 border border-gray-300 w-[22%] text-center">
-                                    Cashier
-                                  </td>
-                                  <td className="px-3 py-1.5 border border-gray-300 text-black font-semibold text-center w-[28%]">
-                                    {saleItem.employee?.name || 'Owner admin'}
                                   </td>
                                 </tr>
                               </tbody>
                             </table>
 
                             {/* 4. Line Items Table */}
-                            <div className="border border-gray-300 overflow-hidden my-2.5 text-xs bg-white">
-                              <table className="w-full text-left border-collapse">
-                                <thead className="bg-[#000ba0] text-white font-bold">
-                                  <tr>
-                                    <th className="px-3 py-2 text-center border-r border-gray-300 w-[6%] font-extrabold">No</th>
-                                    <th className="px-3 py-2 text-center border-r border-gray-300 w-[14%] font-extrabold">Date</th>
-                                    <th className="px-3 py-2 border-r border-gray-300 w-[47%] font-extrabold">Description of Service</th>
-                                    <th className="px-3 py-2 text-center border-r border-gray-300 w-[9%] font-extrabold">Qty</th>
-                                    <th className="px-3 py-2 text-right border-r border-gray-300 w-[11%] font-extrabold">Rate</th>
-                                    <th className="px-3 py-2 text-right w-[13%] font-extrabold">Amount</th>
+                            <div className="border border-gray-300 my-2.5">
+                              <table className="w-full text-left border-collapse text-xs">
+                                <thead>
+                                  <tr className="bg-[#000ba0] text-white font-extrabold text-[11px]">
+                                    <th className="px-3 py-1.5 text-center border-r border-gray-300 w-10">SR#</th>
+                                    <th className="px-3 py-1.5 border-r border-gray-300">Description of Service</th>
+                                    <th className="px-3 py-1.5 text-center border-r border-gray-300 w-24">QTY</th>
+                                    <th className="px-3 py-1.5 text-right border-r border-gray-300 w-24">Price</th>
+                                    <th className="px-3 py-1.5 text-right border-r border-gray-300 w-20">Discount</th>
+                                    <th className="px-3 py-1.5 text-right w-24">Total</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-300 text-black">
+                                <tbody>
                                   {(() => {
                                     const items = saleItem.items || [];
-                                    const uniqueItemPersons = Array.from(
-                                      new Set(items.map((it: any) => it.person_name).filter(Boolean))
-                                    );
-                                    const showPerItemMember = uniqueItemPersons.length > 1;
                                     const rows: React.ReactNode[] = [];
-                                    
-                                    // Render actual items
-                                    items.forEach((item: any, index: number) => {
-                                      const itemDate = item.service_date 
-                                        ? new Date(item.service_date).toLocaleDateString()
-                                        : new Date(item.created_at || saleItem.created_at).toLocaleDateString();
+
+                                    items.forEach((item: any, iIdx: number) => {
                                       rows.push(
-                                        <tr key={item.id} className="h-8">
-                                          <td className="px-3 py-1.5 text-center border-r border-gray-300 font-bold">{index + 1}</td>
-                                          <td className="px-3 py-1.5 text-center border-r border-gray-300 font-medium">{itemDate}</td>
-                                          <td className="px-3 py-1.5 border-r border-gray-300 text-left">
-                                            <span className="font-extrabold text-black">{item.service?.name}</span>
-                                            {showPerItemMember && item.person_name && (
-                                              <span className="block font-semibold text-[11px] text-[#000ba0] mt-0.5">
-                                                👤 For: {item.person_name}
-                                              </span>
-                                            )}
-                                            {item.notes && (
-                                              <span className="block font-normal text-[10px] text-gray-600 italic">
-                                                Note: {item.notes}
-                                              </span>
-                                            )}
+                                        <tr key={item.id || iIdx} className="border-b border-gray-300 h-7 text-black">
+                                          <td className="px-3 py-1 text-center border-r border-gray-300 font-bold">{iIdx + 1}</td>
+                                          <td className="px-3 py-1 border-r border-gray-300 font-medium">
+                                            <span>{item.service?.name || 'Service'}</span>
+                                            {item.notes && <span className="text-[10px] text-gray-500 italic block">{item.notes}</span>}
                                           </td>
-                                          <td className="px-3 py-1.5 text-center border-r border-gray-300 font-bold">{item.quantity}</td>
-                                          <td className="px-3 py-1.5 text-right border-r border-gray-300 font-mono">{item.unit_price.toFixed(2)}</td>
-                                          <td className="px-3 py-1.5 text-right font-mono font-black">{item.subtotal.toFixed(2)}</td>
+                                          <td className="px-3 py-1 text-center border-r border-gray-300 font-bold">{item.quantity}</td>
+                                          <td className="px-3 py-1 text-right border-r border-gray-300 font-mono">{item.unit_price.toFixed(2)}</td>
+                                          <td className="px-3 py-1 text-right border-r border-gray-300 font-mono">0.00</td>
+                                          <td className="px-3 py-1 text-right font-mono font-bold">{item.subtotal.toFixed(2)}</td>
                                         </tr>
                                       );
                                     });
@@ -1101,10 +1182,9 @@ export const SalesList: React.FC = () => {
                                     // Fill up to 5 rows cleanly
                                     const emptyCount = Math.max(0, 5 - items.length);
                                     for (let i = 0; i < emptyCount; i++) {
-                                      const rowNum = items.length + i + 1;
                                       rows.push(
-                                        <tr key={`empty-${i}`} className="h-7">
-                                          <td className="px-3 py-1 text-center border-r border-gray-300 font-bold text-gray-400">{rowNum}</td>
+                                        <tr key={`empty-${i}`} className="border-b border-gray-300 h-7">
+                                          <td className="px-3 py-1 text-center border-r border-gray-300 font-bold text-gray-400">{items.length + i + 1}</td>
                                           <td className="px-3 py-1 border-r border-gray-300"></td>
                                           <td className="px-3 py-1 border-r border-gray-300"></td>
                                           <td className="px-3 py-1 border-r border-gray-300"></td>
@@ -1161,16 +1241,17 @@ export const SalesList: React.FC = () => {
                                       const rows: React.ReactNode[] = [];
 
                                       payments.forEach((p: any, pIdx: number) => {
+                                        const isRef = p.is_refund || p.amount < 0;
                                         rows.push(
                                           <tr key={p.id || pIdx} className="h-6 text-xs">
                                             <td className="px-2.5 py-1 border-r border-gray-300">
-                                              {new Date(p.payment_date).toLocaleDateString()}
+                                              {new Date(p.payment_date || p.created_at).toLocaleDateString()}
                                             </td>
-                                            <td className="px-2.5 py-1 border-r border-gray-300 font-bold capitalize">
-                                              {p.payment_method}
+                                            <td className={`px-2.5 py-1 border-r border-gray-300 font-bold capitalize ${isRef ? 'text-rose-700' : ''}`}>
+                                              {isRef ? `↩ Refund (${p.payment_method})` : p.payment_method}
                                             </td>
-                                            <td className="px-2.5 py-1 text-right font-mono font-bold">
-                                              {p.amount.toFixed(2)}
+                                            <td className={`px-2.5 py-1 text-right font-mono font-bold ${isRef ? 'text-rose-700' : ''}`}>
+                                              {isRef ? `-${Math.abs(p.amount).toFixed(2)}` : p.amount.toFixed(2)}
                                             </td>
                                           </tr>
                                         );
@@ -1200,8 +1281,20 @@ export const SalesList: React.FC = () => {
                                   </div>
                                   <div className="flex justify-between bg-white text-black font-extrabold px-3 py-1.5 text-xs">
                                     <span>Paid Amount</span>
-                                    <span className="font-mono">{totalPaid.toFixed(2)} AED</span>
+                                    <span className="font-mono">{totalCollected.toFixed(2)} AED</span>
                                   </div>
+                                  {totalRefunded > 0 && (
+                                    <div className="flex justify-between bg-rose-50 text-rose-800 font-extrabold px-3 py-1 text-xs">
+                                      <span>Less: Refunded</span>
+                                      <span className="font-mono">-{totalRefunded.toFixed(2)} AED</span>
+                                    </div>
+                                  )}
+                                  {totalRefunded > 0 && (
+                                    <div className="flex justify-between bg-slate-100 text-slate-900 font-extrabold px-3 py-1 text-xs">
+                                      <span>Net Paid</span>
+                                      <span className="font-mono">{netPaid.toFixed(2)} AED</span>
+                                    </div>
+                                  )}
                                   <div className={`flex justify-between font-black px-3 py-1.5 text-xs ${
                                     due > 0 ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800'
                                   }`}>
@@ -1242,14 +1335,104 @@ export const SalesList: React.FC = () => {
                         return due > 0 && hasPermission('Payments.Create') ? (
                           <button
                             type="button"
-                            onClick={() => navigate(`/payments/create?sale_id=${mainSale.id}`)}
-                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-bold transition-colors cursor-pointer"
+                            onClick={() => handleOpenPayModal(mainSale.id)}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-colors cursor-pointer"
                           >
                             <CreditCard size={14} />
                             <span>Collect Due ({due.toFixed(2)} AED)</span>
                           </button>
                         ) : null;
                       })()}
+
+                      {/* Return / Refund button */}
+                      {hasPermission('Payments.Create') && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenRefundModal(mainSale.id)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold transition-colors cursor-pointer"
+                        >
+                          <Undo2 size={14} />
+                          <span>Return / Refund Money</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Payment & Refund History timeline */}
+                    <div className="space-y-3 pt-3 border-t border-border/60">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <CreditCard size={14} className="text-emerald-600" />
+                          Payment &amp; Refund Activity Log (Invoice #{mainSale.invoice_no})
+                        </h4>
+                        {hasPermission('Payments.Create') && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenRefundModal(mainSale.id)}
+                            className="text-[11px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 cursor-pointer"
+                          >
+                            <Undo2 size={12} /> Return Money / Refund
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                        <div className="p-2 rounded-xl bg-muted/40 border border-border">
+                          <div className="text-[10px] text-muted-foreground uppercase font-bold">Total Invoiced</div>
+                          <div className="font-extrabold text-foreground">{mainSale.grand_total.toFixed(2)} AED</div>
+                        </div>
+                        <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                          <div className="text-[10px] text-emerald-600 uppercase font-bold">Collected</div>
+                          <div className="font-extrabold text-emerald-600">
+                            {(mainSale.payments || []).filter((p: any) => p.amount > 0).reduce((s: number, p: any) => s + p.amount, 0).toFixed(2)} AED
+                          </div>
+                        </div>
+                        <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/20">
+                          <div className="text-[10px] text-rose-600 uppercase font-bold">Refunded</div>
+                          <div className="font-extrabold text-rose-600">
+                            {Math.abs((mainSale.payments || []).filter((p: any) => p.amount < 0 || p.is_refund).reduce((s: number, p: any) => s + p.amount, 0)).toFixed(2)} AED
+                          </div>
+                        </div>
+                        <div className="p-2 rounded-xl bg-primary/10 border border-primary/20">
+                          <div className="text-[10px] text-primary uppercase font-bold">Net Balance Due</div>
+                          <div className="font-extrabold text-primary">
+                            {Math.max(0, mainSale.grand_total - (mainSale.payments || []).reduce((s: number, p: any) => s + p.amount, 0)).toFixed(2)} AED
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="relative pl-4 border-l border-border/80 space-y-2.5">
+                        {(mainSale.payments || []).length === 0 ? (
+                          <div className="text-xs text-muted-foreground italic py-1">No payment transactions recorded yet.</div>
+                        ) : (
+                          (mainSale.payments || []).map((p: any, idx: number) => {
+                            const isRef = p.is_refund || p.amount < 0;
+                            return (
+                              <div key={p.id || idx} className="relative text-[11px]">
+                                <div
+                                  className={`absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full border-2 ${
+                                    isRef ? 'border-rose-500 bg-rose-50' : 'border-emerald-500 bg-emerald-50'
+                                  }`}
+                                />
+                                <div className="flex items-center justify-between">
+                                  <span className={`font-bold ${isRef ? 'text-rose-600' : 'text-emerald-700'}`}>
+                                    {isRef ? '↩ Refund Returned' : '✓ Payment Received'}: {isRef ? `-${Math.abs(p.amount).toFixed(2)}` : `+${p.amount.toFixed(2)}`} AED
+                                  </span>
+                                  <span className="text-[10px] text-muted-foreground font-mono">
+                                    {new Date(p.payment_date || p.created_at).toLocaleDateString()} {new Date(p.payment_date || p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                </div>
+                                <div className="text-muted-foreground text-[10px] mt-0.5 flex items-center gap-2 flex-wrap">
+                                  <span>Method: <strong>{p.payment_method}</strong></span>
+                                  {p.person_name && <span>• Member: <strong>👤 {p.person_name}</strong></span>}
+                                  {p.transaction_no && <span>• Txn: <code className="font-mono">{p.transaction_no}</code></span>}
+                                  {p.refund_reason && <span className="text-rose-600 font-semibold">• Reason: {p.refund_reason}</span>}
+                                  {p.notes && !p.refund_reason && <span>• Note: {p.notes.replace(/\[Member:\s*[^\]]+\]/g, '').trim()}</span>}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
                     </div>
 
                     {/* Job Status Workflow history timeline */}
@@ -1901,240 +2084,405 @@ export const SalesList: React.FC = () => {
             </div>
           );
         })()}
-        {/* PAYMENT & ADVANCE MODAL */}
+        {/* PAYMENT & ADVANCE / REFUND MODAL */}
         {payModalOpen && payingSaleDetails && (() => {
-          const totalPaid = (payingSaleDetails.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0);
+          const payments = payingSaleDetails.payments || [];
+          const totalCollected = payments.filter((p: any) => p.amount > 0).reduce((sum: number, p: any) => sum + p.amount, 0);
+          const totalRefunded = Math.abs(payments.filter((p: any) => p.amount < 0 || p.is_refund).reduce((sum: number, p: any) => sum + p.amount, 0));
+          const netPaid = totalCollected - totalRefunded;
           const grandTotal = payingSaleDetails.grand_total || 0;
-          const due = Math.max(0, grandTotal - totalPaid);
-          const advanceCredit = Math.max(0, totalPaid - grandTotal);
-          const isPaid = totalPaid >= grandTotal;
+          const due = Math.max(0, grandTotal - netPaid);
+          const advanceCredit = Math.max(0, netPaid - grandTotal);
+          const isPaid = netPaid >= grandTotal && grandTotal > 0;
+          const maxRefundable = Math.max(0, netPaid);
 
           return (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
               <div className="glass border border-border rounded-2xl p-6 w-full max-w-lg bg-white shadow-2xl relative max-h-[90vh] overflow-y-auto">
                 <button
-                  onClick={() => { setPayModalOpen(false); setPayingSaleId(null); setPayingSaleDetails(null); }}
+                  onClick={() => { setPayModalOpen(false); setPayingSaleId(null); setPayingSaleDetails(null); setRefundVoucherData(null); }}
                   className="absolute right-4 top-4 p-2 text-muted-foreground hover:text-foreground bg-muted/40 rounded-full transition-colors cursor-pointer"
                 >
                   <X size={16} />
                 </button>
 
-                <div className="flex items-center gap-2 mb-5">
-                  <CreditCard size={18} className="text-emerald-600" />
+                <div className="flex items-center gap-2 mb-4">
+                  <CreditCard size={18} className={payModalTab === 'refund' ? 'text-rose-600' : 'text-emerald-600'} />
                   <div>
-                    <h3 className="text-sm font-bold text-foreground leading-none">Payments &amp; Advance — #{payingSaleDetails.invoice_no}</h3>
+                    <h3 className="text-sm font-bold text-foreground leading-none">
+                      {payModalTab === 'refund' ? '↩ Return Money / Refund' : 'Payments & Advance'} — #{payingSaleDetails.invoice_no}
+                    </h3>
                     <span className="text-[10px] text-muted-foreground mt-1 block">{payingSaleDetails.customer?.name || 'Walk-in Customer'}</span>
                   </div>
                 </div>
 
+                {/* Tab Switcher: Collect Payment vs Return Money */}
+                <div className="flex rounded-xl bg-muted/50 p-1 border border-border mb-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayModalTab('collect');
+                      setPayAmount(parseFloat(due.toFixed(2)));
+                    }}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      payModalTab === 'collect'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <CreditCard size={13} />
+                    <span>Collect Payment</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayModalTab('refund');
+                      setPayAmount(parseFloat(maxRefundable.toFixed(2)));
+                    }}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      payModalTab === 'refund'
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Undo2 size={13} />
+                    <span>Return / Refund Money</span>
+                  </button>
+                </div>
+
                 {/* Summary Cards */}
-                <div className="grid grid-cols-3 gap-3 mb-5">
-                  <div className="bg-muted/30 border border-border rounded-xl p-3 text-center">
-                    <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Grand Total</div>
-                    <div className="text-sm font-bold text-foreground">{grandTotal.toFixed(2)} <span className="text-[10px] text-muted-foreground">AED</span></div>
+                <div className="grid grid-cols-4 gap-2 mb-4">
+                  <div className="bg-muted/30 border border-border rounded-xl p-2.5 text-center">
+                    <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider mb-0.5">Grand Total</div>
+                    <div className="text-xs font-bold text-foreground">{grandTotal.toFixed(2)} <span className="text-[9px] text-muted-foreground">AED</span></div>
                   </div>
-                  <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-3 text-center">
-                    <div className="text-[10px] font-bold text-emerald-600/70 uppercase tracking-wider mb-1">Total Collected</div>
-                    <div className="text-sm font-bold text-emerald-600">{totalPaid.toFixed(2)} <span className="text-[10px]">AED</span></div>
+                  <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-2.5 text-center">
+                    <div className="text-[9px] font-bold text-emerald-600/70 uppercase tracking-wider mb-0.5">Collected</div>
+                    <div className="text-xs font-bold text-emerald-600">{totalCollected.toFixed(2)} <span className="text-[9px]">AED</span></div>
                   </div>
-                  <div className={`border rounded-xl p-3 text-center ${
+                  <div className="bg-rose-500/5 border border-rose-500/20 rounded-xl p-2.5 text-center">
+                    <div className="text-[9px] font-bold text-rose-600/70 uppercase tracking-wider mb-0.5">Refunded</div>
+                    <div className="text-xs font-bold text-rose-600">{totalRefunded.toFixed(2)} <span className="text-[9px]">AED</span></div>
+                  </div>
+                  <div className={`border rounded-xl p-2.5 text-center ${
                     advanceCredit > 0
                       ? 'bg-sky-500/10 border-sky-500/30'
                       : isPaid
                       ? 'bg-emerald-500/10 border-emerald-500/30'
                       : 'bg-rose-500/10 border-rose-500/30'
                   }`}>
-                    <div className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${
+                    <div className={`text-[9px] font-bold uppercase tracking-wider mb-0.5 ${
                       advanceCredit > 0 ? 'text-sky-700' : isPaid ? 'text-emerald-700' : 'text-rose-700'
                     }`}>
-                      {advanceCredit > 0 ? '✨ Advance Credit' : isPaid ? 'Status' : 'Outstanding Due'}
+                      {advanceCredit > 0 ? '✨ Advance' : isPaid ? 'Paid' : 'Due'}
                     </div>
-                    <div className={`text-sm font-black ${
+                    <div className={`text-xs font-black ${
                       advanceCredit > 0 ? 'text-sky-800' : isPaid ? 'text-emerald-700' : 'text-rose-600'
                     }`}>
-                      {advanceCredit > 0 ? `+${advanceCredit.toFixed(2)} AED` : isPaid ? 'Fully Paid' : `${due.toFixed(2)} AED`}
+                      {advanceCredit > 0 ? `+${advanceCredit.toFixed(2)}` : isPaid ? 'Full' : `${due.toFixed(2)}`}
                     </div>
                   </div>
                 </div>
 
-                {/* Payment History */}
-                <div className="border border-border rounded-xl overflow-hidden mb-5">
-                  <div className="bg-muted/40 px-3 py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border">
-                    Payment History ({(payingSaleDetails.payments || []).length})
+                {/* Refund Success Callout with Printable Voucher */}
+                {refundVoucherData && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl mb-4 flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2 text-emerald-800 font-bold">
+                      <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                      <span>Refund of {refundVoucherData.amount.toFixed(2)} AED recorded successfully!</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setTimeout(() => window.print(), 200)}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0"
+                    >
+                      <Printer size={12} />
+                      <span>Print Voucher</span>
+                    </button>
                   </div>
-                  {(payingSaleDetails.payments || []).length === 0 ? (
-                    <p className="text-xs text-muted-foreground text-center py-4">No payments recorded yet.</p>
+                )}
+
+                {/* Payment & Refund History Table */}
+                <div className="border border-border rounded-xl overflow-hidden mb-4">
+                  <div className="bg-muted/40 px-3 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border flex justify-between items-center">
+                    <span>Transaction History ({payments.length})</span>
+                    <span className="text-[9px] text-muted-foreground">Net: {netPaid.toFixed(2)} AED</span>
+                  </div>
+                  {payments.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-3">No payments recorded yet.</p>
                   ) : (
-                    <table className="w-full text-xs">
-                      <thead className="bg-muted/20">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-muted-foreground font-semibold">Date</th>
-                          <th className="px-3 py-2 text-left text-muted-foreground font-semibold">For Member</th>
-                          <th className="px-3 py-2 text-left text-muted-foreground font-semibold">Method</th>
-                          <th className="px-3 py-2 text-left text-muted-foreground font-semibold">Txn #</th>
-                          <th className="px-3 py-2 text-left text-muted-foreground font-semibold">Note</th>
-                          <th className="px-3 py-2 text-right text-muted-foreground font-semibold">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(payingSaleDetails.payments || []).map((p: any, idx: number) => (
-                          <tr key={p.id || idx} className="border-t border-border/40">
-                            <td className="px-3 py-2 text-muted-foreground">{new Date(p.payment_date || p.created_at).toLocaleDateString()}</td>
-                            <td className="px-3 py-2">
-                              {p.person_name ? (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold">
-                                  👤 {p.person_name}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground text-[10px] italic">General</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 font-medium text-foreground">{p.payment_method}</td>
-                            <td className="px-3 py-2 text-muted-foreground font-mono">{p.transaction_no || '—'}</td>
-                            <td className="px-3 py-2 text-muted-foreground text-[11px] max-w-[150px] truncate" title={p.notes}>
-                              {p.notes ? p.notes.replace(/\[Member:\s*[^\]]+\]/g, '').trim() || '—' : '—'}
-                            </td>
-                            <td className="px-3 py-2 text-right font-bold text-emerald-600">{p.amount.toFixed(2)}</td>
+                    <div className="max-h-36 overflow-y-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-muted/20 sticky top-0">
+                          <tr>
+                            <th className="px-2.5 py-1 text-left text-muted-foreground font-semibold">Date</th>
+                            <th className="px-2.5 py-1 text-left text-muted-foreground font-semibold">Member</th>
+                            <th className="px-2.5 py-1 text-left text-muted-foreground font-semibold">Type</th>
+                            <th className="px-2.5 py-1 text-left text-muted-foreground font-semibold">Reason/Note</th>
+                            <th className="px-2.5 py-1 text-right text-muted-foreground font-semibold">Amount</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y divide-border/40">
+                          {payments.map((p: any, idx: number) => {
+                            const isRef = p.is_refund || p.amount < 0;
+                            return (
+                              <tr key={p.id || idx} className={isRef ? 'bg-rose-50/40' : ''}>
+                                <td className="px-2.5 py-1 text-muted-foreground">{new Date(p.payment_date || p.created_at).toLocaleDateString()}</td>
+                                <td className="px-2.5 py-1">
+                                  {p.person_name ? (
+                                    <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-primary/10 text-primary text-[9px] font-bold">
+                                      👤 {p.person_name}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground text-[9px] italic">General</span>
+                                  )}
+                                </td>
+                                <td className={`px-2.5 py-1 font-semibold ${isRef ? 'text-rose-700' : 'text-foreground'}`}>
+                                  {isRef ? '↩ Refund' : p.payment_method}
+                                </td>
+                                <td className="px-2.5 py-1 text-muted-foreground text-[10px] max-w-[120px] truncate" title={p.refund_reason || p.notes}>
+                                  {p.refund_reason || (p.notes ? p.notes.replace(/\[Member:\s*[^\]]+\]/g, '').replace(/\[Refund\]\s*/, '').trim() : '—') || '—'}
+                                </td>
+                                <td className={`px-2.5 py-1 text-right font-bold ${isRef ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                  {isRef ? `-${Math.abs(p.amount).toFixed(2)}` : `+${p.amount.toFixed(2)}`}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                 </div>
 
-                {/* Collect / Advance Payment Form */}
-                <form onSubmit={handleSubmitPayment} className="border border-emerald-500/20 bg-emerald-500/5 rounded-xl p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
-                      {isPaid ? '+ Record Advance / Additional Payment' : 'Collect Payment'}
-                    </p>
-                    {isPaid && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 bg-sky-100 text-sky-900 rounded-md border border-sky-200">
-                        Will be saved as Advance
-                      </span>
-                    )}
-                  </div>
+                {/* FORM: COLLECT PAYMENT */}
+                {payModalTab === 'collect' && (
+                  <form onSubmit={handleSubmitPayment} className="border border-emerald-500/20 bg-emerald-500/5 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
+                        {isPaid ? '+ Record Advance / Additional Payment' : 'Collect Payment'}
+                      </p>
+                      {isPaid && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 bg-sky-100 text-sky-900 rounded-md border border-sky-200">
+                          Will be saved as Advance
+                        </span>
+                      )}
+                    </div>
 
-                  {/* Member Allocation Field */}
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
-                      <span>Payment For Member / Applicant</span>
-                      <span className="text-[9px] font-normal text-muted-foreground">Select member or whole invoice</span>
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <select
-                        value={payPersonName}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setPayPersonName(val);
-                          const saleItems = payingSaleDetails.items || [];
-                          const matching = saleItems.filter((it: any) => it.person_name === val);
-                          const itemTotal = matching.reduce((s: number, it: any) => s + it.subtotal, 0);
-                          if (itemTotal > 0) {
-                            setPayAmount(parseFloat(itemTotal.toFixed(2)));
-                          }
-                        }}
-                        className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
-                      >
-                        <option value="">Entire Invoice / All Members</option>
-                        {Array.from(new Set((payingSaleDetails.items || []).map((it: any) => it.person_name).filter(Boolean))).map((m: any, idx: number) => {
-                          const itemTotal = (payingSaleDetails.items || []).filter((it: any) => it.person_name === m).reduce((s: number, it: any) => s + it.subtotal, 0);
-                          return (
-                            <option key={idx} value={m}>
-                              👤 {m} ({itemTotal.toFixed(2)} AED)
+                    {/* Member Allocation Field */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                        <span>Payment For Member / Applicant</span>
+                        <span className="text-[9px] font-normal text-muted-foreground">Select member or whole invoice</span>
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <select
+                          value={payPersonName}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setPayPersonName(val);
+                            const saleItems = payingSaleDetails.items || [];
+                            const matching = saleItems.filter((it: any) => it.person_name === val);
+                            const itemTotal = matching.reduce((s: number, it: any) => s + it.subtotal, 0);
+                            if (itemTotal > 0) {
+                              setPayAmount(parseFloat(itemTotal.toFixed(2)));
+                            }
+                          }}
+                          className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                        >
+                          <option value="">Entire Invoice / All Members</option>
+                          {Array.from(new Set((payingSaleDetails.items || []).map((it: any) => it.person_name).filter(Boolean))).map((m: any, idx: number) => {
+                            const itemTotal = (payingSaleDetails.items || []).filter((it: any) => it.person_name === m).reduce((s: number, it: any) => s + it.subtotal, 0);
+                            return (
+                              <option key={idx} value={m}>
+                                👤 {m} ({itemTotal.toFixed(2)} AED)
+                              </option>
+                            );
+                          })}
+                        </select>
+                        <input
+                          type="text"
+                          value={payPersonName}
+                          onChange={(e) => setPayPersonName(e.target.value)}
+                          placeholder="Or custom member name"
+                          className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Amount (AED)</label>
+                        <input
+                          type="number"
+                          min={0.01}
+                          step={0.01}
+                          value={payAmount || ''}
+                          onChange={(e) => setPayAmount(parseFloat(e.target.value) || 0)}
+                          placeholder="0.00"
+                          className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-emerald-500"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Deposit To Account</label>
+                        <select
+                          value={payAccountId}
+                          onChange={(e) => setPayAccountId(e.target.value)}
+                          className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                        >
+                          {accounts.map(a => (
+                            <option key={a.id} value={a.id}>
+                              {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)
                             </option>
-                          );
-                        })}
-                      </select>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Transaction / Reference No.</label>
+                      <input
+                        type="text"
+                        value={payTxnNo}
+                        onChange={(e) => setPayTxnNo(e.target.value)}
+                        placeholder="Optional — e.g. bank ref, receipt no"
+                        className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Notes</label>
+                      <input
+                        type="text"
+                        value={payNotes}
+                        onChange={(e) => setPayNotes(e.target.value)}
+                        placeholder="Optional remarks about this payment"
+                        className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="submit"
+                        disabled={paySaving || payAmount <= 0}
+                        className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-md disabled:opacity-50 cursor-pointer"
+                      >
+                        <CreditCard size={13} />
+                        {paySaving ? 'Recording...' : payAmount > due || isPaid ? 'Record Advance Payment' : 'Record Payment'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* FORM: RETURN / REFUND MONEY */}
+                {payModalTab === 'refund' && (
+                  <form onSubmit={handleSubmitRefund} className="border border-rose-500/20 bg-rose-500/5 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] font-bold text-rose-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Undo2 size={13} /> Return Money to Customer
+                      </p>
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-rose-100 text-rose-800 rounded-md border border-rose-200">
+                        Max Refundable: {maxRefundable.toFixed(2)} AED
+                      </span>
+                    </div>
+
+                    {/* Quick Amount Chips */}
+                    {maxRefundable > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold text-muted-foreground">Quick:</span>
+                        <button
+                          type="button"
+                          onClick={() => setPayAmount(parseFloat(maxRefundable.toFixed(2)))}
+                          className="px-2 py-0.5 rounded bg-rose-100 hover:bg-rose-200 text-rose-800 text-[10px] font-bold transition-colors cursor-pointer"
+                        >
+                          Full ({maxRefundable.toFixed(2)} AED)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPayAmount(parseFloat((maxRefundable / 2).toFixed(2)))}
+                          className="px-2 py-0.5 rounded bg-rose-100 hover:bg-rose-200 text-rose-800 text-[10px] font-bold transition-colors cursor-pointer"
+                        >
+                          50% ({(maxRefundable / 2).toFixed(2)} AED)
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Refund Amount (AED) *</label>
+                        <input
+                          type="number"
+                          min={0.01}
+                          max={maxRefundable}
+                          step={0.01}
+                          value={payAmount || ''}
+                          onChange={(e) => setPayAmount(Math.min(maxRefundable, parseFloat(e.target.value) || 0))}
+                          placeholder="0.00"
+                          className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-rose-500"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Payout From Account *</label>
+                        <select
+                          value={payAccountId}
+                          onChange={(e) => setPayAccountId(e.target.value)}
+                          className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-rose-500 cursor-pointer"
+                        >
+                          {accounts.map(a => (
+                            <option key={a.id} value={a.id}>
+                              {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Member Allocation */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        For Member / Applicant (Optional)
+                      </label>
                       <input
                         type="text"
                         value={payPersonName}
                         onChange={(e) => setPayPersonName(e.target.value)}
-                        placeholder="Or type custom member name"
-                        className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-emerald-500"
+                        placeholder="E.g. Mohammed Ali"
+                        className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-rose-500"
                       />
                     </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Amount (AED)</label>
-                      <input
-                        type="number"
-                        min={0.01}
-                        step={0.01}
-                        value={payAmount || ''}
-                        onChange={(e) => setPayAmount(parseFloat(e.target.value) || 0)}
-                        placeholder="0.00"
-                        className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-emerald-500"
+                    {/* Refund Reason */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        Reason for Money Return / Refund *
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={refundReason}
+                        onChange={(e) => setRefundReason(e.target.value)}
+                        placeholder="E.g. Visa application rejected by MOHRE, client canceled typing, overpayment return..."
+                        className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-rose-500"
                         required
                       />
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Deposit To Account</label>
-                      <select
-                        value={payAccountId}
-                        onChange={(e) => setPayAccountId(e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="submit"
+                        disabled={paySaving || payAmount <= 0 || !refundReason.trim()}
+                        className="flex items-center gap-1.5 px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-all shadow-md disabled:opacity-50 cursor-pointer"
                       >
-                        {accounts.map(a => (
-                          <option key={a.id} value={a.id}>
-                            {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)
-                          </option>
-                        ))}
-                      </select>
+                        <Undo2 size={13} />
+                        {paySaving ? 'Processing Refund...' : `Process & Return (${payAmount.toFixed(2)} AED)`}
+                      </button>
                     </div>
-                  </div>
+                  </form>
+                )}
 
-                  {/* Advance Notification Callout */}
-                  {payAmount > due && due > 0 && (
-                    <div className="text-xs font-bold font-heading text-sky-900 bg-sky-50 border border-sky-200 px-3 py-2 rounded-xl">
-                      Taking advance: +{(payAmount - due).toFixed(2)} AED
-                    </div>
-                  )}
-
-                  {isPaid && payAmount > 0 && (
-                    <div className="text-xs font-bold font-heading text-sky-900 bg-sky-50 border border-sky-200 px-3 py-2 rounded-xl">
-                      Taking advance: +{payAmount.toFixed(2)} AED
-                    </div>
-                  )}
-
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Transaction / Reference No.</label>
-                    <input
-                      type="text"
-                      value={payTxnNo}
-                      onChange={(e) => setPayTxnNo(e.target.value)}
-                      placeholder="Optional — e.g. bank ref, receipt no"
-                      className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Notes</label>
-                    <input
-                      type="text"
-                      value={payNotes}
-                      onChange={(e) => setPayNotes(e.target.value)}
-                      placeholder="Optional remarks about this payment (e.g. advance for medical & visa)"
-                      className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-                  <div className="flex justify-end pt-1">
-                    <button
-                      type="submit"
-                      disabled={paySaving || payAmount <= 0}
-                      className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-md disabled:opacity-50 cursor-pointer"
-                    >
-                      <CreditCard size={13} />
-                      {paySaving ? 'Recording...' : payAmount > due || isPaid ? 'Record Advance Payment' : 'Record Payment'}
-                    </button>
-                  </div>
-                </form>
-
-                <div className="flex justify-end pt-4 border-t border-border mt-4">
+                <div className="flex justify-end pt-3 border-t border-border mt-3">
                   <button
-                    onClick={() => { setPayModalOpen(false); setPayingSaleId(null); setPayingSaleDetails(null); }}
-                    className="px-4 py-2 bg-secondary hover:bg-muted text-foreground text-xs font-bold rounded-xl transition-all cursor-pointer"
+                    onClick={() => { setPayModalOpen(false); setPayingSaleId(null); setPayingSaleDetails(null); setRefundVoucherData(null); }}
+                    className="px-4 py-1.5 bg-secondary hover:bg-muted text-foreground text-xs font-bold rounded-xl transition-all cursor-pointer"
                   >
                     Close
                   </button>
@@ -2143,6 +2491,73 @@ export const SalesList: React.FC = () => {
             </div>
           );
         })()}
+
+        {/* PRINTABLE REFUND / CREDIT VOUCHER (HIDDEN ON SCREEN, POPULATED WHEN PRINTING VOUCHER) */}
+        {refundVoucherData && (
+          <div className="hidden print:block fixed inset-0 bg-white text-black p-8 font-sans text-xs">
+            <div className="border border-gray-400 p-6 rounded-lg space-y-6">
+              {/* Voucher Header */}
+              <div className="flex items-center justify-between border-b pb-4 border-gray-300">
+                <img src="/logo.png" alt="AZIZI" className="w-16 h-16 object-contain" />
+                <div className="text-center">
+                  <div className="text-lg font-black text-[#000ba0]">مكتب عزيزي للكتابة وعمل الأختام ذ.م.م</div>
+                  <div className="text-sm font-bold text-[#f28f00] uppercase">AZIZI TYPING &amp; STAMP MAKING BR. 1</div>
+                  <div className="text-xs text-gray-700">Abu Dhabi, Musaffah M37 • Tel: 0542797933</div>
+                </div>
+                <div className="w-16" />
+              </div>
+
+              {/* Title Banner */}
+              <div className="bg-[#000ba0] text-white py-1.5 px-4 text-center font-bold tracking-wider text-sm rounded">
+                PAYMENT RETURN / REFUND VOUCHER
+              </div>
+
+              {/* Details Table */}
+              <table className="w-full border-collapse border border-gray-300 text-xs">
+                <tbody>
+                  <tr>
+                    <td className="p-2 bg-gray-100 font-bold border border-gray-300 w-1/3">Voucher Date:</td>
+                    <td className="p-2 border border-gray-300">{new Date(refundVoucherData.date).toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="p-2 bg-gray-100 font-bold border border-gray-300">Original Invoice #:</td>
+                    <td className="p-2 border border-gray-300 font-mono font-bold">{refundVoucherData.sale?.invoice_no}</td>
+                  </tr>
+                  <tr>
+                    <td className="p-2 bg-gray-100 font-bold border border-gray-300">Customer / Company:</td>
+                    <td className="p-2 border border-gray-300 font-bold">{refundVoucherData.sale?.customer?.name || 'Walk-in Customer'}</td>
+                  </tr>
+                  <tr>
+                    <td className="p-2 bg-gray-100 font-bold border border-gray-300">Member / Applicant:</td>
+                    <td className="p-2 border border-gray-300">{refundVoucherData.personName || '—'}</td>
+                  </tr>
+                  <tr>
+                    <td className="p-2 bg-gray-100 font-bold border border-gray-300">Payout From Account:</td>
+                    <td className="p-2 border border-gray-300">{refundVoucherData.account?.name || 'Cash Drawer'}</td>
+                  </tr>
+                  <tr>
+                    <td className="p-2 bg-gray-100 font-bold border border-gray-300">Reason for Return:</td>
+                    <td className="p-2 border border-gray-300 italic text-gray-800">{refundVoucherData.reason}</td>
+                  </tr>
+                  <tr className="bg-rose-50 text-rose-900 font-bold text-sm">
+                    <td className="p-2 border border-gray-300">Amount Refunded (AED):</td>
+                    <td className="p-2 border border-gray-300 font-mono font-black text-base">{refundVoucherData.amount.toFixed(2)} AED</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* Signatures */}
+              <div className="grid grid-cols-2 gap-8 pt-8 text-center text-xs">
+                <div className="border-t border-gray-400 pt-2 font-bold">
+                  Authorized Cashier / Manager Signature
+                </div>
+                <div className="border-t border-gray-400 pt-2 font-bold">
+                  Customer / Receiver Signature &amp; Date
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </PermissionGuard>

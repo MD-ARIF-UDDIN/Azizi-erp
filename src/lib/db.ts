@@ -526,12 +526,14 @@ const logAudit = (userId: string | undefined, action: string, tableName: string,
 };
 
 export const getActiveUserSession = (): User => {
-  const saved = localStorage.getItem('azizi_active_session');
+  const saved = typeof window !== 'undefined' ? localStorage.getItem('azizi_active_session') : null;
   if (saved) {
     try {
       const u = JSON.parse(saved);
-      const found = _users.find(x => x.id === u.id && !x.is_deleted);
-      if (found) return found;
+      if (u && u.id) {
+        const found = _users.find(x => x.id === u.id && !x.is_deleted);
+        return found || u;
+      }
     } catch {}
   }
   return _users[0];
@@ -1219,7 +1221,12 @@ export const db = {
           service: _services.find(srv => srv.id === si.service_id),
           staff: _users.find(u => u.id === (si.staff_id || s.employee_id))
         })),
-        payments: _payments.filter((p: Payment) => p.sale_id === s.id && !p.is_deleted)
+        payments: _payments.filter((p: Payment) => p.sale_id === s.id && !p.is_deleted).map(p => ({
+          ...p,
+          is_refund: p.is_refund || p.amount < 0 || p.notes?.includes('[Refund]'),
+          refund_reason: p.refund_reason || (p.notes?.includes('[Refund]') ? p.notes.replace(/\[Refund\]\s*/, '').replace(/\[Member:\s*[^\]]+\]/g, '').trim() : undefined),
+          person_name: p.person_name || (p.notes?.match(/\[Member:\s*(.*?)\]/)?.[1]) || undefined
+        }))
       })));
     },
     getById: async (id: string) => {
@@ -1229,7 +1236,7 @@ export const db = {
         if (!s) return undefined;
 
         const { data: rawItems } = await supabase.from('sale_items').select('*, service:services(*), staff:users!staff_id(*)').eq('sale_id', id);
-        const { data: paymentsList } = await supabase.from('payments').select('*').eq('sale_id', id).eq('is_deleted', false);
+        const { data: paymentsList } = await supabase.from('payments').select('*').eq('sale_id', id).eq('is_deleted', false).order('created_at', { ascending: true });
         const { data: history } = await supabase.from('order_status_history').select('*, new_status:order_statuses(*), user:users(*)').eq('sale_id', id).order('created_at', { ascending: false });
         const { data: dbExpenses } = await supabase.from('expenses').select('*').eq('sale_id', id).eq('is_deleted', false);
 
@@ -1261,7 +1268,12 @@ export const db = {
         return {
           ...s,
           items: items,
-          payments: paymentsList || [],
+          payments: (paymentsList || []).map((p: any) => ({
+            ...p,
+            is_refund: p.is_refund || p.amount < 0 || p.notes?.includes('[Refund]'),
+            refund_reason: p.refund_reason || (p.notes?.includes('[Refund]') ? p.notes.replace(/\[Refund\]\s*/, '').replace(/\[Member:\s*[^\]]+\]/g, '').trim() : undefined),
+            person_name: p.person_name || (p.notes?.match(/\[Member:\s*(.*?)\]/)?.[1]) || undefined
+          })),
           history: history || []
         };
       }
@@ -1289,7 +1301,12 @@ export const db = {
         };
       });
 
-      const paymentsList = _payments.filter((p: Payment) => p.sale_id === s.id && !p.is_deleted);
+      const paymentsList = _payments.filter((p: Payment) => p.sale_id === s.id && !p.is_deleted).map(p => ({
+        ...p,
+        is_refund: p.is_refund || p.amount < 0 || p.notes?.includes('[Refund]'),
+        refund_reason: p.refund_reason || (p.notes?.includes('[Refund]') ? p.notes.replace(/\[Refund\]\s*/, '').replace(/\[Member:\s*[^\]]+\]/g, '').trim() : undefined),
+        person_name: p.person_name || (p.notes?.match(/\[Member:\s*(.*?)\]/)?.[1]) || undefined
+      }));
       
       const statusHistory = _history.filter((h: OrderStatusHistory) => h.sale_id === s.id).map((h: OrderStatusHistory) => ({
         ...h,
@@ -1858,15 +1875,19 @@ export const db = {
   payments: {
     getBySaleId: async (saleId: string) => {
       if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.from('payments').select('*').eq('sale_id', saleId).eq('is_deleted', false);
+        const { data, error } = await supabase.from('payments').select('*').eq('sale_id', saleId).eq('is_deleted', false).order('created_at', { ascending: true });
         if (error) throw error;
         return (data || []).map((p: any) => ({
           ...p,
+          is_refund: p.is_refund || p.amount < 0 || p.notes?.includes('[Refund]'),
+          refund_reason: p.refund_reason || (p.notes?.includes('[Refund]') ? p.notes.replace(/\[Refund\]\s*/, '').replace(/\[Member:\s*[^\]]+\]/g, '').trim() : undefined),
           person_name: p.person_name || (p.notes?.match(/\[Member:\s*(.*?)\]/)?.[1]) || undefined
         })) as Payment[];
       }
       return delay(_payments.filter((p: Payment) => p.sale_id === saleId && !p.is_deleted).map(p => ({
         ...p,
+        is_refund: p.is_refund || p.amount < 0 || p.notes?.includes('[Refund]'),
+        refund_reason: p.refund_reason || (p.notes?.includes('[Refund]') ? p.notes.replace(/\[Refund\]\s*/, '').replace(/\[Member:\s*[^\]]+\]/g, '').trim() : undefined),
         person_name: p.person_name || (p.notes?.match(/\[Member:\s*(.*?)\]/)?.[1]) || undefined
       })));
     },
@@ -2055,7 +2076,7 @@ export const db = {
         const totalPaid = allSalePayments.reduce((sum: number, p: Payment) => sum + p.amount, 0);
         
         let payment_status: Sale['payment_status'] = 'Unpaid';
-        if (totalPaid >= sale.grand_total) payment_status = 'Paid';
+        if (totalPaid >= sale.grand_total && sale.grand_total > 0) payment_status = 'Paid';
         else if (totalPaid > 0) payment_status = 'Partially Paid';
 
         _sales[saleIndex] = { ...sale, payment_status, updated_by: activeUser.id, updated_at: now };
@@ -2063,6 +2084,209 @@ export const db = {
 
       saveAll();
       logAudit(activeUser.id, 'INSERT_PAYMENT', 'payments', newPay.id, null, newPay);
+      return delay(newPay);
+    },
+
+    refund: async (data: {
+      sale_id: string;
+      amount: number;
+      account_id?: string;
+      payment_method?: Payment['payment_method'];
+      reason: string;
+      person_name?: string;
+    }) => {
+      const activeUser = getActiveUserSession();
+      const employeeId = sanitizeUUID(activeUser?.id);
+      const payId = generateUUID();
+      const now = new Date().toISOString();
+      const refundAmount = Math.abs(Number(data.amount) || 0);
+
+      if (refundAmount <= 0) {
+        throw new Error('Refund amount must be greater than 0');
+      }
+
+      // Resolve account and payment method
+      let targetAccount = data.account_id ? _accounts.find(a => a.id === data.account_id) : undefined;
+      if (!targetAccount && !data.payment_method) {
+        targetAccount = _accounts.find(a => a.type === 'cash_drawer') || _accounts[0];
+      }
+
+      let resolvedMethod: Payment['payment_method'] = data.payment_method || 'Cash';
+      if (!data.payment_method && targetAccount) {
+        if (targetAccount.type === 'cash_drawer') resolvedMethod = 'Cash';
+        else if (targetAccount.type === 'card') resolvedMethod = 'Card';
+        else if (targetAccount.type === 'bank') resolvedMethod = 'Bank Transfer';
+      }
+
+      // Deduct from account (Money goes OUT to customer)
+      if (targetAccount) {
+        const accIdx = _accounts.findIndex(a => a.id === targetAccount?.id);
+        if (accIdx !== -1) {
+          _accounts[accIdx].balance -= refundAmount;
+          _accounts[accIdx].updated_at = now;
+          const txn: AccountTransaction = {
+            id: generateUUID(),
+            account_id: targetAccount.id,
+            transaction_type: 'withdrawal',
+            amount: refundAmount,
+            balance_after: _accounts[accIdx].balance,
+            sale_id: data.sale_id,
+            payment_id: payId,
+            description: `Refund returned for ${data.person_name ? `${data.person_name} ` : ''}Invoice: ${data.reason}`,
+            created_at: now,
+            created_by: activeUser?.id
+          };
+          _accountTransactions.unshift(txn);
+        }
+      }
+
+      // Find sale and customer company/name
+      let sale = _sales.find(s => s.id === data.sale_id);
+      let saleInvoiceNo = sale?.invoice_no;
+      let salePersonName = sale?.person_name;
+      let cust = sale?.customer_id ? _customers.find(c => c.id === sale.customer_id) : undefined;
+
+      if (!sale && isSupabaseConfigured && supabase) {
+        try {
+          const { data: supaSale } = await supabase.from('sales').select('*, customer:customers(*)').eq('id', data.sale_id).maybeSingle();
+          if (supaSale) {
+            saleInvoiceNo = supaSale.invoice_no;
+            salePersonName = supaSale.person_name;
+            cust = supaSale.customer;
+          }
+        } catch (e) {
+          console.warn('Could not load sale for refund journal:', e);
+        }
+      }
+
+      const clientName = data.person_name || salePersonName || cust?.company?.name || cust?.name || 'Client / Customer';
+      const referenceNo = saleInvoiceNo ? `#${saleInvoiceNo}` : undefined;
+      const journalDesc = `Refund returned to ${clientName}${saleInvoiceNo ? ` for Invoice #${saleInvoiceNo}` : ''}: ${data.reason}`;
+
+      // Embed tags in notes for seamless database compatibility
+      const memberTag = data.person_name ? `[Member: ${data.person_name}]` : '';
+      const reasonTag = `[Refund] ${data.reason}`;
+      const combinedNotes = [reasonTag, memberTag].filter(Boolean).join(' ');
+
+      // Auto-create Double Entry Journal Record (Cash Out)
+      const journalEntry: JournalEntry = {
+        id: generateUUID(),
+        entry_date: now,
+        entry_type: 'cash_out',
+        from_account: targetAccount?.name || 'Main Cash Drawer',
+        from_account_id: targetAccount?.id,
+        to_account: clientName,
+        amount: refundAmount,
+        sale_id: data.sale_id,
+        payment_id: payId,
+        reference_no: referenceNo,
+        description: journalDesc,
+        performed_by: activeUser?.id,
+        created_at: now,
+        created_by: activeUser?.id
+      };
+      _journalEntries.unshift(journalEntry);
+
+      if (isSupabaseConfigured && supabase) {
+        const payload = {
+          id: payId,
+          sale_id: data.sale_id,
+          amount: -refundAmount,
+          payment_method: resolvedMethod,
+          account_id: targetAccount ? sanitizeUUID(targetAccount.id) : null,
+          notes: combinedNotes,
+          received_by: employeeId,
+          created_by: employeeId,
+          updated_by: employeeId
+        };
+        try {
+          const { data: created, error } = await supabase.from('payments').insert([payload]).select().single();
+          if (!error && created) {
+            if (targetAccount) {
+              const { data: curAcc } = await supabase.from('accounts').select('balance').eq('id', targetAccount.id).maybeSingle();
+              const newBalance = (curAcc?.balance || 0) - refundAmount;
+              await supabase.from('accounts').update({ balance: newBalance }).eq('id', targetAccount.id);
+              await supabase.from('account_transactions').insert([{
+                account_id: targetAccount.id,
+                transaction_type: 'withdrawal',
+                amount: refundAmount,
+                balance_after: newBalance,
+                sale_id: data.sale_id,
+                payment_id: payId,
+                description: `Refund returned for ${data.person_name ? `${data.person_name} ` : ''}Invoice #${saleInvoiceNo || ''}: ${data.reason}`,
+                created_by: employeeId
+              }]);
+            }
+
+            await supabase.from('journal_entries').insert([{
+              ...journalEntry,
+              sale_id: sanitizeUUID(data.sale_id),
+              payment_id: sanitizeUUID(payId),
+              from_account_id: targetAccount ? sanitizeUUID(targetAccount.id) : null,
+              reference_no: referenceNo || null,
+              performed_by: employeeId,
+              created_by: employeeId
+            }]);
+
+            // Recalculate Sale Payment Status
+            const { data: saleData } = await supabase.from('sales').select('grand_total').eq('id', data.sale_id).maybeSingle();
+            const { data: allPayments } = await supabase.from('payments').select('amount').eq('sale_id', data.sale_id).eq('is_deleted', false);
+
+            const grand_total = saleData?.grand_total || 0;
+            const netPaid = (allPayments || []).reduce((sum: number, p: any) => sum + p.amount, 0);
+
+            let payment_status: Sale['payment_status'] = 'Unpaid';
+            if (netPaid >= grand_total && grand_total > 0) payment_status = 'Paid';
+            else if (netPaid > 0) payment_status = 'Partially Paid';
+
+            await supabase.from('sales').update({ payment_status, updated_by: employeeId }).eq('id', data.sale_id);
+            return {
+              ...created,
+              is_refund: true,
+              refund_reason: data.reason,
+              person_name: data.person_name || undefined
+            } as Payment;
+          }
+        } catch (supaErr) {
+          console.warn('Supabase payment refund fallback:', supaErr);
+        }
+      }
+
+      const newPay: Payment = {
+        id: payId,
+        sale_id: data.sale_id,
+        amount: -refundAmount,
+        payment_method: resolvedMethod,
+        account_id: targetAccount?.id,
+        notes: combinedNotes,
+        person_name: data.person_name,
+        is_refund: true,
+        refund_reason: data.reason,
+        payment_date: now,
+        received_by: activeUser?.id,
+        is_deleted: false,
+        created_at: now,
+        updated_at: now,
+        created_by: activeUser?.id,
+        updated_by: activeUser?.id
+      };
+      _payments.push(newPay);
+
+      const saleIndex = _sales.findIndex(s => s.id === data.sale_id);
+      if (saleIndex !== -1) {
+        const sale = _sales[saleIndex];
+        const allSalePayments = _payments.filter((p: Payment) => p.sale_id === data.sale_id && !p.is_deleted);
+        const netPaid = allSalePayments.reduce((sum: number, p: Payment) => sum + p.amount, 0);
+        
+        let payment_status: Sale['payment_status'] = 'Unpaid';
+        if (netPaid >= sale.grand_total && sale.grand_total > 0) payment_status = 'Paid';
+        else if (netPaid > 0) payment_status = 'Partially Paid';
+
+        _sales[saleIndex] = { ...sale, payment_status, updated_by: activeUser.id, updated_at: now };
+      }
+
+      saveAll();
+      logAudit(activeUser.id, 'REFUND_PAYMENT', 'payments', newPay.id, null, newPay);
       return delay(newPay);
     }
   },

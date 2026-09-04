@@ -111,11 +111,9 @@ export const DailySheet: React.FC = () => {
     const sDue = Math.max(0, sGrandTotal - sPaid);
     totalDue += sDue;
 
-    // Profit calculation: Margin based strictly on collected amount
-    const potentialMargin = Math.max(0, sGrandTotal - saleCost);
-    const paidRatio = sGrandTotal > 0 ? Math.min(1, sPaid / sGrandTotal) : 0;
-    const collectedProfit = potentialMargin * paidRatio;
-    totalProfit += collectedProfit;
+    // Profit calculation: Grand Total - Expense
+    const invoiceProfit = sGrandTotal - saleCost;
+    totalProfit += invoiceProfit;
 
     // Payment methods breakdown
     sPayments.forEach((p: any) => {
@@ -182,9 +180,7 @@ export const DailySheet: React.FC = () => {
 
       const sGrandTotal = Number(s.grand_total || 0);
       const saleCost = s.items?.reduce((sum: number, it: any) => sum + (Number(it.quantity || 1) * Number(it.service?.expense || 0)), 0) || 0;
-      const potentialMargin = Math.max(0, sGrandTotal - saleCost);
-      const paidRatio = sGrandTotal > 0 ? Math.min(1, sPaid / sGrandTotal) : 0;
-      const collectedProfit = potentialMargin * paidRatio;
+      const invoiceProfit = sGrandTotal - saleCost;
 
       return [
         (idx + 1).toString(),
@@ -199,7 +195,7 @@ export const DailySheet: React.FC = () => {
         saleCost.toFixed(2),
         sPaid.toFixed(2),
         sDue.toFixed(2),
-        collectedProfit.toFixed(2),
+        invoiceProfit.toFixed(2),
         methods
       ];
     });
@@ -612,9 +608,7 @@ export const DailySheet: React.FC = () => {
 
                     const sGrandTotal = Number(s.grand_total || 0);
                     const saleCost = s.items?.reduce((sum: number, it: any) => sum + (Number(it.quantity || 1) * Number(it.service?.expense || 0)), 0) || 0;
-                    const potentialMargin = Math.max(0, sGrandTotal - saleCost);
-                    const paidRatio = sGrandTotal > 0 ? Math.min(1, sPaid / sGrandTotal) : 0;
-                    const collectedProfit = potentialMargin * paidRatio;
+                    const invoiceProfit = sGrandTotal - saleCost;
 
                     return (
                       <tr key={s.id} className="hover:bg-muted/40 transition-colors print:hover:bg-transparent print-avoid-break">
@@ -697,11 +691,9 @@ export const DailySheet: React.FC = () => {
 
                         {/* Profit Column */}
                         <td className="px-2 py-1.5 text-right font-black whitespace-nowrap font-mono">
-                          {collectedProfit > 0 ? (
-                            <span className="text-emerald-600 print:text-slate-900">+{collectedProfit.toFixed(2)}</span>
-                          ) : (
-                            <span className="text-muted-foreground print:text-slate-400">0.00</span>
-                          )}
+                          <span className={invoiceProfit >= 0 ? "text-emerald-600 print:text-slate-900" : "text-rose-600 print:text-slate-900"}>
+                            {invoiceProfit >= 0 ? `+${invoiceProfit.toFixed(2)}` : invoiceProfit.toFixed(2)}
+                          </span>
                         </td>
                       </tr>
                     );
@@ -738,51 +730,7 @@ export const DailySheet: React.FC = () => {
           </div>
         </div>
 
-        {/* ── DAILY EXPENSES (If any) ── */}
-        {filteredExpenses.length > 0 && (
-          <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-xs print:border-none print:shadow-none print:avoid-break">
-            <div className="p-2.5 border-b border-border bg-rose-500/5 print:bg-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <TrendingDown size={14} className="text-rose-600 print:text-slate-900" />
-                <h3 className="text-xs font-bold text-foreground print:text-slate-900 m-0 uppercase tracking-wider">
-                  Daily Expenses Log ({filteredExpenses.length} Records)
-                </h3>
-              </div>
-              <strong className="text-xs text-rose-600 print:text-slate-900 font-bold font-mono">
-                Total Expenses Out: -{totalExpenseAmount.toFixed(2)} AED
-              </strong>
-            </div>
 
-            <div className="overflow-x-auto print:overflow-visible">
-              <table className="daily-report-table w-full text-left text-xs border-collapse">
-                <thead className="bg-muted/40 text-muted-foreground font-semibold border-b border-border print:bg-slate-100 print:text-slate-900">
-                  <tr>
-                    <th style={{ width: '4%' }} className="px-2 py-1.5 text-center">#</th>
-                    <th style={{ width: '18%' }} className="px-2 py-1.5">Category</th>
-                    <th style={{ width: '38%' }} className="px-2 py-1.5">Description</th>
-                    <th style={{ width: '18%' }} className="px-2 py-1.5">Paid To</th>
-                    <th style={{ width: '10%' }} className="px-2 py-1.5">Method</th>
-                    <th style={{ width: '12%' }} className="px-2 py-1.5 text-right">Amount (AED)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60 text-foreground print:divide-slate-300 print:text-slate-900">
-                  {filteredExpenses.map((e, idx) => (
-                    <tr key={e.id} className="hover:bg-muted/20 print-avoid-break">
-                      <td className="px-2 py-1.5 text-center text-muted-foreground print:text-slate-700 font-mono">{idx + 1}</td>
-                      <td className="px-2 py-1.5 font-semibold text-rose-600 print:text-slate-900">{e.category?.name || 'Expense'}</td>
-                      <td className="px-2 py-1.5 text-muted-foreground print:text-slate-700">{e.description || '—'}</td>
-                      <td className="px-2 py-1.5 font-medium">{e.paid_to || '—'}</td>
-                      <td className="px-2 py-1.5 text-muted-foreground print:text-slate-600">{e.payment_method}</td>
-                      <td className="px-2 py-1.5 text-right font-bold text-rose-600 print:text-slate-900 font-mono">
-                        -{Number(e.amount || 0).toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
 
         {/* ── PRINT VIEW ONLY: OFFICIAL VERIFICATION & SIGN-OFF BOX ── */}
         <div className="hidden print:block pt-5 mt-4 border-t-2 border-slate-300 print-avoid-break">

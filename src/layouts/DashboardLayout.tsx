@@ -13,10 +13,6 @@ import {
   FileBarChart2,
   Settings,
   LogOut,
-  Building,
-  Shield,
-  ChevronsUpDown,
-  Check,
   ChevronDown,
   PanelLeftClose,
   PanelLeft,
@@ -224,19 +220,12 @@ const SidebarSection: React.FC<{ label: string; collapsed: boolean }> = ({ label
 export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const {
     user,
-    activeBranchId,
-    setActiveBranchId,
     logout,
-    isAdmin,
-    availableBranches,
-    allUsersList,
-    login
+    allUsersList
   } = useAuth();
 
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [showUserSwitcher, setShowUserSwitcher] = useState(false);
-  const [showBranchSwitcher, setShowBranchSwitcher] = useState(false);
   
   // Command Palette State
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -359,20 +348,10 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
     setMobileOpen(false);
   }, [location.pathname]);
 
-  const handleImpersonate = async (email: string) => {
-    await login(email);
-    setShowUserSwitcher(false);
-    navigate('/');
-  };
-
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
-
-  const activeBranchName = activeBranchId === 'all'
-    ? 'All Branches'
-    : availableBranches.find(b => b.id === activeBranchId)?.name || 'Select Branch';
 
   const currentUserRoleName = allUsersList.find(u => u.id === user?.id)?.role?.name || 'User';
 
@@ -579,104 +558,19 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
 
         {/* Sidebar Footer */}
         <div className="p-2.5 border-t border-slate-200 space-y-1.5 bg-[#f1f5f9]">
-          {/* Branch Selector (Sidebar version) */}
-          {!isCollapsedResponsive && (
-            <div className="relative w-full">
-              <button
-                onClick={() => { setShowBranchSwitcher(!showBranchSwitcher); setShowUserSwitcher(false); }}
-                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-black transition-all cursor-pointer shadow-2xs ${
-                  !isAdmin ? 'opacity-75 cursor-not-allowed' : ''
-                }`}
-                disabled={!isAdmin}
-              >
-                <div className="flex items-center gap-2 truncate">
-                  <Building size={13} className="text-primary shrink-0" />
-                  <span className="truncate">{activeBranchName}</span>
+          {/* User Profile Info Card */}
+          <div className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md border border-slate-200 bg-white text-xs font-bold text-black shadow-2xs">
+            <div className="flex items-center gap-2 truncate">
+              <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-[10px] uppercase shrink-0 font-heading">
+                {user?.name?.charAt(0) || 'U'}
+              </div>
+              {!isCollapsedResponsive && (
+                <div className="text-left truncate">
+                  <div className="font-bold text-[11px] leading-none truncate text-black">{user?.name}</div>
+                  <div className="text-[9px] text-black/75 leading-none mt-1 truncate font-semibold">{currentUserRoleName}</div>
                 </div>
-                {isAdmin && <ChevronsUpDown size={11} className="text-black shrink-0" />}
-              </button>
-
-              {showBranchSwitcher && isAdmin && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowBranchSwitcher(false)} />
-                  <div className="absolute left-0 bottom-full mb-2 w-56 rounded-lg border border-slate-200 bg-white shadow-xl z-50 p-1.5 animate-scale-in">
-                    <div className="px-2 py-1 text-[9px] font-bold text-black uppercase tracking-wider font-heading">Branch View</div>
-                    <button
-                      onClick={() => { setActiveBranchId('all'); setShowBranchSwitcher(false); }}
-                      className="w-full text-left flex items-center justify-between px-2.5 py-1.5 text-xs rounded-md hover:bg-slate-100 transition-colors font-bold text-black cursor-pointer"
-                    >
-                      <span>All Branches</span>
-                      {activeBranchId === 'all' && <Check size={12} className="text-primary" />}
-                    </button>
-                    {availableBranches.map(b => (
-                      <button
-                        key={b.id}
-                        onClick={() => { setActiveBranchId(b.id); setShowBranchSwitcher(false); }}
-                        className="w-full text-left flex items-center justify-between px-2.5 py-1.5 text-xs rounded-md hover:bg-slate-100 transition-colors font-bold text-black cursor-pointer"
-                      >
-                        <span className="truncate">{b.name}</span>
-                        {activeBranchId === b.id && <Check size={12} className="text-primary" />}
-                      </button>
-                    ))}
-                  </div>
-                </>
               )}
             </div>
-          )}
-
-          {/* User Impersonator (Sidebar version) */}
-          <div className="relative w-full">
-            <button
-              onClick={() => { setShowUserSwitcher(!showUserSwitcher); setShowBranchSwitcher(false); }}
-              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-black transition-all cursor-pointer shadow-2xs"
-            >
-              <div className="flex items-center gap-2 truncate">
-                <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-[10px] uppercase shrink-0 font-heading">
-                  {user?.name.charAt(0)}
-                </div>
-                {!isCollapsedResponsive && (
-                  <div className="text-left truncate">
-                    <div className="font-bold text-[11px] leading-none truncate text-black">{user?.name}</div>
-                    <div className="text-[9px] text-black/75 leading-none mt-0.5 truncate font-semibold">{currentUserRoleName}</div>
-                  </div>
-                )}
-              </div>
-              {!isCollapsedResponsive && <ChevronsUpDown size={11} className="text-black shrink-0" />}
-            </button>
-
-            {showUserSwitcher && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowUserSwitcher(false)} />
-                <div className="absolute left-0 bottom-full mb-2 w-60 rounded-lg border border-slate-200 bg-white shadow-xl z-50 p-1.5">
-                  <div className="px-2 py-1 border-b border-slate-100 pb-1.5 mb-1">
-                    <div className="font-bold text-xs flex items-center gap-1.5 text-black font-heading">
-                      <Shield size={12} className="text-primary" />
-                      Impersonate Profile
-                    </div>
-                  </div>
-                  <div className="space-y-0.5 max-h-48 overflow-y-auto">
-                    {allUsersList.map(u => {
-                      const isCurrent = u.id === user?.id;
-                      return (
-                        <button
-                          key={u.id}
-                          onClick={() => handleImpersonate(u.email)}
-                          className={`w-full text-left px-2 py-1.5 rounded-md text-[11px] hover:bg-slate-100 transition-colors flex items-center justify-between font-bold text-black cursor-pointer ${
-                            isCurrent ? 'bg-primary/10 font-bold text-primary' : ''
-                          }`}
-                        >
-                          <div className="truncate">
-                            <div className="truncate font-bold text-black">{u.name}</div>
-                            <div className="text-[9px] text-black/70 truncate font-semibold">{u.role?.name} • {u.branch?.name}</div>
-                          </div>
-                          {isCurrent && <Check size={12} className="text-primary" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </>
-            )}
           </div>
 
           <button
@@ -729,12 +623,6 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
             <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-50 border border-slate-200 text-[11px] font-mono text-slate-600 font-semibold">
               <Clock size={12} className="text-primary" />
               <span>{currentTime}</span>
-            </div>
-
-            {/* Branch Badge */}
-            <div className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-md bg-sky-50 text-sky-700 text-xs font-bold border border-sky-200 font-heading">
-              <Building size={12} />
-              <span className="truncate max-w-[120px]">{activeBranchName}</span>
             </div>
 
             {/* Global New Invoice F2 Button */}

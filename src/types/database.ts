@@ -162,6 +162,8 @@ export interface Payment {
   notes?: string;
   person_name?: string;
   received_by?: string;
+  is_refund?: boolean;
+  refund_reason?: string;
   is_deleted: boolean;
   created_at: string;
   updated_at: string;

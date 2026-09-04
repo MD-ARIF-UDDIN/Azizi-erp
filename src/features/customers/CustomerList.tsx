@@ -2868,8 +2868,11 @@ export const CustomerList: React.FC = () => {
 
       {/* HIDDEN PRINT-ONLY INVOICE — rendered when printSaleData is set */}
       {printSaleData && (() => {
-        const totalPaid = (printSaleData.payments || []).reduce((s: number, p: any) => s + p.amount, 0);
-        const due = Math.max(0, printSaleData.grand_total - totalPaid);
+        const allPayments = printSaleData.payments || [];
+        const totalCollected = allPayments.filter((p: any) => p.amount > 0).reduce((s: number, p: any) => s + p.amount, 0);
+        const totalRefunded = Math.abs(allPayments.filter((p: any) => p.amount < 0 || p.is_refund).reduce((s: number, p: any) => s + p.amount, 0));
+        const netPaid = totalCollected - totalRefunded;
+        const due = Math.max(0, printSaleData.grand_total - netPaid);
 
         return (
           <div className="hidden print:block fixed inset-0 bg-white p-6 sm:p-8 z-[9999] text-black text-xs font-sans print-invoice-sheet leading-normal">
@@ -2914,12 +2917,20 @@ export const CustomerList: React.FC = () => {
                       const companyName = printSaleData.customer.customer_type === 'company' 
                         ? printSaleData.customer.name 
                         : (printSaleData.customer.company?.name || printSaleData.customer.name);
+                      const companyPhone = printSaleData.customer.customer_type === 'company'
+                        ? printSaleData.customer.phone
+                        : (printSaleData.customer.company?.phone || printSaleData.customer.phone);
                       return (
                         <div className="flex flex-col">
                           <span className="font-black text-black text-[13px] uppercase">{companyName}</span>
-                          {printSaleData.customer.trn && (
-                            <span className="text-[10px] text-gray-600 font-mono mt-0.5">TRN: {printSaleData.customer.trn}</span>
-                          )}
+                          <div className="flex items-center gap-4 text-[10px] text-gray-700 font-medium mt-0.5">
+                            {companyPhone && (
+                              <span><strong className="text-gray-900">Phone:</strong> {companyPhone}</span>
+                            )}
+                            {printSaleData.customer.trn && (
+                              <span><strong className="text-gray-900">TRN:</strong> {printSaleData.customer.trn}</span>
+                            )}
+                          </div>
                         </div>
                       );
                     })()}
@@ -2936,12 +2947,7 @@ export const CustomerList: React.FC = () => {
                         || printSaleData.items?.[0]?.person_name 
                         || '—';
                       return (
-                        <div className="flex flex-col">
-                          <span className="font-bold text-black text-[12px]">{memberName}</span>
-                          {printSaleData.customer?.phone && (
-                            <span className="text-[10px] text-gray-600 font-mono">{printSaleData.customer.phone}</span>
-                          )}
-                        </div>
+                        <span className="font-bold text-black text-[12px]">{memberName}</span>
                       );
                     })()}
                   </td>
@@ -2956,77 +2962,52 @@ export const CustomerList: React.FC = () => {
                   <td className="bg-gray-50 text-gray-800 font-bold px-3 py-1.5 border border-gray-300 w-[22%]">
                     Invoice No:
                   </td>
-                  <td className="px-3 py-1.5 border border-gray-300 text-black font-bold font-mono w-[28%]">
+                  <td className="px-3 py-1.5 border border-gray-300 text-black font-bold font-mono w-[78%]" colSpan={3}>
                     {printSaleData.invoice_no}
-                  </td>
-                  <td className="bg-gray-50 text-gray-800 font-bold px-3 py-1.5 border border-gray-300 w-[22%] text-center">
-                    Cashier
-                  </td>
-                  <td className="px-3 py-1.5 border border-gray-300 text-black font-semibold text-center w-[28%]">
-                    {printSaleData.employee?.name || 'Owner admin'}
                   </td>
                 </tr>
               </tbody>
             </table>
 
             {/* 4. Line Items Table */}
-            <div className="border border-gray-300 overflow-hidden my-2.5 text-xs bg-white">
-              <table className="w-full text-left border-collapse">
-                <thead className="bg-[#000ba0] text-white font-bold">
-                  <tr>
-                    <th className="px-3 py-2 text-center border-r border-gray-300 w-[6%] font-extrabold">No</th>
-                    <th className="px-3 py-2 text-center border-r border-gray-300 w-[14%] font-extrabold">Date</th>
-                    <th className="px-3 py-2 border-r border-gray-300 w-[47%] font-extrabold">Description of Service</th>
-                    <th className="px-3 py-2 text-center border-r border-gray-300 w-[9%] font-extrabold">Qty</th>
-                    <th className="px-3 py-2 text-right border-r border-gray-300 w-[11%] font-extrabold">Rate</th>
-                    <th className="px-3 py-2 text-right w-[13%] font-extrabold">Amount</th>
+            <div className="border border-gray-300 my-2.5">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-[#000ba0] text-white font-extrabold text-[11px]">
+                    <th className="px-3 py-1.5 text-center border-r border-gray-300 w-10">SR#</th>
+                    <th className="px-3 py-1.5 border-r border-gray-300">Description of Service</th>
+                    <th className="px-3 py-1.5 text-center border-r border-gray-300 w-24">QTY</th>
+                    <th className="px-3 py-1.5 text-right border-r border-gray-300 w-24">Price</th>
+                    <th className="px-3 py-1.5 text-right border-r border-gray-300 w-20">Discount</th>
+                    <th className="px-3 py-1.5 text-right w-24">Total</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-300 text-black">
+                <tbody>
                   {(() => {
                     const items = printSaleData.items || [];
-                    const uniqueItemPersons = Array.from(
-                      new Set(items.map((it: any) => it.person_name).filter(Boolean))
-                    );
-                    const showPerItemMember = uniqueItemPersons.length > 1;
                     const rows: React.ReactNode[] = [];
-                    
-                    // Render actual items
-                    items.forEach((item: any, index: number) => {
-                      const itemDate = item.service_date 
-                        ? new Date(item.service_date).toLocaleDateString()
-                        : new Date(item.created_at || printSaleData.created_at).toLocaleDateString();
+
+                    items.forEach((item: any, iIdx: number) => {
                       rows.push(
-                        <tr key={item.id} className="h-8">
-                          <td className="px-3 py-1.5 text-center border-r border-gray-300 font-bold">{index + 1}</td>
-                          <td className="px-3 py-1.5 text-center border-r border-gray-300 font-medium">{itemDate}</td>
-                          <td className="px-3 py-1.5 border-r border-gray-300 text-left">
-                            <span className="font-extrabold text-black">{item.service?.name}</span>
-                            {showPerItemMember && item.person_name && (
-                              <span className="block font-semibold text-[11px] text-[#000ba0] mt-0.5">
-                                👤 For: {item.person_name}
-                              </span>
-                            )}
-                            {item.notes && (
-                              <span className="block font-normal text-[10px] text-gray-600 italic">
-                                Note: {item.notes}
-                              </span>
-                            )}
+                        <tr key={item.id || iIdx} className="border-b border-gray-300 h-7 text-black">
+                          <td className="px-3 py-1 text-center border-r border-gray-300 font-bold">{iIdx + 1}</td>
+                          <td className="px-3 py-1 border-r border-gray-300 font-medium">
+                            <span>{item.service?.name || 'Service'}</span>
+                            {item.notes && <span className="text-[10px] text-gray-500 italic block">{item.notes}</span>}
                           </td>
-                          <td className="px-3 py-1.5 text-center border-r border-gray-300 font-bold">{item.quantity}</td>
-                          <td className="px-3 py-1.5 text-right border-r border-gray-300 font-mono">{item.unit_price.toFixed(2)}</td>
-                          <td className="px-3 py-1.5 text-right font-mono font-black">{item.subtotal.toFixed(2)}</td>
+                          <td className="px-3 py-1 text-center border-r border-gray-300 font-bold">{item.quantity}</td>
+                          <td className="px-3 py-1 text-right border-r border-gray-300 font-mono">{item.unit_price.toFixed(2)}</td>
+                          <td className="px-3 py-1 text-right border-r border-gray-300 font-mono">0.00</td>
+                          <td className="px-3 py-1 text-right font-mono font-bold">{item.subtotal.toFixed(2)}</td>
                         </tr>
                       );
                     });
 
-                    // Fill up to 5 rows cleanly
                     const emptyCount = Math.max(0, 5 - items.length);
                     for (let i = 0; i < emptyCount; i++) {
-                      const rowNum = items.length + i + 1;
                       rows.push(
-                        <tr key={`empty-${i}`} className="h-7">
-                          <td className="px-3 py-1 text-center border-r border-gray-300 font-bold text-gray-400">{rowNum}</td>
+                        <tr key={`empty-${i}`} className="border-b border-gray-300 h-7">
+                          <td className="px-3 py-1 text-center border-r border-gray-300 font-bold text-gray-400">{items.length + i + 1}</td>
                           <td className="px-3 py-1 border-r border-gray-300"></td>
                           <td className="px-3 py-1 border-r border-gray-300"></td>
                           <td className="px-3 py-1 border-r border-gray-300"></td>
@@ -3045,7 +3026,7 @@ export const CustomerList: React.FC = () => {
                       Sub Total
                     </td>
                     <td className="px-3 py-1.5 text-right font-mono font-black">
-                      {(printSaleData.subtotal || printSaleData.grand_total || 0).toFixed(2)}
+                      {(printSaleData.subtotal || 0).toFixed(2)}
                     </td>
                   </tr>
                 </tfoot>
@@ -3054,7 +3035,6 @@ export const CustomerList: React.FC = () => {
 
             {/* 5. Bottom Section: Remarks & Payment Record */}
             <div className="grid grid-cols-2 gap-3 my-2.5 items-stretch">
-              {/* Left Column: Remarks & Internal Notes */}
               <div className="border border-gray-300 rounded-xs flex flex-col bg-white text-xs">
                 <div className="bg-gray-100 text-gray-800 font-bold px-3 py-1.5 border-b border-gray-300 text-[11px] uppercase tracking-wider">
                   Remarks &amp; Internal Notes
@@ -3064,7 +3044,6 @@ export const CustomerList: React.FC = () => {
                 </div>
               </div>
 
-              {/* Right Column: Payment Record & Totals */}
               <div className="border border-gray-300 rounded-xs flex flex-col bg-white text-xs">
                 <div className="bg-[#000ba0] text-white text-center py-1 font-extrabold uppercase tracking-wider text-xs">
                   PAYMENT ENTRY RECORD
@@ -3083,16 +3062,17 @@ export const CustomerList: React.FC = () => {
                       const rows: React.ReactNode[] = [];
 
                       payments.forEach((p: any, pIdx: number) => {
+                        const isRef = p.is_refund || p.amount < 0;
                         rows.push(
                           <tr key={p.id || pIdx} className="h-6 text-xs">
                             <td className="px-2.5 py-1 border-r border-gray-300">
-                              {new Date(p.payment_date).toLocaleDateString()}
+                              {new Date(p.payment_date || p.created_at).toLocaleDateString()}
                             </td>
-                            <td className="px-2.5 py-1 border-r border-gray-300 font-bold capitalize">
-                              {p.payment_method}
+                            <td className={`px-2.5 py-1 border-r border-gray-300 font-bold capitalize ${isRef ? 'text-rose-700' : ''}`}>
+                              {isRef ? `↩ Refund (${p.payment_method})` : p.payment_method}
                             </td>
-                            <td className="px-2.5 py-1 text-right font-mono font-bold">
-                              {p.amount.toFixed(2)}
+                            <td className={`px-2.5 py-1 text-right font-mono font-bold ${isRef ? 'text-rose-700' : ''}`}>
+                              {isRef ? `-${Math.abs(p.amount).toFixed(2)}` : p.amount.toFixed(2)}
                             </td>
                           </tr>
                         );
@@ -3120,10 +3100,22 @@ export const CustomerList: React.FC = () => {
                     <span>Total Amount</span>
                     <span className="font-mono">{(printSaleData.grand_total || 0).toFixed(2)} AED</span>
                   </div>
-                  <div className="flex justify-between bg-white text-black font-extrabold px-3 py-1.5 text-xs">
+                  <div className="flex justify-between bg-white text-black font-extrabold px-3 py-1 text-xs">
                     <span>Paid Amount</span>
-                    <span className="font-mono">{totalPaid.toFixed(2)} AED</span>
+                    <span className="font-mono">{totalCollected.toFixed(2)} AED</span>
                   </div>
+                  {totalRefunded > 0 && (
+                    <div className="flex justify-between bg-rose-50 text-rose-800 font-extrabold px-3 py-1 text-xs">
+                      <span>Less: Refunded</span>
+                      <span className="font-mono">-{totalRefunded.toFixed(2)} AED</span>
+                    </div>
+                  )}
+                  {totalRefunded > 0 && (
+                    <div className="flex justify-between bg-slate-100 text-slate-900 font-extrabold px-3 py-1 text-xs">
+                      <span>Net Paid</span>
+                      <span className="font-mono">{netPaid.toFixed(2)} AED</span>
+                    </div>
+                  )}
                   <div className={`flex justify-between font-black px-3 py-1.5 text-xs ${
                     due > 0 ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800'
                   }`}>

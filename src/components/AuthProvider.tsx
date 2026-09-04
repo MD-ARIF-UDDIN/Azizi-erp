@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { User, Branch } from '../types/database';
-import { db, getActiveUserSession, setActiveUserSession } from '../lib/db';
+import { db, setActiveUserSession } from '../lib/db';
 
 interface AuthContextType {
   user: User | null;
@@ -64,28 +64,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const saved = localStorage.getItem('azizi_active_session');
       let sessionUser: User | null = null;
       if (saved) {
-        const cached = getActiveUserSession();
-        if (cached) {
-          // Sync with the latest user object from database
-          const fresh = users.find(u => u.id === cached.id);
-          sessionUser = fresh ? { ...cached, ...fresh } : cached;
-          setActiveUserSession(sessionUser);
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.id) {
+            const fresh = users.find(u => u.id === parsed.id && !u.is_deleted);
+            sessionUser = fresh ? { ...parsed, ...fresh } : parsed;
+            if (sessionUser) {
+              setActiveUserSession(sessionUser);
+            }
+          }
+        } catch (e) {
+          console.error('Failed to parse saved session:', e);
         }
       }
+
+      // If no session exists yet, default to first active user
+      if (!sessionUser && users.length > 0) {
+        sessionUser = users[0];
+        setActiveUserSession(sessionUser);
+      }
+
       setUser(sessionUser);
 
       if (sessionUser) {
-        // Set default active branch to user's branch
-        // Super Admins & Owners can select 'all' branches, other roles default to their branch
-        const role = sessionUser.role_id ? await db.roles.getById(sessionUser.role_id) : null;
-        const roleName = role?.name?.toLowerCase() || '';
-        if (roleName === 'super admin' || roleName === 'owner') {
-          setActiveBranchIdState('all');
-        } else {
-          setActiveBranchIdState(sessionUser.branch_id || 'all');
-        }
-
-        // Load role-based permissions
+        setActiveBranchIdState(sessionUser.branch_id || 'all');
         const perms = await computePermissions(sessionUser);
         setRolePermissions(perms);
       }
