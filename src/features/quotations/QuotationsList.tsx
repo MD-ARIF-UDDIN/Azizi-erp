@@ -480,209 +480,199 @@ export const QuotationsList: React.FC = () => {
                   </div>
 
                   {/* PRINTABLE QUOTATION PAPER SHEET */}
-                  <div className="print-invoice-sheet bg-white text-black p-6 sm:p-8 rounded-2xl shadow-2xl border border-border/80 print:border-none print:shadow-none print:p-0 print:rounded-none">
+                  <div className="print-invoice-sheet bg-white text-black p-6 sm:p-8 rounded-2xl shadow-2xl border border-border/80 print:border-none print:shadow-none print:p-0 print:rounded-none text-xs font-sans">
                     <div className="w-full">
-                      {/* Branding Header with raw logo in a card */}
-                      <div className="flex items-center justify-between pb-3 border-b border-gray-300 gap-3">
-                        <div className="p-1 bg-white border border-gray-300 rounded-xl shadow-xs shrink-0">
-                          <img src="/logo.png" alt="AZIZI Logo" className="w-14 h-14 object-contain block" />
-                        </div>
+                      {/* 1. Brand Header */}
+                      <div className="flex items-center justify-between pb-2 border-b border-gray-300 gap-3">
+                        <img src="/logo.png" alt="AZIZI Logo" className="w-16 h-16 object-contain shrink-0" />
                         <div className="text-center flex-1 space-y-0.5">
-                          <div className="text-lg font-bold text-[#000ba0] font-serif tracking-wide italic">
-                            مكتب عزيزي للكتابة وعمل الأختام ذ.م.م - فرع ١
+                          <div className="text-lg font-black text-[#000ba0] tracking-wide" style={{ fontFamily: "'Cairo', 'Inter', sans-serif" }}>
+                            مكتب عزيزي للكتابة وعمل الأختام ذ.م.م - فرع ۱
                           </div>
-                          <div className="text-base font-black text-[#f28f00] tracking-wide italic uppercase">
-                            AZIZI TYPING &amp; STAMP MAKING Br. 1
+                          <div className="text-sm font-black text-[#f28f00] tracking-wider italic uppercase">
+                            AZIZI TYPING &amp; STAMP MAKING BR. 1
                           </div>
                           <div className="text-xs text-black font-bold">
                             Mobile: 0542797933 • Email: azizitypingbr@gmail.com
                           </div>
-                          <div className="text-[11px] text-gray-700 font-semibold">
+                          <div className="text-[11px] text-gray-700 font-medium">
                             Abu Dhabi, Musaffah M37, Near Irani Masjid
                           </div>
                         </div>
                         <div className="w-16 shrink-0" />
                       </div>
 
-                      {/* Orange Banner Header */}
-                      <div className="bg-[#f28f00] text-white flex items-center justify-between px-4 py-1.5 font-bold uppercase tracking-wider text-xs my-3 rounded-sm shadow-sm">
-                        <span>Customer Quotation</span>
-                        <span className="bg-[#000ba0] text-white px-3 py-0.5 rounded font-mono text-[11px] tracking-widest">
+                      {/* 2. Blue Quotation Banner */}
+                      <div className="bg-[#000ba0] text-white flex items-center justify-between px-3.5 py-1.5 font-bold uppercase tracking-wider text-xs my-2.5 rounded-xs">
+                        <span className="font-extrabold tracking-widest text-[12px]">PRICE QUOTATION / عرض أسعار</span>
+                        <span className="bg-[#f28f00] text-white px-3 py-0.5 rounded font-mono text-xs tracking-wider">
                           # {quote.quotation_no}
                         </span>
                       </div>
 
-                      {/* Customer Metadata Table */}
-                      <table className="w-full border-collapse border border-gray-300 text-xs my-3 bg-white text-black">
+                      {/* 3. Structured Quotation Metadata Grid Table */}
+                      <table className="w-full border-collapse border border-gray-300 text-xs my-2.5 bg-white text-black">
                         <tbody>
                           <tr>
-                            <td className="bg-[#000ba0] text-white font-bold px-3 py-2 border border-gray-300 w-1/4 uppercase tracking-wider">
-                              Quotation To
+                            <td className="bg-[#f28f00] text-white font-extrabold px-3 py-2 border border-gray-300 w-[22%] uppercase tracking-wider align-middle">
+                              QUOTATION TO
                             </td>
-                            <td className="px-3 py-2 border border-gray-300 text-black font-bold text-sm w-3/4" colSpan={3}>
+                            <td className="px-3 py-2 border border-gray-300 text-black w-[78%]" colSpan={3}>
                               {(() => {
-                                if (!quote.customer) return 'Walk-in Customer';
+                                if (!quote.customer) return <span className="font-extrabold text-sm">Walk-in Customer</span>;
                                 if (quote.person_name) {
                                   return (
                                     <div className="flex flex-col">
-                                      <span className="font-extrabold text-black">{quote.person_name}</span>
-                                      <span className="text-xs text-[#000ba0] font-semibold mt-0.5">
+                                      <span className="font-black text-black text-[13px]">{quote.person_name}</span>
+                                      <span className="text-[11px] text-[#000ba0] font-bold mt-0.5">
                                         Company Account: {quote.customer.name}
                                       </span>
                                     </div>
                                   );
                                 }
-                                return (
-                                  <div className="flex flex-col">
-                                    <span className="font-extrabold text-black">{quote.customer.name}</span>
-                                    {quote.customer.company && (
-                                      <span className="text-xs text-[#000ba0] font-semibold mt-0.5">
-                                        Billed via: {quote.customer.company.name}
+                                const parentName = quote.customer.company?.name;
+                                if (parentName) {
+                                  return (
+                                    <div className="flex flex-col">
+                                      <span className="font-black text-black text-[13px]">{quote.customer.name}</span>
+                                      <span className="text-[11px] text-[#000ba0] font-bold mt-0.5">
+                                        Company Account: {parentName}
                                       </span>
-                                    )}
-                                  </div>
-                                );
+                                    </div>
+                                  );
+                                }
+                                return <span className="font-black text-black text-[13px]">{quote.customer.name}</span>;
                               })()}
                             </td>
                           </tr>
                           <tr>
-                            <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4">
-                              Phone Number
+                            <td className="bg-gray-50 text-gray-800 font-bold px-3 py-1.5 border border-gray-300 w-[22%]">
+                              Mr. / M/s:
                             </td>
-                            <td className="px-3 py-2 border border-gray-300 w-1/4 text-black font-semibold">
-                              {quote.person_phone || quote.customer?.phone || 'N/A'}
+                            <td className="px-3 py-1.5 border border-gray-300 text-black font-semibold w-[28%]">
+                              {quote.person_phone || quote.customer?.phone || quote.person_email || quote.customer?.email || 'N/A'}
                             </td>
-                            <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4">
-                              Quotation Date
+                            <td className="bg-[#f28f00] text-white font-extrabold px-3 py-1.5 border border-gray-300 w-[22%] uppercase tracking-wider text-center">
+                              DATE
                             </td>
-                            <td className="px-3 py-2 border border-gray-300 w-1/4 text-black font-semibold">
+                            <td className="px-3 py-1.5 border border-gray-300 text-black font-bold text-center w-[28%]">
                               {new Date(quote.created_at).toLocaleDateString()}
                             </td>
                           </tr>
                           <tr>
-                            <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4">
-                              Email Address
+                            <td className="bg-gray-50 text-gray-800 font-bold px-3 py-1.5 border border-gray-300 w-[22%]">
+                              Valid Until:
                             </td>
-                            <td className="px-3 py-2 border border-gray-300 w-1/4 text-black font-medium">
-                              {quote.person_email || quote.customer?.email || 'N/A'}
+                            <td className="px-3 py-1.5 border border-gray-300 text-rose-700 font-bold w-[28%]">
+                              {quote.valid_until ? new Date(quote.valid_until).toLocaleDateString() : '30 Days from issue'}
                             </td>
-                            <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4">
-                              Valid Until Date
+                            <td className="bg-gray-50 text-gray-800 font-bold px-3 py-1.5 border border-gray-300 w-[22%] text-center">
+                              Prepared By
                             </td>
-                            <td className="px-3 py-2 border border-gray-300 w-1/4 text-rose-600 font-bold">
-                              {quote.valid_until ? new Date(quote.valid_until).toLocaleDateString() : 'N/A'}
-                            </td>
-                          </tr>
-                          <tr>
-                            <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4">
-                              Status Label
-                            </td>
-                            <td className="px-3 py-2 border border-gray-300 text-black font-bold" colSpan={3}>
-                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold border ${
-                                quote.status === 'Converted' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
-                                quote.status === 'Accepted' ? 'bg-blue-50 text-blue-700 border-blue-300' :
-                                quote.status === 'Draft' ? 'bg-gray-100 text-gray-700 border-gray-300' :
-                                quote.status === 'Sent' ? 'bg-indigo-50 text-indigo-700 border-indigo-300' :
-                                quote.status === 'Rejected' ? 'bg-rose-50 text-rose-700 border-rose-300' :
-                                'bg-amber-50 text-amber-700 border-amber-300'
-                              }`}>
-                                {quote.status}
-                              </span>
+                            <td className="px-3 py-1.5 border border-gray-300 text-black font-semibold text-center w-[28%]">
+                              {quote.employee?.name || 'Staff'}
                             </td>
                           </tr>
                         </tbody>
                       </table>
 
-                      {/* Items Details Table */}
-                      <table className="w-full border-collapse border border-gray-300 text-xs my-4 text-left bg-white text-black">
-                        <thead>
-                          <tr className="bg-[#000ba0] text-white uppercase font-bold text-[10px] tracking-wider">
-                            <th className="px-3 py-2 border border-gray-300 text-center w-12">No</th>
-                            <th className="px-3 py-2 border border-gray-300">Service Description</th>
-                            <th className="px-3 py-2 border border-gray-300 text-center w-20">Qty</th>
-                            <th className="px-3 py-2 border border-gray-300 text-right w-28">Unit Price</th>
-                            <th className="px-3 py-2 border border-gray-300 text-right w-28">Subtotal</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {items.length === 0 ? (
+                      {/* 4. Line Items Table */}
+                      <div className="border border-gray-300 overflow-hidden my-2.5 text-xs bg-white">
+                        <table className="w-full text-left border-collapse">
+                          <thead className="bg-[#000ba0] text-white font-bold">
                             <tr>
-                              <td colSpan={5} className="px-3 py-6 text-center text-gray-500 italic">
-                                No items linked to this quotation.
-                              </td>
+                              <th className="px-3 py-2 text-center border-r border-gray-300 w-[6%] font-extrabold">No</th>
+                              <th className="px-3 py-2 border-r border-gray-300 w-[55%] font-extrabold">Description of Service / الخدمة</th>
+                              <th className="px-3 py-2 text-center border-r border-gray-300 w-[11%] font-extrabold">Qty</th>
+                              <th className="px-3 py-2 text-right border-r border-gray-300 w-[14%] font-extrabold">Rate</th>
+                              <th className="px-3 py-2 text-right w-[14%] font-extrabold">Amount</th>
                             </tr>
-                          ) : (
-                            items.map((item: any, idx: number) => (
-                              <tr key={item.id} className="hover:bg-gray-50 text-black font-semibold">
-                                <td className="px-3 py-2 border border-gray-300 text-center text-gray-600">
-                                  {idx + 1}
-                                </td>
-                                <td className="px-3 py-2 border border-gray-300">
-                                  <div className="font-extrabold">{item.service?.name || 'Service Item'}</div>
-                                </td>
-                                <td className="px-3 py-2 border border-gray-300 text-center text-sm font-bold">
-                                  {item.quantity}
-                                </td>
-                                <td className="px-3 py-2 border border-gray-300 text-right font-mono">
-                                  {item.unit_price.toFixed(2)}
-                                </td>
-                                <td className="px-3 py-2 border border-gray-300 text-right font-mono font-bold">
-                                  {item.subtotal.toFixed(2)} AED
+                          </thead>
+                          <tbody className="divide-y divide-gray-300 text-black">
+                            {items.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} className="px-3 py-6 text-center text-gray-400 italic">
+                                  No items linked to this quotation.
                                 </td>
                               </tr>
-                            ))
-                          )}
-                          
-                          {/* Financial Summary rows */}
-                          <tr className="bg-gray-100 font-bold text-black text-right">
-                            <td colSpan={3} className="border border-gray-300 px-3 py-2">Subtotal Amount:</td>
-                            <td colSpan={2} className="border border-gray-300 px-3 py-2 font-mono">{quote.subtotal.toFixed(2)} AED</td>
-                          </tr>
-                          {quote.discount > 0 && (
-                            <tr className="bg-gray-100 font-bold text-rose-600 text-right">
-                              <td colSpan={3} className="border border-gray-300 px-3 py-2">Discount Deduction:</td>
-                              <td colSpan={2} className="border border-gray-300 px-3 py-2 font-mono">- {quote.discount.toFixed(2)} AED</td>
+                            ) : (
+                              items.map((item: any, itemIdx: number) => (
+                                <tr key={item.id || itemIdx} className="h-8">
+                                  <td className="px-3 py-1.5 text-center border-r border-gray-300 font-bold">{itemIdx + 1}</td>
+                                  <td className="px-3 py-1.5 border-r border-gray-300 text-left">
+                                    <span className="font-extrabold text-black">{item.service?.name || 'Service Item'}</span>
+                                    {item.notes && (
+                                      <span className="block font-normal text-[10px] text-gray-600 italic">
+                                        Note: {item.notes}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center border-r border-gray-300 font-bold">{item.quantity}</td>
+                                  <td className="px-3 py-1.5 text-right border-r border-gray-300 font-mono">{item.unit_price.toFixed(2)}</td>
+                                  <td className="px-3 py-1.5 text-right font-mono font-black">{item.subtotal.toFixed(2)}</td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-[#f28f00] text-white font-extrabold border-t border-gray-300 text-xs">
+                              <td className="px-3 py-1.5 text-center border-r border-gray-300 uppercase tracking-wider" colSpan={4}>
+                                Total Proposed Amount
+                              </td>
+                              <td className="px-3 py-1.5 text-right font-mono font-black">
+                                {quote.grand_total.toFixed(2)} AED
+                              </td>
                             </tr>
-                          )}
-                          <tr className="bg-[#000ba0] font-black text-white text-right text-sm">
-                            <td colSpan={3} className="border border-gray-300 px-3 py-2.5 uppercase tracking-wider">Net Payable Amount:</td>
-                            <td colSpan={2} className="border border-gray-300 px-3 py-2.5 font-mono">{quote.grand_total.toFixed(2)} AED</td>
-                          </tr>
-                        </tbody>
-                      </table>
+                          </tfoot>
+                        </table>
+                      </div>
 
-                      {/* Terms & Conditions Box */}
+                      {/* 5. Terms & Remarks */}
                       {((quote.terms_conditions && quote.terms_conditions.length > 0) || quote.notes) && (
-                        <div className="mt-4 p-3 border border-gray-300 rounded text-xs bg-gray-50 text-black text-left">
-                          <strong className="text-gray-800 block mb-1.5 font-bold">Terms &amp; Conditions:</strong>
+                        <div className="my-2.5 p-3 border border-gray-300 rounded-xs text-xs bg-gray-50/60 text-black">
+                          <div className="font-bold text-gray-900 uppercase text-[11px] tracking-wider mb-1">
+                            Terms &amp; Conditions / الشروط والأحكام:
+                          </div>
                           {quote.terms_conditions && quote.terms_conditions.length > 0 && (
-                            <ol className="list-decimal pl-4 mb-2 space-y-1 text-[11px] text-gray-700 font-medium leading-relaxed">
+                            <ol className="list-decimal pl-4 space-y-0.5 text-[11px] text-gray-700 font-medium">
                               {quote.terms_conditions.map((tc: any) => (
                                 <li key={tc.id}>
-                                  <span className="font-bold text-gray-800">{tc.title}:</span> {tc.content}
+                                  <span className="font-bold text-black">{tc.title}:</span> {tc.content}
                                 </li>
                               ))}
                             </ol>
                           )}
                           {quote.notes && (
-                            <div className="text-[11px] text-gray-700 font-medium whitespace-pre-line leading-relaxed border-t border-gray-200/60 pt-2 mt-2">
+                            <div className="text-[11px] text-gray-700 font-medium whitespace-pre-line border-t border-gray-300 pt-1.5 mt-1.5 italic">
                               {quote.notes}
                             </div>
                           )}
                         </div>
                       )}
 
-                      {/* Official Signature Footer */}
-                      <div className="mt-8 flex justify-between items-end border-t border-gray-300 pt-6">
-                        <div className="text-center font-bold text-[11px] text-black">
-                          <div className="h-10" />
-                          <div>Customer Signature</div>
+                      {/* 6. Signature Lines */}
+                      <div className="pt-6 mt-4 border-t border-gray-300">
+                        <div className="grid grid-cols-2 gap-8 items-end text-xs">
+                          <div className="text-center">
+                            <div className="border-b border-gray-400 w-3/4 mx-auto mb-1"></div>
+                            <div className="text-[10px] font-bold text-gray-700 uppercase tracking-wide">
+                              Customer Acceptance Signature / قبول العميل
+                            </div>
+                          </div>
+
+                          <div className="text-center">
+                            <div className="border-b border-gray-400 w-3/4 mx-auto mb-1"></div>
+                            <div className="text-[10px] font-bold text-gray-700 uppercase tracking-wide">
+                              Authorized Signature &amp; Official Stamp / الختم والتوقيع
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-center font-bold text-[11px] text-black">
-                          <div className="font-serif italic text-[#000ba0] text-[10px] mb-1 font-semibold">AZIZI TYPING CO.</div>
-                          <div className="border-t border-gray-300 w-32 mx-auto pt-1">Authorized Cashier</div>
+
+                        <div className="text-center text-[9px] text-gray-500 mt-4 tracking-wide font-medium">
+                          Official Quotation Document • Azizi Typing &amp; Stamp Making L.L.C • Abu Dhabi, UAE
                         </div>
                       </div>
+
                     </div>
                   </div>
 

@@ -332,7 +332,7 @@ input:focus, select:focus, textarea:focus {
     color: #000000 !important;
     width: 100% !important;
     height: auto !important;
-    min-height: 100% !important;
+    min-height: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
     overflow: visible !important;
@@ -340,34 +340,39 @@ input:focus, select:focus, textarea:focus {
     display: block !important;
   }
 
-  /* Reset layout containers from DashboardLayout (h-screen, overflow-hidden) */
-  .h-screen,
-  .w-screen,
-  .overflow-hidden,
-  .overflow-y-auto,
-  .overflow-x-auto,
-  main,
-  aside,
-  header {
+  /* Reset outer app layout containers from DashboardLayout into normal document flow */
+  #root > div,
+  main {
     height: auto !important;
+    min-height: 0 !important;
     max-height: none !important;
     width: 100% !important;
+    max-width: 100% !important;
     overflow: visible !important;
     position: static !important;
+    display: block !important;
   }
+
+  /* Explicit print display utilities with !important */
+  .print\:block { display: block !important; }
+  .print\:inline-block { display: inline-block !important; }
+  .print\:inline { display: inline !important; }
+  .print\:flex { display: flex !important; }
+  .print\:grid { display: grid !important; }
+  .print\:table { display: table !important; }
+  .print\:table-row { display: table-row !important; }
+  .print\:table-cell { display: table-cell !important; }
 
   /* Hide navigation, sidebar, topbar, buttons and anything marked print:hidden */
   aside,
   header,
   nav,
   .print\:hidden,
-  .print-hidden,
-  [class*="print:hidden"],
-  [class*="print:hidden"] * {
+  .print-hidden {
     display: none !important;
   }
 
-  /* Reset fixed modal overlays so they don't clip, obscure or darken the invoice */
+  /* Reset fixed modal overlays that wrap printable sheets so they flow naturally without backdrops */
   .fixed,
   .fixed.inset-0 {
     position: static !important;
@@ -380,7 +385,6 @@ input:focus, select:focus, textarea:focus {
     height: auto !important;
     max-height: none !important;
     overflow: visible !important;
-    display: block !important;
     backdrop-filter: none !important;
     box-shadow: none !important;
   }
@@ -415,36 +419,44 @@ input:focus, select:focus, textarea:focus {
     background: #ffffff !important;
     color: #000000 !important;
     visibility: visible !important;
-    page-break-inside: avoid;
+  }
+
+  /* Preserve flex and grid layouts inside invoice sheets */
+  .print-invoice-sheet .flex {
+    display: flex !important;
+  }
+
+  .print-invoice-sheet .grid {
+    display: grid !important;
+  }
+
+  .print-invoice-sheet .grid-cols-2,
+  .print-invoice-sheet .md\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
   .print-invoice-sheet table {
     border-collapse: collapse !important;
     width: 100% !important;
+    display: table !important;
   }
 
-  .print-invoice-sheet table thead th {
-    background-color: #000ba0 !important;
-    color: #ffffff !important;
-    font-weight: 700 !important;
-    border: 1px solid #9ca3af !important;
+  .print-invoice-sheet table th,
+  .print-invoice-sheet table td {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    color-adjust: exact !important;
   }
 
-  .print-invoice-sheet table tbody td {
-    border: 1px solid #d1d5db !important;
-    color: #000000 !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
+  /* Individual invoice container: ensure it never breaks across pages unless multi-page is forced */
+  .print-invoice-sheet > div {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
-  .print-invoice-sheet table tfoot tr,
-  .print-invoice-sheet table tfoot td {
-    background-color: #f28f00 !important;
-    color: #ffffff !important;
-    font-weight: 700 !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
+  .print\:page-break-before-always {
+    page-break-before: always !important;
+    break-before: page !important;
   }
 }
+

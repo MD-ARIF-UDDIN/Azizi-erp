@@ -765,7 +765,7 @@ export const CustomerList: React.FC = () => {
       <div className="w-full">
         
         {/* CUSTOMER DIRECTORY LISTING */}
-        <div className="w-full space-y-4">
+        <div className={`w-full space-y-4 ${printSaleData || isPrintingCustomerList ? 'print:hidden' : ''}`}>
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -1084,7 +1084,7 @@ export const CustomerList: React.FC = () => {
           )}
         </div>        {/* CUSTOMER PROFILE DETAIL PANEL (Structured & Understandable Modal) */}
         {selectedCustomer && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/70 backdrop-blur-xs overflow-y-auto animate-fade-in">
+          <div className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/70 backdrop-blur-xs overflow-y-auto animate-fade-in ${printSaleData ? 'print:hidden' : ''}`}>
             <div className="glass border border-border rounded-2xl shadow-2xl relative bg-card w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col my-4 animate-scale-in">
               
               {/* 1. MODAL HEADER BANNER */}
@@ -2867,182 +2867,269 @@ export const CustomerList: React.FC = () => {
       )}
 
       {/* HIDDEN PRINT-ONLY INVOICE — rendered when printSaleData is set */}
-      {printSaleData && (
-        <div className="hidden print:block fixed inset-0 bg-white p-8 z-[9999] text-black text-xs print-invoice-sheet">
-          {/* Company Header with raw logo */}
-          <div className="flex items-center justify-between pb-3 border-b border-gray-300 gap-3">
-            <img src="/logo.png" alt="AZIZI Logo" className="w-14 h-14 object-contain shrink-0" />
-            <div className="text-center flex-1 space-y-0.5">
-              <div className="text-lg font-bold text-[#000ba0] font-serif tracking-wide italic">
-                مكتب عزيزي للكتابة وعمل الأختام ذ.م.م - فرع ١
+      {printSaleData && (() => {
+        const totalPaid = (printSaleData.payments || []).reduce((s: number, p: any) => s + p.amount, 0);
+        const due = Math.max(0, printSaleData.grand_total - totalPaid);
+
+        return (
+          <div className="hidden print:block fixed inset-0 bg-white p-6 sm:p-8 z-[9999] text-black text-xs font-sans print-invoice-sheet leading-normal">
+            {/* 1. Brand Header */}
+            <div className="flex items-center justify-between pb-2 border-b border-gray-300 gap-3">
+              <img src="/logo.png" alt="AZIZI Logo" className="w-16 h-16 object-contain shrink-0" />
+              <div className="text-center flex-1 space-y-0.5">
+                <div className="text-lg font-black text-[#000ba0] tracking-wide" style={{ fontFamily: "'Cairo', 'Inter', sans-serif" }}>
+                  مكتب عزيزي للكتابة وعمل الأختام ذ.م.م - فرع ۱
+                </div>
+                <div className="text-sm font-black text-[#f28f00] tracking-wider italic uppercase">
+                  AZIZI TYPING &amp; STAMP MAKING BR. 1
+                </div>
+                <div className="text-xs text-black font-bold">
+                  Mobile: 0542797933 • Email: azizitypingbr@gmail.com
+                </div>
+                <div className="text-[11px] text-gray-700 font-medium">
+                  Abu Dhabi, Musaffah M37, Near Irani Masjid
+                </div>
               </div>
-              <div className="text-base font-black text-[#f28f00] tracking-wide italic uppercase">
-                AZIZI TYPING &amp; STAMP MAKING Br. 1
-              </div>
-              <div className="text-xs text-black font-bold">
-                Mobile: 0542797933 • Email: azizitypingbr@gmail.com
-              </div>
-              <div className="text-[11px] text-gray-700 font-semibold">
-                Abu Dhabi, Musaffah M37, Near Irani Masjid
-              </div>
+              <div className="w-16 shrink-0" />
             </div>
-            <div className="w-14 shrink-0" />
-          </div>
 
-          {/* Banner */}
-          <div className="bg-[#000ba0] text-white flex items-center justify-between px-4 py-1.5 font-bold uppercase tracking-wider text-xs my-3 rounded-sm">
-            <span>Customer Invoice</span>
-            <span className="bg-[#f28f00] text-white px-3 py-0.5 rounded font-mono text-[11px] tracking-widest">
-              # {printSaleData.invoice_no}
-            </span>
-          </div>
+            {/* 2. Blue Customer Invoice Banner */}
+            <div className="bg-[#000ba0] text-white flex items-center justify-between px-3.5 py-1.5 font-bold uppercase tracking-wider text-xs my-2.5 rounded-xs">
+              <span className="font-extrabold tracking-widest text-[12px]">CUSTOMER INVOICE</span>
+              <span className="bg-[#f28f00] text-white px-3 py-0.5 rounded font-mono text-xs tracking-wider">
+                # {printSaleData.invoice_no}
+              </span>
+            </div>
 
-          {/* Metadata */}
-          <table className="w-full border-collapse border border-gray-300 text-xs my-3">
-            <tbody>
-              <tr>
-                <td className="bg-[#f28f00] text-white font-bold px-3 py-2 border border-gray-300 w-1/4 uppercase">Invoice To</td>
-                <td className="px-3 py-2 border border-gray-300 text-black font-bold text-sm" colSpan={3}>
-                  {printSaleData.customer?.name || 'Walk-in Customer'}
-                </td>
-              </tr>
-              <tr>
-                <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4">Mr. / M/s:</td>
-                <td className="px-3 py-2 border border-gray-300 text-black font-semibold w-1/4">{printSaleData.customer?.email || 'N/A'}</td>
-                <td className="bg-[#f28f00] text-white font-bold px-3 py-2 border border-gray-300 w-1/4 uppercase text-center">Date</td>
-                <td className="px-3 py-2 border border-gray-300 text-black font-bold text-center w-1/4">
-                  {new Date(printSaleData.created_at).toLocaleDateString()}
-                </td>
-              </tr>
-              <tr>
-                <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4">Invoice No:</td>
-                <td className="px-3 py-2 border border-gray-300 text-[#000ba0] font-bold w-1/4">{printSaleData.invoice_no}</td>
-                <td className="bg-gray-100 text-gray-700 font-bold px-3 py-2 border border-gray-300 w-1/4 text-center">Cashier</td>
-                <td className="px-3 py-2 border border-gray-300 text-black font-semibold text-center w-1/4">
-                  {printSaleData.employee?.name || 'Staff'}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-
-          {/* Items */}
-          <div className="border border-gray-300 rounded-sm overflow-hidden my-3">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead className="bg-[#000ba0] text-white font-bold">
+            {/* 3. Structured Invoice Info Grid Table */}
+            <table className="w-full border-collapse border border-gray-300 text-xs my-2.5 bg-white text-black">
+              <tbody>
                 <tr>
-                  <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[6%]">No</th>
-                  <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[14%]">Date</th>
-                  <th className="px-3 py-2.5 border-r border-gray-300 w-[47%]">Description of Service</th>
-                  <th className="px-3 py-2.5 text-center border-r border-gray-300 w-[9%]">Qty</th>
-                  <th className="px-3 py-2.5 text-right border-r border-gray-300 w-[10%]">Rate</th>
-                  <th className="px-3 py-2.5 text-right w-[14%]">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-300">
-                {(() => {
-                  const items = printSaleData.items || [];
-                  const totalRows = 11;
-                  const rows: React.ReactNode[] = [];
-                  items.forEach((item: any, index: number) => {
-                    const itemDate = item.service_date 
-                      ? new Date(item.service_date).toLocaleDateString()
-                      : new Date(item.created_at || printSaleData.created_at).toLocaleDateString();
-                    rows.push(
-                      <tr key={item.id} className="h-8">
-                        <td className="px-3 py-1.5 text-center border-r border-gray-300 font-semibold">{index + 1}</td>
-                        <td className="px-3 py-1.5 text-center border-r border-gray-300 font-medium">{itemDate}</td>
-                        <td className="px-3 py-1.5 border-r border-gray-300 font-bold">
-                          {item.service?.name}
-                          {item.person_name ? (
-                            <span className="ml-1.5 font-normal text-[11px] text-gray-700 italic">
-                              (For: {item.person_name})
+                  <td className="bg-[#f28f00] text-white font-extrabold px-3 py-2 border border-gray-300 w-[22%] uppercase tracking-wider align-middle">
+                    INVOICE TO
+                  </td>
+                  <td className="px-3 py-2 border border-gray-300 text-black w-[78%]" colSpan={3}>
+                    {(() => {
+                      if (!printSaleData.customer) return <span className="font-extrabold text-sm">Walk-in Customer</span>;
+                      if (printSaleData.person_name) {
+                        return (
+                          <div className="flex flex-col">
+                            <span className="font-black text-black text-[13px]">{printSaleData.person_name}</span>
+                            <span className="text-[11px] text-[#000ba0] font-bold mt-0.5">
+                              Company Account: {printSaleData.customer.name} (Consolidated Billing)
                             </span>
-                          ) : null}
-                        </td>
-                        <td className="px-3 py-1.5 text-center border-r border-gray-300">{item.quantity}</td>
-                        <td className="px-3 py-1.5 text-right border-r border-gray-300">{item.unit_price.toFixed(2)}</td>
-                        <td className="px-3 py-1.5 text-right font-bold">{item.subtotal.toFixed(2)}</td>
-                      </tr>
-                    );
-                  });
-                  for (let i = 0; i < Math.max(0, totalRows - items.length); i++) {
-                    rows.push(
-                      <tr key={`e-${i}`} className="h-8">
-                        <td className="px-3 py-1.5 text-center border-r border-gray-300 font-semibold">{items.length + i + 1}</td>
-                        <td className="px-3 py-1.5 border-r border-gray-300" />
-                        <td className="px-3 py-1.5 border-r border-gray-300" />
-                        <td className="px-3 py-1.5 border-r border-gray-300" />
-                        <td className="px-3 py-1.5 border-r border-gray-300" />
-                        <td className="px-3 py-1.5 text-right" />
-                      </tr>
-                    );
-                  }
-                  return rows;
-                })()}
-              </tbody>
-              <tfoot>
-                <tr className="bg-[#f28f00] text-white font-bold border-t border-gray-300">
-                  <td className="px-3 py-2 text-center border-r border-gray-300" colSpan={5}>Sub Total</td>
-                  <td className="px-3 py-2 text-right">{printSaleData.subtotal?.toFixed(2)}</td>
+                          </div>
+                        );
+                      }
+                      const parentName = printSaleData.customer.company?.name;
+                      if (parentName) {
+                        return (
+                          <div className="flex flex-col">
+                            <span className="font-black text-black text-[13px]">{printSaleData.customer.name}</span>
+                            <span className="text-[11px] text-[#000ba0] font-bold mt-0.5">
+                              Company Account: {parentName} (Consolidated Billing)
+                            </span>
+                          </div>
+                        );
+                      }
+                      return <span className="font-black text-black text-[13px]">{printSaleData.customer.name}</span>;
+                    })()}
+                  </td>
                 </tr>
-              </tfoot>
+                <tr>
+                  <td className="bg-gray-50 text-gray-800 font-bold px-3 py-1.5 border border-gray-300 w-[22%]">
+                    Mr. / M/s:
+                  </td>
+                  <td className="px-3 py-1.5 border border-gray-300 text-black font-semibold w-[28%]">
+                    {printSaleData.customer?.phone || printSaleData.customer?.email || 'N/A'}
+                  </td>
+                  <td className="bg-[#f28f00] text-white font-extrabold px-3 py-1.5 border border-gray-300 w-[22%] uppercase tracking-wider text-center">
+                    DATE
+                  </td>
+                  <td className="px-3 py-1.5 border border-gray-300 text-black font-bold text-center w-[28%]">
+                    {new Date(printSaleData.created_at).toLocaleDateString()}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="bg-gray-50 text-gray-800 font-bold px-3 py-1.5 border border-gray-300 w-[22%]">
+                    Invoice No:
+                  </td>
+                  <td className="px-3 py-1.5 border border-gray-300 text-black font-bold font-mono w-[28%]">
+                    {printSaleData.invoice_no}
+                  </td>
+                  <td className="bg-gray-50 text-gray-800 font-bold px-3 py-1.5 border border-gray-300 w-[22%] text-center">
+                    Cashier
+                  </td>
+                  <td className="px-3 py-1.5 border border-gray-300 text-black font-semibold text-center w-[28%]">
+                    {printSaleData.employee?.name || 'Owner admin'}
+                  </td>
+                </tr>
+              </tbody>
             </table>
-          </div>
 
-          {/* Bottom: Notes + Payments */}
-          <div className="grid grid-cols-2 gap-4 my-3">
-            <div className="border border-gray-300 rounded-sm">
-              <div className="bg-gray-100 border-b border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700">Remarks</div>
-              <div className="p-3 text-xs italic">{printSaleData.notes || 'Thank you for choosing AZIZI!'}</div>
-            </div>
-            <div className="border border-gray-300 rounded-sm text-xs">
-              <div className="bg-[#000ba0] text-white text-center py-1.5 font-bold uppercase">Payment Record</div>
-              <table className="w-full border-collapse">
-                <thead className="bg-[#f28f00] text-white font-bold">
+            {/* 4. Line Items Table */}
+            <div className="border border-gray-300 overflow-hidden my-2.5 text-xs bg-white">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-[#000ba0] text-white font-bold">
                   <tr>
-                    <th className="px-3 py-1.5 border-r border-gray-300">Date</th>
-                    <th className="px-3 py-1.5 border-r border-gray-300">Method</th>
-                    <th className="px-3 py-1.5 text-right">Amount</th>
+                    <th className="px-3 py-2 text-center border-r border-gray-300 w-[6%] font-extrabold">No</th>
+                    <th className="px-3 py-2 text-center border-r border-gray-300 w-[14%] font-extrabold">Date</th>
+                    <th className="px-3 py-2 border-r border-gray-300 w-[47%] font-extrabold">Description of Service</th>
+                    <th className="px-3 py-2 text-center border-r border-gray-300 w-[9%] font-extrabold">Qty</th>
+                    <th className="px-3 py-2 text-right border-r border-gray-300 w-[11%] font-extrabold">Rate</th>
+                    <th className="px-3 py-2 text-right w-[13%] font-extrabold">Amount</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-300">
-                  {(printSaleData.payments || []).map((p: any) => (
-                    <tr key={p.id} className="h-7">
-                      <td className="px-3 py-1 border-r border-gray-300">{new Date(p.payment_date).toLocaleDateString()}</td>
-                      <td className="px-3 py-1 border-r border-gray-300 font-semibold">{p.payment_method}</td>
-                      <td className="px-3 py-1 text-right font-semibold">{p.amount.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                  {Array.from({ length: Math.max(0, 4 - (printSaleData.payments?.length || 0)) }).map((_, i) => (
-                    <tr key={`ep-${i}`} className="h-7">
-                      <td className="px-3 py-1 border-r border-gray-300" />
-                      <td className="px-3 py-1 border-r border-gray-300" />
-                      <td className="px-3 py-1" />
-                    </tr>
-                  ))}
+                <tbody className="divide-y divide-gray-300 text-black">
+                  {(() => {
+                    const items = printSaleData.items || [];
+                    const rows: React.ReactNode[] = [];
+                    
+                    // Render actual items
+                    items.forEach((item: any, index: number) => {
+                      const itemDate = item.service_date 
+                        ? new Date(item.service_date).toLocaleDateString()
+                        : new Date(item.created_at || printSaleData.created_at).toLocaleDateString();
+                      rows.push(
+                        <tr key={item.id} className="h-8">
+                          <td className="px-3 py-1.5 text-center border-r border-gray-300 font-bold">{index + 1}</td>
+                          <td className="px-3 py-1.5 text-center border-r border-gray-300 font-medium">{itemDate}</td>
+                          <td className="px-3 py-1.5 border-r border-gray-300 text-left">
+                            <span className="font-extrabold text-black">{item.service?.name}</span>
+                            {item.person_name && (
+                              <span className="block font-semibold text-[11px] text-[#000ba0] mt-0.5">
+                                👤 For: {item.person_name}
+                              </span>
+                            )}
+                            {item.notes && (
+                              <span className="block font-normal text-[10px] text-gray-600 italic">
+                                Note: {item.notes}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-1.5 text-center border-r border-gray-300 font-bold">{item.quantity}</td>
+                          <td className="px-3 py-1.5 text-right border-r border-gray-300 font-mono">{item.unit_price.toFixed(2)}</td>
+                          <td className="px-3 py-1.5 text-right font-mono font-black">{item.subtotal.toFixed(2)}</td>
+                        </tr>
+                      );
+                    });
+
+                    // Fill up to 5 rows cleanly
+                    const emptyCount = Math.max(0, 5 - items.length);
+                    for (let i = 0; i < emptyCount; i++) {
+                      const rowNum = items.length + i + 1;
+                      rows.push(
+                        <tr key={`empty-${i}`} className="h-7">
+                          <td className="px-3 py-1 text-center border-r border-gray-300 font-bold text-gray-400">{rowNum}</td>
+                          <td className="px-3 py-1 border-r border-gray-300"></td>
+                          <td className="px-3 py-1 border-r border-gray-300"></td>
+                          <td className="px-3 py-1 border-r border-gray-300"></td>
+                          <td className="px-3 py-1 border-r border-gray-300"></td>
+                          <td className="px-3 py-1 text-right"></td>
+                        </tr>
+                      );
+                    }
+
+                    return rows;
+                  })()}
                 </tbody>
+                <tfoot>
+                  <tr className="bg-[#f28f00] text-white font-extrabold border-t border-gray-300 text-xs">
+                    <td className="px-3 py-1.5 text-center border-r border-gray-300 uppercase tracking-wider" colSpan={5}>
+                      Sub Total
+                    </td>
+                    <td className="px-3 py-1.5 text-right font-mono font-black">
+                      {(printSaleData.subtotal || printSaleData.grand_total || 0).toFixed(2)}
+                    </td>
+                  </tr>
+                </tfoot>
               </table>
-              {(() => {
-                const paid = (printSaleData.payments || []).reduce((s: number, p: any) => s + p.amount, 0);
-                const due = Math.max(0, printSaleData.grand_total - paid);
-                return (
-                  <>
-                    <div className="flex justify-between bg-[#000ba0] text-white font-bold px-3 py-1.5 text-xs">
-                      <span>Total</span><span>{printSaleData.grand_total?.toFixed(2)} AED</span>
-                    </div>
-                    <div className="flex justify-between bg-white text-black font-bold px-3 py-1.5 text-xs border-t border-gray-300">
-                      <span>Paid</span><span>{paid.toFixed(2)} AED</span>
-                    </div>
-                    <div className={`flex justify-between font-extrabold px-3 py-1.5 text-xs ${due > 0 ? 'bg-[#fadbd8] text-[#78281f]' : 'bg-green-50 text-green-700'}`}>
-                      <span>Due</span><span>{due.toFixed(2)} AED</span>
-                    </div>
-                  </>
-                );
-              })()}
+            </div>
+
+            {/* 5. Bottom Section: Remarks & Payment Record */}
+            <div className="grid grid-cols-2 gap-3 my-2.5 items-stretch">
+              {/* Left Column: Remarks & Internal Notes */}
+              <div className="border border-gray-300 rounded-xs flex flex-col bg-white text-xs">
+                <div className="bg-gray-100 text-gray-800 font-bold px-3 py-1.5 border-b border-gray-300 text-[11px] uppercase tracking-wider">
+                  Remarks &amp; Internal Notes
+                </div>
+                <div className="p-3 flex-1 flex items-start text-xs font-semibold text-black italic leading-relaxed">
+                  {printSaleData.notes || 'Document completed successfully. Thank you for choosing AZIZI!'}
+                </div>
+              </div>
+
+              {/* Right Column: Payment Record & Totals */}
+              <div className="border border-gray-300 rounded-xs flex flex-col bg-white text-xs">
+                <div className="bg-[#000ba0] text-white text-center py-1 font-extrabold uppercase tracking-wider text-xs">
+                  PAYMENT ENTRY RECORD
+                </div>
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-[#000ba0] text-white font-bold border-b border-gray-300 text-[11px]">
+                    <tr>
+                      <th className="px-2.5 py-1 border-r border-gray-300">Deposit Date</th>
+                      <th className="px-2.5 py-1 border-r border-gray-300">Type</th>
+                      <th className="px-2.5 py-1 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-300 text-black">
+                    {(() => {
+                      const payments = printSaleData.payments || [];
+                      const rows: React.ReactNode[] = [];
+
+                      payments.forEach((p: any, pIdx: number) => {
+                        rows.push(
+                          <tr key={p.id || pIdx} className="h-6 text-xs">
+                            <td className="px-2.5 py-1 border-r border-gray-300">
+                              {new Date(p.payment_date).toLocaleDateString()}
+                            </td>
+                            <td className="px-2.5 py-1 border-r border-gray-300 font-bold capitalize">
+                              {p.payment_method}
+                            </td>
+                            <td className="px-2.5 py-1 text-right font-mono font-bold">
+                              {p.amount.toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      });
+
+                      const emptyPayCount = Math.max(0, 2 - payments.length);
+                      for (let i = 0; i < emptyPayCount; i++) {
+                        rows.push(
+                          <tr key={`empty-pay-${i}`} className="h-6">
+                            <td className="px-2.5 py-1 border-r border-gray-300"></td>
+                            <td className="px-2.5 py-1 border-r border-gray-300"></td>
+                            <td className="px-2.5 py-1 text-right"></td>
+                          </tr>
+                        );
+                      }
+
+                      return rows;
+                    })()}
+                  </tbody>
+                </table>
+
+                {/* Totals Summary */}
+                <div className="divide-y divide-gray-300 border-t border-gray-300">
+                  <div className="flex justify-between bg-[#000ba0] text-white font-extrabold px-3 py-1.5 text-xs">
+                    <span>Total Amount</span>
+                    <span className="font-mono">{(printSaleData.grand_total || 0).toFixed(2)} AED</span>
+                  </div>
+                  <div className="flex justify-between bg-white text-black font-extrabold px-3 py-1.5 text-xs">
+                    <span>Paid Amount</span>
+                    <span className="font-mono">{totalPaid.toFixed(2)} AED</span>
+                  </div>
+                  <div className={`flex justify-between font-black px-3 py-1.5 text-xs ${
+                    due > 0 ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800'
+                  }`}>
+                    <span>Due Amount</span>
+                    <span className="font-mono">{due.toFixed(2)} AED</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 2. CUSTOMER DIRECTORY PDF / PRINT REPORT */}
       {isPrintingCustomerList && (
