@@ -2,7 +2,7 @@ import { isSupabaseConfigured, supabase } from './supabase';
 import type {
   Branch, Role, Permission, RolePermission, User, Customer,
   ServiceCategory, Service, OrderStatus, Sale, SaleItem, Payment,
-  ExpenseCategory, Expense, OrderStatusHistory, AuditLog, ClientDocument,
+  ExpenseCategory, Expense, OrderStatusHistory, AuditLog, ClientDocument, DocumentType,
   Quotation, QuotationItem, QuotationStatusHistory, TermsConditions,
   Account, AccountTransaction, JournalEntry
 } from '../types/database';
@@ -40,6 +40,7 @@ const KEYS = {
   ORDER_STATUS_HISTORY: 'azizi_erp_order_status_history',
   AUDIT_LOGS: 'azizi_erp_audit_logs',
   CLIENT_DOCUMENTS: 'azizi_erp_client_documents',
+  DOCUMENT_TYPES: 'azizi_erp_document_types',
   QUOTATIONS: 'azizi_erp_quotations',
   QUOTATION_ITEMS: 'azizi_erp_quotation_items',
   QUOTATION_STATUS_HISTORY: 'azizi_erp_quotation_status_history',
@@ -458,7 +459,21 @@ const SEED_ACCOUNTS = (): Account[] => [
   { id: 'a4444444-4444-4444-4444-444444444444', name: 'Corporate Bank Account', type: 'bank', bank_name: 'Mashreq Bank', account_number: '9012', balance: 0, is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
 ];
 
+const SEED_DOCUMENT_TYPES = (): DocumentType[] => [
+  { id: 'dt111111-1111-1111-1111-111111111111', name: 'Visa', description: 'UAE Residence / Employment / Partner Visa', is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'dt222222-2222-2222-2222-222222222222', name: 'Emirates ID', description: 'National Identity Card', is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'dt333333-3333-3333-3333-333333333333', name: 'Passport', description: 'National Passport', is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'dt444444-4444-4444-4444-444444444444', name: 'Trade License', description: 'Economic Department Commercial License', is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'dt555555-5555-5555-5555-555555555555', name: 'Labor Card', description: 'MOHRE Work Permit / Labor Card', is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'dt666666-6666-6666-6666-666666666666', name: 'Medical Insurance', description: 'Daman / Thiqa / Private Health Insurance', is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'dt777777-7777-7777-7777-777777777777', name: 'Tenancy Contract (Ejari)', description: 'Tawtheeq / Ejari Lease Agreement', is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'dt888888-8888-8888-8888-888888888888', name: 'Establishment Card', description: 'Immigration & Labor Company Card', is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'dt999999-9999-9999-9999-999999999999', name: 'Commercial Register', description: 'Chamber of Commerce Certificate', is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'dt000000-0000-0000-0000-000000000000', name: 'Other', description: 'Other General Document Types', is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+];
+
 let _clientDocuments: ClientDocument[] = getOrSeed(KEYS.CLIENT_DOCUMENTS, () => SEED_CLIENT_DOCUMENTS(_customers));
+let _documentTypes: DocumentType[] = getOrSeed(KEYS.DOCUMENT_TYPES, SEED_DOCUMENT_TYPES);
 let _quotations: Quotation[] = getOrSeed(KEYS.QUOTATIONS, () => []);
 let _quotationItems: QuotationItem[] = getOrSeed(KEYS.QUOTATION_ITEMS, () => []);
 let _quotationHistory: QuotationStatusHistory[] = getOrSeed(KEYS.QUOTATION_STATUS_HISTORY, () => []);
@@ -485,6 +500,7 @@ const saveAll = () => {
   saveToLocalStorage(KEYS.ORDER_STATUS_HISTORY, _history);
   saveToLocalStorage(KEYS.AUDIT_LOGS, _logs);
   saveToLocalStorage(KEYS.CLIENT_DOCUMENTS, _clientDocuments);
+  saveToLocalStorage(KEYS.DOCUMENT_TYPES, _documentTypes);
   saveToLocalStorage(KEYS.QUOTATIONS, _quotations);
   saveToLocalStorage(KEYS.QUOTATION_ITEMS, _quotationItems);
   saveToLocalStorage(KEYS.QUOTATION_STATUS_HISTORY, _quotationHistory);
@@ -732,7 +748,9 @@ export const db = {
     create: async (data: Omit<User, 'id' | 'is_deleted' | 'created_at' | 'updated_at'>) => {
       const userPassword = data.password || 'password';
       if (isSupabaseConfigured && supabase) {
-        const payload = { ...data, password: userPassword };
+        const payload: any = { ...data, password: userPassword };
+        delete payload.role;
+        delete payload.branch;
         const { data: created, error } = await supabase.from('users').insert([payload]).select().single();
         if (error) throw error;
         return created as User;
@@ -754,6 +772,8 @@ export const db = {
       if (isSupabaseConfigured && supabase) {
         const updatePayload: any = { ...data };
         if (!updatePayload.password) delete updatePayload.password;
+        delete updatePayload.role;
+        delete updatePayload.branch;
         const { data: updated, error } = await supabase.from('users').update(updatePayload).eq('id', id).select().single();
         if (error) throw error;
         return updated as User;
@@ -2677,6 +2697,86 @@ export const db = {
       _clientDocuments.splice(index, 1);
       saveAll();
       logAudit(getActiveUserSession().id, 'DELETE', 'client_documents', id, old, null);
+      return delay(true);
+    }
+  },
+
+  documentTypes: {
+    getAll: async () => {
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data, error } = await supabase.from('document_types').select('*').eq('is_deleted', false).order('name', { ascending: true });
+          if (!error && data && data.length > 0) return data as DocumentType[];
+        } catch (e) {
+          console.warn('Supabase document_types fallback:', e);
+        }
+      }
+      return delay(_documentTypes.filter(d => !d.is_deleted));
+    },
+    getById: async (id: string) => {
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data, error } = await supabase.from('document_types').select('*').eq('id', id).single();
+          if (!error && data) return data as DocumentType;
+        } catch (e) {}
+      }
+      return delay(_documentTypes.find(d => d.id === id) || null);
+    },
+    create: async (data: Omit<DocumentType, 'id' | 'created_at' | 'updated_at'>) => {
+      const newDocType: DocumentType = {
+        ...data,
+        id: generateUUID(),
+        is_active: data.is_active ?? true,
+        is_deleted: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data: created, error } = await supabase.from('document_types').insert([newDocType]).select().single();
+          if (!error && created) return created as DocumentType;
+        } catch (e) {
+          console.warn('Supabase document_types fallback:', e);
+        }
+      }
+      _documentTypes.push(newDocType);
+      saveAll();
+      logAudit(getActiveUserSession()?.id, 'INSERT', 'document_types', newDocType.id, null, newDocType);
+      return delay(newDocType);
+    },
+    update: async (id: string, data: Partial<Omit<DocumentType, 'id' | 'created_at' | 'updated_at'>>) => {
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data: updated, error } = await supabase.from('document_types').update(data).eq('id', id).select().single();
+          if (!error && updated) return updated as DocumentType;
+        } catch (e) {
+          console.warn('Supabase document_types fallback:', e);
+        }
+      }
+      const index = _documentTypes.findIndex(d => d.id === id);
+      if (index === -1) throw new Error('Document type not found');
+      const old = _documentTypes[index];
+      const updated = { ...old, ...data, updated_at: new Date().toISOString() };
+      _documentTypes[index] = updated;
+      saveAll();
+      logAudit(getActiveUserSession()?.id, 'UPDATE', 'document_types', id, old, updated);
+      return delay(updated);
+    },
+    delete: async (id: string) => {
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { error } = await supabase.from('document_types').update({ is_deleted: true }).eq('id', id);
+          if (!error) return true;
+        } catch (e) {
+          console.warn('Supabase document_types fallback:', e);
+        }
+      }
+      const index = _documentTypes.findIndex(d => d.id === id);
+      if (index === -1) throw new Error('Document type not found');
+      const old = _documentTypes[index];
+      _documentTypes[index] = { ...old, is_deleted: true, updated_at: new Date().toISOString() };
+      saveAll();
+      logAudit(getActiveUserSession()?.id, 'DELETE', 'document_types', id, old, null);
       return delay(true);
     }
   },

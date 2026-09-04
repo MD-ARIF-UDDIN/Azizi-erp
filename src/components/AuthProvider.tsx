@@ -26,16 +26,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [rolePermissions, setRolePermissions] = useState<string[]>([]);
   const [allUsersList, setAllUsersList] = useState<User[]>([]);
 
+  const computePermissions = async (currentUser: User): Promise<string[]> => {
+    if (!currentUser.role_id) return [];
+    try {
+      const rps = await db.rolePermissions.getByRoleId(currentUser.role_id);
+      const allPerms = await db.permissions.getAll();
+      return rps.map(rp => {
+        const p = allPerms.find(perm => perm.id === rp.permission_id);
+        return p ? p.name : '';
+      }).filter(Boolean);
+    } catch (e) {
+      console.error('Failed to load role permissions:', e);
+      return [];
+    }
+  };
+
+  const isSuperOrOwner = (targetUser: User | null): boolean => {
+    if (!targetUser) return false;
+    const roleName = targetUser.role?.name?.toLowerCase() || '';
+    if (roleName === 'super admin' || roleName === 'owner') return true;
+    const foundUser = allUsersList.find(u => u.id === targetUser.id);
+    const foundRoleName = foundUser?.role?.name?.toLowerCase() || '';
+    return foundRoleName === 'super admin' || foundRoleName === 'owner';
+  };
+
   const loadSession = async () => {
     setLoading(true);
     try {
-      const saved = localStorage.getItem('azizi_active_session');
-      let sessionUser = null;
-      if (saved) {
-        sessionUser = getActiveUserSession();
-      }
-      setUser(sessionUser);
-
       // Fetch branches for selection
       const branches = await db.branches.getAll();
       setAvailableBranches(branches);
@@ -44,24 +61,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const users = await db.users.getAll();
       setAllUsersList(users);
 
+      const saved = localStorage.getItem('azizi_active_session');
+      let sessionUser: User | null = null;
+      if (saved) {
+        const cached = getActiveUserSession();
+        if (cached) {
+          // Sync with the latest user object from database
+          const fresh = users.find(u => u.id === cached.id);
+          sessionUser = fresh ? { ...cached, ...fresh } : cached;
+          setActiveUserSession(sessionUser);
+        }
+      }
+      setUser(sessionUser);
+
       if (sessionUser) {
         // Set default active branch to user's branch
-        // Super Admins can select 'all' branches, other roles are pinned to their branch
-        const role = await db.roles.getById(sessionUser.role_id);
-        if (role?.name === 'Super Admin') {
+        // Super Admins & Owners can select 'all' branches, other roles default to their branch
+        const role = sessionUser.role_id ? await db.roles.getById(sessionUser.role_id) : null;
+        const roleName = role?.name?.toLowerCase() || '';
+        if (roleName === 'super admin' || roleName === 'owner') {
           setActiveBranchIdState('all');
         } else {
-          setActiveBranchIdState(sessionUser.branch_id);
+          setActiveBranchIdState(sessionUser.branch_id || 'all');
         }
 
-        // Load permissions
-        const rps = await db.rolePermissions.getByRoleId(sessionUser.role_id);
-        const allPerms = await db.permissions.getAll();
-        const perms = rps.map(rp => {
-          const p = allPerms.find(perm => perm.id === rp.permission_id);
-          return p ? p.name : '';
-        }).filter(Boolean);
-        
+        // Load role-based permissions
+        const perms = await computePermissions(sessionUser);
         setRolePermissions(perms);
       }
     } catch (err) {
@@ -89,19 +114,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const branches = await db.branches.getAll();
       setAvailableBranches(branches);
 
-      const role = await db.roles.getById(found.role_id);
-      if (role?.name === 'Super Admin') {
+      const role = found.role_id ? await db.roles.getById(found.role_id) : null;
+      const roleName = role?.name?.toLowerCase() || '';
+      if (roleName === 'super admin' || roleName === 'owner') {
         setActiveBranchIdState('all');
       } else {
-        setActiveBranchIdState(found.branch_id);
+        setActiveBranchIdState(found.branch_id || 'all');
       }
 
-      const rps = await db.rolePermissions.getByRoleId(found.role_id);
-      const allPerms = await db.permissions.getAll();
-      const perms = rps.map(rp => {
-        const p = allPerms.find(perm => perm.id === rp.permission_id);
-        return p ? p.name : '';
-      }).filter(Boolean);
+      const perms = await computePermissions(found);
       setRolePermissions(perms);
 
       return true;
@@ -116,25 +137,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setActiveBranchIdState('all');
   };
 
+  const _isAdmin = (): boolean => {
+    return isSuperOrOwner(user);
+  };
+
   const hasPermission = (permissionName: string): boolean => {
     if (!user) return false;
-    // Super Admins bypass permission constraints
-    const isSuperAdmin = _isAdmin();
-    if (isSuperAdmin) return true;
+    // Super Admins & Owners bypass permission constraints
+    if (_isAdmin()) return true;
     
+    // Check role permissions strictly
     return rolePermissions.includes(permissionName);
   };
 
-  const _isAdmin = (): boolean => {
-    if (!user) return false;
-    const adminRole = allUsersList.find(u => u.id === user.id)?.role;
-    return adminRole?.name === 'Super Admin';
-  };
-
   const setActiveBranchId = (id: string) => {
-    // If not super admin, restrict toggling
+    // If not super admin or owner, restrict toggling
     if (!_isAdmin() && user) {
-      setActiveBranchIdState(user.branch_id);
+      setActiveBranchIdState(user.branch_id || 'all');
     } else {
       setActiveBranchIdState(id);
     }

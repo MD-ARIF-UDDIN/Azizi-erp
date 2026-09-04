@@ -216,10 +216,20 @@ export interface AuditLog {
   created_at: string;
 }
 
+export interface DocumentType {
+  id: string;
+  name: string;
+  description?: string;
+  is_active: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ClientDocument {
   id: string;
   customer_id: string;
-  document_type: 'Visa' | 'Emirates ID' | 'Passport' | 'Trade License' | 'Other';
+  document_type: string;
   document_number?: string;
   expiry_date: string;
   notified: boolean;

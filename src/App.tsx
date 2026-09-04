@@ -22,6 +22,7 @@ import { ReportsCenter } from './features/reports/ReportsCenter';
 import { DailySheet } from './features/reports/DailySheet';
 import { SettingsPanel } from './features/settings/SettingsPanel';
 import { ExpiryTracker } from './features/documents/ExpiryTracker';
+import { DocumentTypes } from './features/documents/DocumentTypes';
 import { QuotationsList } from './features/quotations/QuotationsList';
 import { CreateQuotation } from './features/quotations/CreateQuotation';
 import { AccountList } from './features/accounts/AccountList';
@@ -289,6 +290,22 @@ function App() {
               element={
                 <AuthenticatedRoute>
                   <ExpiryTracker />
+                </AuthenticatedRoute>
+              }
+            />
+            <Route
+              path="/expiry-tracker/types"
+              element={
+                <AuthenticatedRoute>
+                  <DocumentTypes />
+                </AuthenticatedRoute>
+              }
+            />
+            <Route
+              path="/document-types"
+              element={
+                <AuthenticatedRoute>
+                  <DocumentTypes />
                 </AuthenticatedRoute>
               }
             />

@@ -519,29 +519,18 @@ export const QuotationsList: React.FC = () => {
                             </td>
                             <td className="px-3 py-2 border border-gray-300 text-black w-[78%]" colSpan={3}>
                               {(() => {
-                                if (!quote.customer) return <span className="font-extrabold text-sm">Walk-in Customer</span>;
-                                if (quote.person_name) {
-                                  return (
-                                    <div className="flex flex-col">
-                                      <span className="font-black text-black text-[13px]">{quote.person_name}</span>
-                                      <span className="text-[11px] text-[#000ba0] font-bold mt-0.5">
-                                        Company Account: {quote.customer.name}
-                                      </span>
-                                    </div>
-                                  );
-                                }
-                                const parentName = quote.customer.company?.name;
-                                if (parentName) {
-                                  return (
-                                    <div className="flex flex-col">
-                                      <span className="font-black text-black text-[13px]">{quote.customer.name}</span>
-                                      <span className="text-[11px] text-[#000ba0] font-bold mt-0.5">
-                                        Company Account: {parentName}
-                                      </span>
-                                    </div>
-                                  );
-                                }
-                                return <span className="font-black text-black text-[13px]">{quote.customer.name}</span>;
+                                if (!quote.customer) return <span className="font-extrabold text-sm">Walk-in / Individual</span>;
+                                const companyName = quote.customer.customer_type === 'company' 
+                                  ? quote.customer.name 
+                                  : (quote.customer.company?.name || quote.customer.name);
+                                return (
+                                  <div className="flex flex-col">
+                                    <span className="font-black text-black text-[13px] uppercase">{companyName}</span>
+                                    {quote.customer.trn && (
+                                      <span className="text-[10px] text-gray-600 font-mono mt-0.5">TRN: {quote.customer.trn}</span>
+                                    )}
+                                  </div>
+                                );
                               })()}
                             </td>
                           </tr>
@@ -550,7 +539,21 @@ export const QuotationsList: React.FC = () => {
                               Mr. / M/s:
                             </td>
                             <td className="px-3 py-1.5 border border-gray-300 text-black font-semibold w-[28%]">
-                              {quote.person_phone || quote.customer?.phone || quote.person_email || quote.customer?.email || 'N/A'}
+                              {(() => {
+                                const memberName = quote.person_name 
+                                  || (quote.customer?.customer_type !== 'company' ? quote.customer?.name : '') 
+                                  || '—';
+                                return (
+                                  <div className="flex flex-col">
+                                    <span className="font-bold text-black text-[12px]">{memberName}</span>
+                                    {(quote.person_phone || quote.customer?.phone) && (
+                                      <span className="text-[10px] text-gray-600 font-mono">
+                                        {quote.person_phone || quote.customer?.phone}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </td>
                             <td className="bg-[#f28f00] text-white font-extrabold px-3 py-1.5 border border-gray-300 w-[22%] uppercase tracking-wider text-center">
                               DATE

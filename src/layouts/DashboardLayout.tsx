@@ -92,10 +92,11 @@ interface SidebarDropdownProps {
   icon: React.ReactNode;
   collapsed: boolean;
   permission?: string;
-  links: { to: string; label: string; permission?: string }[];
+  badge?: number;
+  links: { to: string; label: string; permission?: string; badge?: number }[];
 }
 
-const SidebarDropdown: React.FC<SidebarDropdownProps> = ({ label, icon, collapsed, permission, links }) => {
+const SidebarDropdown: React.FC<SidebarDropdownProps> = ({ label, icon, collapsed, permission, badge, links }) => {
   const location = useLocation();
   const { hasPermission } = useAuth();
 
@@ -105,7 +106,7 @@ const SidebarDropdown: React.FC<SidebarDropdownProps> = ({ label, icon, collapse
   const isAllowed = !permission || hasPermission(permission);
 
   const isAnyActive = allowedLinks.some(link => {
-    if (link.to === '/sales' || link.to === '/quotations' || link.to === '/customers' || link.to === '/services' || link.to === '/expenses' || link.to === '/payments') {
+    if (link.to === '/sales' || link.to === '/quotations' || link.to === '/customers' || link.to === '/services' || link.to === '/expenses' || link.to === '/payments' || link.to === '/expiry-tracker') {
       return location.pathname === link.to;
     }
     return location.pathname === link.to || (link.to !== '/' && location.pathname.startsWith(link.to));
@@ -133,11 +134,25 @@ const SidebarDropdown: React.FC<SidebarDropdownProps> = ({ label, icon, collapse
           </div>
           {!collapsed && <span className={isAnyActive && !isOpen ? 'text-primary' : 'text-black'}>{label}</span>}
         </div>
-        {!collapsed && (
-          <ChevronDown
-            size={13}
-            className={`transition-transform duration-200 text-black ${isOpen ? 'rotate-180' : ''}`}
-          />
+        
+        <div className="flex items-center gap-1.5">
+          {!collapsed && badge !== undefined && badge > 0 && (
+            <span className="bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full shrink-0">
+              {badge}
+            </span>
+          )}
+          {!collapsed && (
+            <ChevronDown
+              size={13}
+              className={`transition-transform duration-200 text-black ${isOpen ? 'rotate-180' : ''}`}
+            />
+          )}
+        </div>
+
+        {collapsed && badge !== undefined && badge > 0 && (
+          <span className="absolute top-1 right-1 bg-rose-500 text-white text-[8px] font-bold w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0">
+            {badge}
+          </span>
         )}
 
         {collapsed && (
@@ -147,13 +162,18 @@ const SidebarDropdown: React.FC<SidebarDropdownProps> = ({ label, icon, collapse
               <Link
                 key={link.to}
                 to={link.to}
-                className={`block px-2 py-1.5 rounded-md transition-colors ${
+                className={`flex items-center justify-between px-2 py-1.5 rounded-md transition-colors ${
                   location.pathname === link.to
                     ? 'bg-primary/10 text-primary font-bold'
                     : 'text-black hover:bg-slate-100 font-semibold'
                 }`}
               >
-                {link.label}
+                <span>{link.label}</span>
+                {link.badge !== undefined && link.badge > 0 && (
+                  <span className="bg-rose-500 text-white text-[9px] font-bold px-1 rounded-full">
+                    {link.badge}
+                  </span>
+                )}
               </Link>
             ))}
           </div>
@@ -168,13 +188,18 @@ const SidebarDropdown: React.FC<SidebarDropdownProps> = ({ label, icon, collapse
               <Link
                 key={link.to}
                 to={link.to}
-                className={`flex items-center px-2 py-1.5 rounded-md text-xs transition-all duration-150 ${
+                className={`flex items-center justify-between px-2 py-1.5 rounded-md text-xs transition-all duration-150 ${
                   isChildActive
                     ? 'text-primary bg-white font-bold shadow-2xs border border-border/70'
                     : 'text-black hover:bg-slate-200/50 font-medium'
                 }`}
               >
-                {link.label}
+                <span>{link.label}</span>
+                {link.badge !== undefined && link.badge > 0 && (
+                  <span className="bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full">
+                    {link.badge}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -465,13 +490,16 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                   ]}
                 />
 
-                <SidebarLink
-                  to="/expiry-tracker"
-                  icon={<Calendar size={17} />}
+                <SidebarDropdown
                   label="Expiry Tracker"
+                  icon={<Calendar size={17} />}
                   collapsed={isCollapsedResponsive}
                   permission="Sales.View"
                   badge={expiryCount > 0 ? expiryCount : undefined}
+                  links={[
+                    { to: '/expiry-tracker', label: 'Expiry Tracker', permission: 'Sales.View', badge: expiryCount > 0 ? expiryCount : undefined },
+                    { to: '/expiry-tracker/types', label: 'Document Types', permission: 'Sales.View' }
+                  ]}
                 />
 
                 {/* 2. FINANCE & ACCOUNTS */}

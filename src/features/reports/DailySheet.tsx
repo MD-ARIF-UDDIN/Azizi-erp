@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../lib/db';
 import { useAuth } from '../../components/AuthProvider';
 import { PermissionGuard } from '../../components/PermissionGuard';
+import { Logo } from '../../components/Logo';
 import {
   Calendar,
   User,
@@ -15,7 +16,7 @@ import {
 export const DailySheet: React.FC = () => {
   const { activeBranchId, availableBranches } = useAuth();
 
-  // ── Filters: ONLY Date and Staff ──
+  // ── Filters: Date and Staff ──
   const getTodayStr = () => new Date().toISOString().split('T')[0];
   const [selectedDate, setSelectedDate] = useState<string>(getTodayStr());
   const [selectedStaffId, setSelectedStaffId] = useState<string>('all');
@@ -84,6 +85,7 @@ export const DailySheet: React.FC = () => {
 
   // ── Aggregate Metrics ──
   let totalGrossSales = 0;
+  let totalSalesExpense = 0;
   let totalDiscount = 0;
   let totalCollected = 0;
   let totalDue = 0;
@@ -97,6 +99,9 @@ export const DailySheet: React.FC = () => {
     const sGrandTotal = Number(s.grand_total || 0);
     totalGrossSales += sGrandTotal;
     totalDiscount += Number(s.discount || 0);
+
+    const saleCost = s.items?.reduce((sum: number, it: any) => sum + (Number(it.quantity || 1) * Number(it.service?.expense || 0)), 0) || 0;
+    totalSalesExpense += saleCost;
     
     // Resolve payments
     const sPayments = s.payments || [];
@@ -107,7 +112,6 @@ export const DailySheet: React.FC = () => {
     totalDue += sDue;
 
     // Profit calculation: Margin based strictly on collected amount
-    const saleCost = s.items?.reduce((sum: number, it: any) => sum + (Number(it.quantity || 1) * Number(it.service?.expense || 0)), 0) || 0;
     const potentialMargin = Math.max(0, sGrandTotal - saleCost);
     const paidRatio = sGrandTotal > 0 ? Math.min(1, sPaid / sGrandTotal) : 0;
     const collectedProfit = potentialMargin * paidRatio;
@@ -152,6 +156,7 @@ export const DailySheet: React.FC = () => {
       'Service',
       'Staff',
       'Grand Total (AED)',
+      'Expense / Cost (AED)',
       'Paid (AED)',
       'Due (AED)',
       'Profit (AED)',
@@ -191,6 +196,7 @@ export const DailySheet: React.FC = () => {
         serviceNames,
         staffName,
         sGrandTotal.toFixed(2),
+        saleCost.toFixed(2),
         sPaid.toFixed(2),
         sDue.toFixed(2),
         collectedProfit.toFixed(2),
@@ -199,9 +205,9 @@ export const DailySheet: React.FC = () => {
     });
 
     const csvContent = [
-      `"AZIZI TYPING & STAMP MAKING - DAILY SHEET"`,
+      `"AZIZI TYPING & STAMP MAKING - DAILY CLOSING STATEMENT"`,
       `"Date: ${selectedDate}","Staff: ${selectedStaffName}","Branch: ${activeBranchName}"`,
-      `"Total Sales: ${totalGrossSales.toFixed(2)} AED","Total Profit: ${totalProfit.toFixed(2)} AED","Total Collected: ${totalCollected.toFixed(2)} AED","Total Expenses: ${totalExpenseAmount.toFixed(2)} AED","Net Cash: ${netCashInHand.toFixed(2)} AED"`,
+      `"Total Sales: ${totalGrossSales.toFixed(2)} AED","Total Invoice Expense: ${totalSalesExpense.toFixed(2)} AED","Total Profit: ${totalProfit.toFixed(2)} AED","Total Collected: ${totalCollected.toFixed(2)} AED","Total Expenses: ${totalExpenseAmount.toFixed(2)} AED","Net Cash: ${netCashInHand.toFixed(2)} AED"`,
       '',
       headers.join(','),
       ...rows.map(r => r.map(val => `"${val.replace(/"/g, '""')}"`).join(','))
@@ -222,32 +228,87 @@ export const DailySheet: React.FC = () => {
 
   return (
     <PermissionGuard permission="Reports.View" fallback="ui">
-      <div className="space-y-5 print:p-0 print:m-0 print:bg-white print:text-black">
+      {/* ── SCOPED PRINT STYLES FOR LANDSCAPE A4 CORPORATE REPORTING ── */}
+      <style>{`
+        @page {
+          size: A4 landscape !important;
+          margin: 6mm 8mm 6mm 8mm !important;
+        }
+        @media print {
+          html, body, #root, main, #root > div {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            color: #0f172a !important;
+            overflow: visible !important;
+          }
+          .daily-sheet-print-container {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+          }
+          .daily-report-table {
+            width: 100% !important;
+            table-layout: fixed !important;
+            border-collapse: collapse !important;
+            margin: 0 !important;
+          }
+          .daily-report-table th, 
+          .daily-report-table td {
+            border: 1px solid #94a3b8 !important;
+            padding: 4px 5px !important;
+            font-size: 7.5pt !important;
+            line-height: 1.2 !important;
+            white-space: normal !important;
+            word-break: break-word !important;
+            overflow-wrap: anywhere !important;
+            box-sizing: border-box !important;
+          }
+          .daily-report-table thead th {
+            background-color: #f1f5f9 !important;
+            color: #0f172a !important;
+            font-weight: 800 !important;
+            text-transform: uppercase !important;
+            font-size: 7pt !important;
+            letter-spacing: 0.02em !important;
+          }
+          .print-avoid-break {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+        }
+      `}</style>
+
+      <div className="daily-sheet-print-container space-y-5 print:space-y-3 print:p-0 print:m-0 print:bg-white print:text-slate-900">
         
-        {/* ── HEADER & CONTROLS (Screen view) ── */}
+        {/* ── SCREEN VIEW: HEADER & CONTROLS ── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-foreground m-0 flex items-center gap-2">
               <Layers className="text-primary" size={20} />
-              Daily Sheet
+              Daily Closing &amp; Transaction Sheet
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Daily transaction log, cash collections, expenses &amp; staff performance.
+              Daily transaction ledger, cash collections, expense logs &amp; shift reconciliation.
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-card hover:bg-muted border border-border rounded-xl text-xs font-bold text-foreground shadow-2xs transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-card hover:bg-muted border border-border rounded-xl text-xs font-bold text-foreground shadow-2xs transition-all cursor-pointer"
             >
-              <Printer size={14} />
-              <span>Print</span>
+              <Printer size={14} className="text-primary" />
+              <span>Print / Download PDF</span>
             </button>
 
             <button
               onClick={handleExportCSV}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold shadow-2xs transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold shadow-2xs transition-all cursor-pointer"
             >
               <Download size={14} />
               <span>Export CSV</span>
@@ -255,7 +316,7 @@ export const DailySheet: React.FC = () => {
           </div>
         </div>
 
-        {/* ── COMPACT FILTERS TOOLBAR: DATE WISE & STAFF WISE ── */}
+        {/* ── SCREEN VIEW: FILTER CONTROLS ── */}
         <div className="bg-card border border-border/80 p-3 rounded-2xl shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 print:hidden">
           <div className="flex flex-wrap items-center gap-2.5 flex-1">
             
@@ -308,37 +369,79 @@ export const DailySheet: React.FC = () => {
           </div>
         </div>
 
-        {/* ── PRINT HEADER (Visible only during Print / PDF) ── */}
-        <div className="hidden print:block pb-4 mb-4 border-b border-gray-300 text-center space-y-1">
-          <div className="flex items-center justify-between gap-3 pb-2 border-b border-gray-200">
-            <img src="/logo.png" alt="AZIZI Logo" className="w-12 h-12 object-contain" />
-            <div>
-              <h2 className="text-base font-bold text-[#000ba0] tracking-wide">
-                AZIZI TYPING &amp; STAMP MAKING
-              </h2>
-              <p className="text-[11px] text-gray-700 font-semibold">
-                Abu Dhabi, Musaffah M37 • Phone: 0542797933
-              </p>
+        {/* ── PRINT VIEW: CORPORATE REPORT HEADER ── */}
+        <div className="hidden print:block pb-2 border-b-2 border-slate-800">
+          <div className="flex items-center justify-between gap-4">
+            {/* Logo & Company Title */}
+            <div className="flex items-center gap-3">
+              <Logo size={42} />
+              <div>
+                <h1 className="text-base font-extrabold text-[#000ba0] tracking-tight uppercase leading-none font-heading m-0">
+                  AZIZI TYPING &amp; STAMP MAKING
+                </h1>
+                <p className="text-[8.5pt] font-semibold text-slate-700 mt-0.5 mb-0">
+                  Typing, Business Setup, Document Clearing &amp; Stamp Services
+                </p>
+                <p className="text-[7.5pt] text-slate-500 font-medium m-0">
+                  Abu Dhabi, Musaffah M37 • Phone: +971 54 279 7933 • Branch: {activeBranchName}
+                </p>
+              </div>
             </div>
-            <div className="text-right text-[10px] text-gray-600 font-mono">
-              Printed: {new Date().toLocaleString()}
-            </div>
-          </div>
 
-          <div className="pt-2 flex items-center justify-between text-xs">
-            <div className="font-bold text-black uppercase tracking-wider text-sm bg-gray-100 px-3 py-1 rounded">
-              DAILY TRANSACTION &amp; CLOSING SHEET
-            </div>
-            <div className="text-right font-medium text-black">
-              <span>Date: <strong>{selectedDate}</strong></span> • 
-              <span className="ml-2">Staff: <strong>{selectedStaffName}</strong></span> • 
-              <span className="ml-2">Branch: <strong>{activeBranchName}</strong></span>
+            {/* Report Title & Metadata Box */}
+            <div className="text-right border-l-2 border-slate-300 pl-4 space-y-0.5 min-w-[240px]">
+              <div className="text-[9.5pt] font-black uppercase tracking-wider text-slate-900 bg-slate-100 px-2 py-0.5 rounded inline-block border border-slate-300">
+                DAILY TRANSACTION &amp; CLOSING SHEET
+              </div>
+              <div className="text-[8pt] text-slate-700">
+                <span>Date: <strong className="text-slate-900 font-mono">{selectedDate}</strong></span>
+                <span className="mx-2">•</span>
+                <span>Branch: <strong className="text-slate-900">{activeBranchName}</strong></span>
+              </div>
+              <div className="text-[8pt] text-slate-700">
+                <span>Staff: <strong className="text-slate-900">{selectedStaffName}</strong></span>
+              </div>
+              <div className="text-[7pt] text-slate-400 font-mono">
+                Printed: {new Date().toLocaleString()}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* ── MINIMAL KPI SUMMARY CARDS ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 print:hidden">
+        {/* ── PRINT VIEW: SHIFT CLOSING CASH DRAWER SUMMARY ── */}
+        <div className="hidden print:grid grid-cols-7 gap-2 pb-2 text-[8pt] print-avoid-break">
+          <div className="border border-slate-300 bg-slate-50 p-1.5 rounded text-center">
+            <div className="text-[6.5pt] uppercase font-bold text-slate-500">Invoices</div>
+            <div className="text-[9.5pt] font-black text-slate-900 font-mono mt-0.5">{filteredSales.length}</div>
+          </div>
+          <div className="border border-slate-300 bg-slate-50 p-1.5 rounded text-center">
+            <div className="text-[6.5pt] uppercase font-bold text-slate-500">Gross Sales</div>
+            <div className="text-[9.5pt] font-black text-slate-900 font-mono mt-0.5">{totalGrossSales.toFixed(2)} <span className="text-[6.5pt] font-normal">AED</span></div>
+          </div>
+          <div className="border border-slate-300 bg-rose-50/60 p-1.5 rounded text-center">
+            <div className="text-[6.5pt] uppercase font-bold text-rose-800">Invoice Expenses</div>
+            <div className="text-[9.5pt] font-black text-rose-700 font-mono mt-0.5">{totalSalesExpense.toFixed(2)} <span className="text-[6.5pt] font-normal">AED</span></div>
+          </div>
+          <div className="border border-slate-300 bg-emerald-50/60 p-1.5 rounded text-center">
+            <div className="text-[6.5pt] uppercase font-bold text-emerald-800">Total Collected</div>
+            <div className="text-[9.5pt] font-black text-emerald-700 font-mono mt-0.5">+{totalCollected.toFixed(2)} <span className="text-[6.5pt] font-normal">AED</span></div>
+          </div>
+          <div className="border border-slate-300 bg-slate-50 p-1.5 rounded text-center">
+            <div className="text-[6.5pt] uppercase font-bold text-slate-500">Cash In Hand</div>
+            <div className="text-[9.5pt] font-black text-slate-800 font-mono mt-0.5">{cashAmount.toFixed(2)} <span className="text-[6.5pt] font-normal">AED</span></div>
+          </div>
+          <div className="border-2 border-slate-800 bg-slate-100 p-1.5 rounded text-center">
+            <div className="text-[6.5pt] uppercase font-black text-slate-900">Net Cash In Drawer</div>
+            <div className="text-[9.5pt] font-black text-slate-900 font-mono mt-0.5">{netCashInHand.toFixed(2)} <span className="text-[6.5pt] font-normal">AED</span></div>
+          </div>
+          <div className="border border-slate-300 bg-amber-50/60 p-1.5 rounded text-center">
+            <div className="text-[6.5pt] uppercase font-bold text-amber-800">Outstanding Dues</div>
+            <div className="text-[9.5pt] font-black text-amber-700 font-mono mt-0.5">{totalDue.toFixed(2)} <span className="text-[6.5pt] font-normal">AED</span></div>
+          </div>
+        </div>
+
+        {/* ── SCREEN VIEW: SUMMARY KPI CARDS ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 print:hidden">
           
           {/* Total Invoices */}
           <div className="bg-card border border-border/80 px-3.5 py-2.5 rounded-xl shadow-2xs">
@@ -357,6 +460,16 @@ export const DailySheet: React.FC = () => {
             </span>
             <div className="text-base font-bold text-foreground mt-0.5">
               {totalGrossSales.toFixed(2)} <span className="text-[10px] text-muted-foreground font-normal">AED</span>
+            </div>
+          </div>
+
+          {/* Invoice Expense / Cost */}
+          <div className="bg-card border border-border/80 px-3.5 py-2.5 rounded-xl shadow-2xs">
+            <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold uppercase tracking-wider block">
+              Inv. Expenses
+            </span>
+            <div className="text-base font-bold text-rose-600 dark:text-rose-400 mt-0.5">
+              {totalSalesExpense.toFixed(2)} <span className="text-[10px] text-muted-foreground font-normal">AED</span>
             </div>
           </div>
 
@@ -380,10 +493,10 @@ export const DailySheet: React.FC = () => {
             </div>
           </div>
 
-          {/* Expenses */}
+          {/* Operational Expenses */}
           <div className="bg-card border border-border/80 px-3.5 py-2.5 rounded-xl shadow-2xs">
             <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold uppercase tracking-wider block">
-              Expenses
+              Daily Exp. Out
             </span>
             <div className="text-base font-bold text-rose-600 dark:text-rose-400 mt-0.5">
               -{totalExpenseAmount.toFixed(2)} <span className="text-[10px] text-muted-foreground font-normal">AED</span>
@@ -412,11 +525,11 @@ export const DailySheet: React.FC = () => {
 
         </div>
 
-        {/* ── PAYMENT METHODS MINI-BAR (CLEAN & MINIMAL) ── */}
+        {/* ── SCREEN VIEW: PAYMENT METHODS MINI-BAR ── */}
         <div className="bg-card border border-border/80 px-4 py-2 rounded-xl shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs print:hidden">
           <div className="flex items-center gap-1.5 font-bold text-muted-foreground text-[11px]">
             <CreditCard size={13} className="text-primary" />
-            <span>Breakdown:</span>
+            <span>Collections Breakdown:</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-4 text-xs">
@@ -440,43 +553,44 @@ export const DailySheet: React.FC = () => {
 
             <div className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-amber-500" />
-              <span className="text-muted-foreground text-[11px]">Uncollected:</span>
+              <span className="text-muted-foreground text-[11px]">Uncollected Dues:</span>
               <strong className="text-amber-600 dark:text-amber-400 font-mono">{totalDue.toFixed(2)} AED</strong>
             </div>
           </div>
         </div>
 
         {/* ── DAILY TRANSACTIONS TABLE ── */}
-        <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-2xs print:border-none print:shadow-none">
+        <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-2xs print:border-none print:shadow-none print:overflow-visible">
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-muted/60 text-muted-foreground font-semibold border-b border-border print:bg-gray-100 print:text-black">
+          <div className="overflow-x-auto print:overflow-visible">
+            <table className="daily-report-table w-full text-left text-xs border-collapse">
+              <thead className="bg-muted/60 text-muted-foreground font-semibold border-b border-border print:bg-slate-100 print:text-slate-900">
                 <tr>
-                  <th className="px-3 py-2.5 text-center w-8">#</th>
-                  <th className="px-3 py-2.5 w-16">Time</th>
-                  <th className="px-3 py-2.5 w-24">Invoice #</th>
-                  <th className="px-3 py-2.5">Company</th>
-                  <th className="px-3 py-2.5">Member Name</th>
-                  <th className="px-3 py-2.5">Service</th>
-                  <th className="px-3 py-2.5 w-24">Staff</th>
-                  <th className="px-3 py-2.5 text-right w-20">Total</th>
-                  <th className="px-3 py-2.5 text-right w-20">Paid</th>
-                  <th className="px-3 py-2.5 text-right w-20">Due</th>
-                  <th className="px-3 py-2.5 text-right w-20">Profit</th>
+                  <th style={{ width: '3%' }} className="px-2 py-2 text-center">#</th>
+                  <th style={{ width: '5%' }} className="px-2 py-2">Time</th>
+                  <th style={{ width: '7%' }} className="px-2 py-2">Invoice #</th>
+                  <th style={{ width: '16%' }} className="px-2 py-2">Company / Client</th>
+                  <th style={{ width: '13%' }} className="px-2 py-2">Member Name</th>
+                  <th style={{ width: '18%' }} className="px-2 py-2">Services Rendered</th>
+                  <th style={{ width: '7%' }} className="px-2 py-2">Staff</th>
+                  <th style={{ width: '6%' }} className="px-2 py-2 text-right">Total</th>
+                  <th style={{ width: '6%' }} className="px-2 py-2 text-right">Expense</th>
+                  <th style={{ width: '6%' }} className="px-2 py-2 text-right">Paid</th>
+                  <th style={{ width: '6%' }} className="px-2 py-2 text-right">Due</th>
+                  <th style={{ width: '7%' }} className="px-2 py-2 text-right">Profit</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/60 text-foreground print:text-black">
+              <tbody className="divide-y divide-border/60 text-foreground print:divide-slate-300 print:text-slate-900">
                 {loading ? (
                   <tr>
-                    <td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">
+                    <td colSpan={12} className="px-4 py-12 text-center text-muted-foreground">
                       <div className="inline-block h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin mb-2" />
                       <p>Loading daily sheet transactions...</p>
                     </td>
                   </tr>
                 ) : filteredSales.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="px-4 py-12 text-center text-muted-foreground italic">
+                    <td colSpan={12} className="px-4 py-12 text-center text-muted-foreground italic">
                       No invoices recorded for {selectedDate} with the selected staff filter.
                     </td>
                   </tr>
@@ -503,46 +617,46 @@ export const DailySheet: React.FC = () => {
                     const collectedProfit = potentialMargin * paidRatio;
 
                     return (
-                      <tr key={s.id} className="hover:bg-muted/40 transition-colors print:hover:bg-transparent">
-                        <td className="px-3 py-2.5 text-center font-mono text-muted-foreground">{idx + 1}</td>
-                        <td className="px-3 py-2.5 font-mono text-muted-foreground whitespace-nowrap">{timeStr}</td>
-                        <td className="px-3 py-2.5 font-bold font-mono text-foreground whitespace-nowrap">
+                      <tr key={s.id} className="hover:bg-muted/40 transition-colors print:hover:bg-transparent print-avoid-break">
+                        <td className="px-2 py-1.5 text-center font-mono text-muted-foreground print:text-slate-700">{idx + 1}</td>
+                        <td className="px-2 py-1.5 font-mono text-muted-foreground print:text-slate-700 whitespace-nowrap">{timeStr}</td>
+                        <td className="px-2 py-1.5 font-bold font-mono text-foreground print:text-slate-900 whitespace-nowrap">
                           {s.invoice_no}
                         </td>
                         
                         {/* Company Column */}
-                        <td className="px-3 py-2.5">
+                        <td className="px-2 py-1.5">
                           {companyName ? (
                             <div>
-                              <span className="font-semibold text-foreground">{companyName}</span>
-                              <span className="ml-1.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-500/10 text-blue-600 border border-blue-500/20">
-                                Co.
+                              <span className="font-semibold text-foreground print:text-slate-900">{companyName}</span>
+                              <span className="ml-1 px-1 py-0.2 rounded text-[8px] font-bold bg-blue-500/10 text-blue-600 border border-blue-500/20 print:border-slate-300">
+                                Co
                               </span>
                             </div>
                           ) : (
-                            <span className="text-muted-foreground italic">Walk-in / Individual</span>
+                            <span className="text-muted-foreground print:text-slate-500 italic">Walk-in / Individual</span>
                           )}
                         </td>
 
                         {/* Member Name Column */}
-                        <td className="px-3 py-2.5">
-                          <div className="font-medium text-foreground">
+                        <td className="px-2 py-1.5">
+                          <div className="font-medium text-foreground print:text-slate-900 leading-tight">
                             {memberNames || '—'}
                           </div>
                           {s.customer?.phone && (
-                            <div className="text-[10px] text-muted-foreground font-mono">{s.customer.phone}</div>
+                            <div className="text-[9px] text-muted-foreground print:text-slate-500 font-mono">{s.customer.phone}</div>
                           )}
                         </td>
 
                         {/* Service Column */}
-                        <td className="px-3 py-2.5">
-                          <div className="space-y-0.5 max-w-xs">
+                        <td className="px-2 py-1.5">
+                          <div className="space-y-0.5">
                             {s.items?.map((it: any, iIdx: number) => (
-                              <div key={iIdx} className="truncate text-[11px] flex items-center gap-1">
-                                <span className="font-semibold text-foreground">{it.service?.name || 'Service'}</span>
-                                <span className="text-muted-foreground font-mono">x{it.quantity}</span>
+                              <div key={iIdx} className="text-[9.5pt] print:text-[7pt] leading-tight flex items-start gap-1">
+                                <span className="font-semibold text-foreground print:text-slate-900">• {it.service?.name || 'Service'}</span>
+                                <span className="text-muted-foreground print:text-slate-600 font-mono shrink-0">(x{it.quantity})</span>
                                 {it.person_name && (
-                                  <span className="text-primary text-[10px] font-medium truncate">({it.person_name})</span>
+                                  <span className="text-primary print:text-slate-600 text-[9px] font-medium shrink-0">[{it.person_name}]</span>
                                 )}
                               </div>
                             ))}
@@ -550,32 +664,43 @@ export const DailySheet: React.FC = () => {
                         </td>
 
                         {/* Staff Column */}
-                        <td className="px-3 py-2.5 whitespace-nowrap">
-                          <span className="inline-block px-2 py-0.5 rounded-md bg-muted text-foreground font-medium text-[11px]">
+                        <td className="px-2 py-1.5 whitespace-nowrap">
+                          <span className="inline-block px-1.5 py-0.5 rounded bg-muted print:bg-slate-100 text-foreground print:text-slate-900 font-medium text-[10px]">
                             {staffName}
                           </span>
                         </td>
 
-                        {/* Financials */}
-                        <td className="px-3 py-2.5 text-right font-bold text-foreground whitespace-nowrap">
+                        {/* Total Financials */}
+                        <td className="px-2 py-1.5 text-right font-bold text-foreground print:text-slate-900 whitespace-nowrap font-mono">
                           {sGrandTotal.toFixed(2)}
                         </td>
-                        <td className="px-3 py-2.5 text-right font-semibold text-emerald-600 whitespace-nowrap">
-                          <div>+{sPaid.toFixed(2)}</div>
-                          <div className="text-[9px] text-muted-foreground font-normal truncate">{methods}</div>
+
+                        {/* Expense Column */}
+                        <td className="px-2 py-1.5 text-right font-semibold text-rose-600 print:text-slate-800 whitespace-nowrap font-mono">
+                          {saleCost.toFixed(2)}
                         </td>
-                        <td className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">
+
+                        {/* Paid Column */}
+                        <td className="px-2 py-1.5 text-right font-semibold text-emerald-600 print:text-slate-900 whitespace-nowrap font-mono">
+                          <div>{sPaid > 0 ? `+${sPaid.toFixed(2)}` : '0.00'}</div>
+                          <div className="text-[8px] text-muted-foreground print:text-slate-500 font-normal truncate">{methods}</div>
+                        </td>
+
+                        {/* Due Column */}
+                        <td className="px-2 py-1.5 text-right font-semibold whitespace-nowrap font-mono">
                           {sDue > 0 ? (
-                            <span className="text-amber-600 font-bold">{sDue.toFixed(2)}</span>
+                            <span className="text-amber-600 print:text-rose-700 font-bold">{sDue.toFixed(2)}</span>
                           ) : (
-                            <span className="text-muted-foreground">0.00</span>
+                            <span className="text-muted-foreground print:text-slate-400">0.00</span>
                           )}
                         </td>
-                        <td className="px-3 py-2.5 text-right font-black whitespace-nowrap">
+
+                        {/* Profit Column */}
+                        <td className="px-2 py-1.5 text-right font-black whitespace-nowrap font-mono">
                           {collectedProfit > 0 ? (
-                            <span className="text-emerald-600 dark:text-emerald-400">+{collectedProfit.toFixed(2)}</span>
+                            <span className="text-emerald-600 print:text-slate-900">+{collectedProfit.toFixed(2)}</span>
                           ) : (
-                            <span className="text-muted-foreground">0.00</span>
+                            <span className="text-muted-foreground print:text-slate-400">0.00</span>
                           )}
                         </td>
                       </tr>
@@ -586,22 +711,25 @@ export const DailySheet: React.FC = () => {
 
               {/* Table Footer Totals */}
               {filteredSales.length > 0 && (
-                <tfoot className="bg-muted/80 font-bold border-t-2 border-border text-foreground print:bg-gray-200 print:text-black">
+                <tfoot className="bg-muted/80 font-bold border-t-2 border-border text-foreground print:bg-slate-200 print:text-slate-900 print-avoid-break">
                   <tr>
-                    <td colSpan={7} className="px-3 py-2.5 text-right uppercase tracking-wider text-xs">
-                      Daily Totals:
+                    <td colSpan={7} className="px-2 py-2 text-right uppercase tracking-wider text-[8.5pt] font-extrabold font-heading">
+                      Daily Ledger Totals ({filteredSales.length} Invoices):
                     </td>
-                    <td className="px-3 py-2.5 text-right text-xs font-black text-primary print:text-black">
-                      {totalGrossSales.toFixed(2)} AED
+                    <td className="px-2 py-2 text-right text-[8.5pt] font-black text-primary print:text-slate-900 font-mono">
+                      {totalGrossSales.toFixed(2)}
                     </td>
-                    <td className="px-3 py-2.5 text-right text-xs font-black text-emerald-600 print:text-black">
-                      +{totalCollected.toFixed(2)} AED
+                    <td className="px-2 py-2 text-right text-[8.5pt] font-black text-rose-600 print:text-slate-900 font-mono">
+                      {totalSalesExpense.toFixed(2)}
                     </td>
-                    <td className="px-3 py-2.5 text-right text-xs font-black text-amber-600 print:text-black">
-                      {totalDue.toFixed(2)} AED
+                    <td className="px-2 py-2 text-right text-[8.5pt] font-black text-emerald-600 print:text-slate-900 font-mono">
+                      +{totalCollected.toFixed(2)}
                     </td>
-                    <td className="px-3 py-2.5 text-right text-xs font-black text-emerald-600 print:text-black">
-                      +{totalProfit.toFixed(2)} AED
+                    <td className="px-2 py-2 text-right text-[8.5pt] font-black text-amber-600 print:text-slate-900 font-mono">
+                      {totalDue.toFixed(2)}
+                    </td>
+                    <td className="px-2 py-2 text-right text-[8.5pt] font-black text-emerald-600 print:text-slate-900 font-mono">
+                      +{totalProfit.toFixed(2)}
                     </td>
                   </tr>
                 </tfoot>
@@ -610,43 +738,43 @@ export const DailySheet: React.FC = () => {
           </div>
         </div>
 
-        {/* ── EXPENSES OF THE DAY (If any) ── */}
+        {/* ── DAILY EXPENSES (If any) ── */}
         {filteredExpenses.length > 0 && (
-          <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-xs">
-            <div className="p-3.5 border-b border-border bg-rose-500/5 flex items-center justify-between">
+          <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-xs print:border-none print:shadow-none print:avoid-break">
+            <div className="p-2.5 border-b border-border bg-rose-500/5 print:bg-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <TrendingDown size={16} className="text-rose-600" />
-                <h3 className="text-xs font-bold text-foreground m-0">
-                  Daily Expenses Log ({filteredExpenses.length})
+                <TrendingDown size={14} className="text-rose-600 print:text-slate-900" />
+                <h3 className="text-xs font-bold text-foreground print:text-slate-900 m-0 uppercase tracking-wider">
+                  Daily Expenses Log ({filteredExpenses.length} Records)
                 </h3>
               </div>
-              <strong className="text-xs text-rose-600 font-bold">
-                Total Out: -{totalExpenseAmount.toFixed(2)} AED
+              <strong className="text-xs text-rose-600 print:text-slate-900 font-bold font-mono">
+                Total Expenses Out: -{totalExpenseAmount.toFixed(2)} AED
               </strong>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-muted/40 text-muted-foreground font-semibold border-b border-border">
+            <div className="overflow-x-auto print:overflow-visible">
+              <table className="daily-report-table w-full text-left text-xs border-collapse">
+                <thead className="bg-muted/40 text-muted-foreground font-semibold border-b border-border print:bg-slate-100 print:text-slate-900">
                   <tr>
-                    <th className="px-3.5 py-2 w-10">#</th>
-                    <th className="px-3.5 py-2">Category</th>
-                    <th className="px-3.5 py-2">Description</th>
-                    <th className="px-3.5 py-2">Paid To</th>
-                    <th className="px-3.5 py-2">Method</th>
-                    <th className="px-3.5 py-2 text-right">Amount</th>
+                    <th style={{ width: '4%' }} className="px-2 py-1.5 text-center">#</th>
+                    <th style={{ width: '18%' }} className="px-2 py-1.5">Category</th>
+                    <th style={{ width: '38%' }} className="px-2 py-1.5">Description</th>
+                    <th style={{ width: '18%' }} className="px-2 py-1.5">Paid To</th>
+                    <th style={{ width: '10%' }} className="px-2 py-1.5">Method</th>
+                    <th style={{ width: '12%' }} className="px-2 py-1.5 text-right">Amount (AED)</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border/60 text-foreground">
+                <tbody className="divide-y divide-border/60 text-foreground print:divide-slate-300 print:text-slate-900">
                   {filteredExpenses.map((e, idx) => (
-                    <tr key={e.id} className="hover:bg-muted/20">
-                      <td className="px-3.5 py-2 text-muted-foreground font-mono">{idx + 1}</td>
-                      <td className="px-3.5 py-2 font-semibold text-rose-600">{e.category?.name || 'Expense'}</td>
-                      <td className="px-3.5 py-2 text-muted-foreground">{e.description || '—'}</td>
-                      <td className="px-3.5 py-2">{e.paid_to || '—'}</td>
-                      <td className="px-3.5 py-2 text-muted-foreground">{e.payment_method}</td>
-                      <td className="px-3.5 py-2 text-right font-bold text-rose-600">
-                        -{Number(e.amount || 0).toFixed(2)} AED
+                    <tr key={e.id} className="hover:bg-muted/20 print-avoid-break">
+                      <td className="px-2 py-1.5 text-center text-muted-foreground print:text-slate-700 font-mono">{idx + 1}</td>
+                      <td className="px-2 py-1.5 font-semibold text-rose-600 print:text-slate-900">{e.category?.name || 'Expense'}</td>
+                      <td className="px-2 py-1.5 text-muted-foreground print:text-slate-700">{e.description || '—'}</td>
+                      <td className="px-2 py-1.5 font-medium">{e.paid_to || '—'}</td>
+                      <td className="px-2 py-1.5 text-muted-foreground print:text-slate-600">{e.payment_method}</td>
+                      <td className="px-2 py-1.5 text-right font-bold text-rose-600 print:text-slate-900 font-mono">
+                        -{Number(e.amount || 0).toFixed(2)}
                       </td>
                     </tr>
                   ))}
@@ -655,6 +783,28 @@ export const DailySheet: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* ── PRINT VIEW ONLY: OFFICIAL VERIFICATION & SIGN-OFF BOX ── */}
+        <div className="hidden print:block pt-5 mt-4 border-t-2 border-slate-300 print-avoid-break">
+          <div className="grid grid-cols-3 gap-8 text-center text-[8pt]">
+            <div className="space-y-6">
+              <div className="font-bold text-slate-700 uppercase tracking-wider">Prepared By (Cashier / Staff)</div>
+              <div className="border-t border-slate-400 pt-1 text-slate-500 font-medium">Signature &amp; Date</div>
+            </div>
+            <div className="space-y-6">
+              <div className="font-bold text-slate-700 uppercase tracking-wider">Verified By (Accountant / Manager)</div>
+              <div className="border-t border-slate-400 pt-1 text-slate-500 font-medium">Signature &amp; Date</div>
+            </div>
+            <div className="space-y-6">
+              <div className="font-bold text-slate-700 uppercase tracking-wider">Approved By (Owner / Director)</div>
+              <div className="border-t border-slate-400 pt-1 text-slate-500 font-medium">Official Stamp &amp; Signature</div>
+            </div>
+          </div>
+          
+          <div className="text-center text-[7pt] text-slate-400 font-medium pt-4 mt-2 border-t border-slate-200">
+            This is an official computer-generated transaction closing report from Azizi Typing &amp; Stamp Making ERP System.
+          </div>
+        </div>
 
       </div>
     </PermissionGuard>

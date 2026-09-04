@@ -2910,29 +2910,18 @@ export const CustomerList: React.FC = () => {
                   </td>
                   <td className="px-3 py-2 border border-gray-300 text-black w-[78%]" colSpan={3}>
                     {(() => {
-                      if (!printSaleData.customer) return <span className="font-extrabold text-sm">Walk-in Customer</span>;
-                      if (printSaleData.person_name) {
-                        return (
-                          <div className="flex flex-col">
-                            <span className="font-black text-black text-[13px]">{printSaleData.person_name}</span>
-                            <span className="text-[11px] text-[#000ba0] font-bold mt-0.5">
-                              Company Account: {printSaleData.customer.name} (Consolidated Billing)
-                            </span>
-                          </div>
-                        );
-                      }
-                      const parentName = printSaleData.customer.company?.name;
-                      if (parentName) {
-                        return (
-                          <div className="flex flex-col">
-                            <span className="font-black text-black text-[13px]">{printSaleData.customer.name}</span>
-                            <span className="text-[11px] text-[#000ba0] font-bold mt-0.5">
-                              Company Account: {parentName} (Consolidated Billing)
-                            </span>
-                          </div>
-                        );
-                      }
-                      return <span className="font-black text-black text-[13px]">{printSaleData.customer.name}</span>;
+                      if (!printSaleData.customer) return <span className="font-extrabold text-sm">Walk-in / Individual</span>;
+                      const companyName = printSaleData.customer.customer_type === 'company' 
+                        ? printSaleData.customer.name 
+                        : (printSaleData.customer.company?.name || printSaleData.customer.name);
+                      return (
+                        <div className="flex flex-col">
+                          <span className="font-black text-black text-[13px] uppercase">{companyName}</span>
+                          {printSaleData.customer.trn && (
+                            <span className="text-[10px] text-gray-600 font-mono mt-0.5">TRN: {printSaleData.customer.trn}</span>
+                          )}
+                        </div>
+                      );
                     })()}
                   </td>
                 </tr>
@@ -2941,7 +2930,20 @@ export const CustomerList: React.FC = () => {
                     Mr. / M/s:
                   </td>
                   <td className="px-3 py-1.5 border border-gray-300 text-black font-semibold w-[28%]">
-                    {printSaleData.customer?.phone || printSaleData.customer?.email || 'N/A'}
+                    {(() => {
+                      const memberName = printSaleData.person_name 
+                        || (printSaleData.customer?.customer_type !== 'company' ? printSaleData.customer?.name : '') 
+                        || printSaleData.items?.[0]?.person_name 
+                        || '—';
+                      return (
+                        <div className="flex flex-col">
+                          <span className="font-bold text-black text-[12px]">{memberName}</span>
+                          {printSaleData.customer?.phone && (
+                            <span className="text-[10px] text-gray-600 font-mono">{printSaleData.customer.phone}</span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="bg-[#f28f00] text-white font-extrabold px-3 py-1.5 border border-gray-300 w-[22%] uppercase tracking-wider text-center">
                     DATE
@@ -2983,6 +2985,10 @@ export const CustomerList: React.FC = () => {
                 <tbody className="divide-y divide-gray-300 text-black">
                   {(() => {
                     const items = printSaleData.items || [];
+                    const uniqueItemPersons = Array.from(
+                      new Set(items.map((it: any) => it.person_name).filter(Boolean))
+                    );
+                    const showPerItemMember = uniqueItemPersons.length > 1;
                     const rows: React.ReactNode[] = [];
                     
                     // Render actual items
@@ -2996,7 +3002,7 @@ export const CustomerList: React.FC = () => {
                           <td className="px-3 py-1.5 text-center border-r border-gray-300 font-medium">{itemDate}</td>
                           <td className="px-3 py-1.5 border-r border-gray-300 text-left">
                             <span className="font-extrabold text-black">{item.service?.name}</span>
-                            {item.person_name && (
+                            {showPerItemMember && item.person_name && (
                               <span className="block font-semibold text-[11px] text-[#000ba0] mt-0.5">
                                 👤 For: {item.person_name}
                               </span>
@@ -3054,7 +3060,7 @@ export const CustomerList: React.FC = () => {
                   Remarks &amp; Internal Notes
                 </div>
                 <div className="p-3 flex-1 flex items-start text-xs font-semibold text-black italic leading-relaxed">
-                  {printSaleData.notes || 'Document completed successfully. Thank you for choosing AZIZI!'}
+                  {printSaleData.notes || ''}
                 </div>
               </div>
 

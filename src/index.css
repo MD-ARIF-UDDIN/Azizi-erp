@@ -155,7 +155,7 @@ select option {
 }
 
 /* ── EXACT ALMAS ERP TABLE RULES ── */
-table:not(.print-invoice-sheet table),
+table:not(.print-invoice-sheet table):not(.daily-report-table):not(.print-daily-sheet table),
 .table-container table,
 .glass table {
   width: 100%;
@@ -163,7 +163,7 @@ table:not(.print-invoice-sheet table),
   text-align: left;
 }
 
-table:not(.print-invoice-sheet table) thead th,
+table:not(.print-invoice-sheet table):not(.daily-report-table):not(.print-daily-sheet table) thead th,
 .table-container table thead th,
 .glass table thead th {
   background-color: #f8fafc !important;
@@ -180,19 +180,19 @@ table:not(.print-invoice-sheet table) thead th,
   white-space: nowrap;
 }
 
-table:not(.print-invoice-sheet table) thead th:last-child,
+table:not(.print-invoice-sheet table):not(.daily-report-table):not(.print-daily-sheet table) thead th:last-child,
 .table-container table thead th:last-child,
 .glass table thead th:last-child {
   border-right: none !important;
 }
 
-table:not(.print-invoice-sheet table) tbody tr,
+table:not(.print-invoice-sheet table):not(.daily-report-table):not(.print-daily-sheet table) tbody tr,
 .table-container table tbody tr,
 .glass table tbody tr {
   transition: background-color 0.15s ease;
 }
 
-table:not(.print-invoice-sheet table) tbody td,
+table:not(.print-invoice-sheet table):not(.daily-report-table):not(.print-daily-sheet table) tbody td,
 .table-container table tbody td,
 .glass table tbody td {
   padding: 0.55rem 0.85rem !important;
@@ -206,25 +206,25 @@ table:not(.print-invoice-sheet table) tbody td,
   color: #000000 !important;           /* Pure Black Data Cells */
 }
 
-table:not(.print-invoice-sheet table) tbody td:last-child,
+table:not(.print-invoice-sheet table):not(.daily-report-table):not(.print-daily-sheet table) tbody td:last-child,
 .table-container table tbody td:last-child,
 .glass table tbody td:last-child {
   border-right: none !important;
 }
 
-table:not(.print-invoice-sheet table) tbody tr:last-child td,
+table:not(.print-invoice-sheet table):not(.daily-report-table):not(.print-daily-sheet table) tbody tr:last-child td,
 .table-container table tbody tr:last-child td,
 .glass table tbody tr:last-child td {
   border-bottom: none !important;
 }
 
-table:not(.print-invoice-sheet table) tbody tr:hover td,
+table:not(.print-invoice-sheet table):not(.daily-report-table):not(.print-daily-sheet table) tbody tr:hover td,
 .table-container table tbody tr:hover td,
 .glass table tbody tr:hover td {
   background-color: #fafaf9 !important;
 }
 
-table:not(.print-invoice-sheet table) tfoot td,
+table:not(.print-invoice-sheet table):not(.daily-report-table):not(.print-daily-sheet table) tfoot td,
 .table-container table tfoot td,
 .glass table tfoot td {
   padding: 0.55rem 0.85rem !important;
@@ -239,7 +239,7 @@ table:not(.print-invoice-sheet table) tfoot td,
   vertical-align: middle;
 }
 
-table:not(.print-invoice-sheet table) tfoot td:last-child,
+table:not(.print-invoice-sheet table):not(.daily-report-table):not(.print-daily-sheet table) tfoot td:last-child,
 .table-container table tfoot td:last-child,
 .glass table tfoot td:last-child {
   border-right: none !important;

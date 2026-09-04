@@ -46,7 +46,6 @@ export const RbacList: React.FC = () => {
     role_id: '',
     branch_id: '',
     status: 'Active' as User['status'],
-    permissions: [] as string[],
     password: ''
   });
 
@@ -64,28 +63,29 @@ export const RbacList: React.FC = () => {
     email: ''
   });
 
-  const [searchQuery, setSearchQuery] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Fetch all data
   const fetchData = async () => {
     setLoading(true);
     try {
-      const uData = await db.users.getAll();
-      const rData = await db.roles.getAll();
-      const pData = await db.permissions.getAll();
-      const bData = await db.branches.getAll();
-      
-      setUsers(uData as any);
-      setRoles(rData);
-      setPermissions(pData);
-      setBranches(bData);
+      const [u, r, p, b] = await Promise.all([
+        db.users.getAll(),
+        db.roles.getAll(),
+        db.permissions.getAll(),
+        db.branches.getAll()
+      ]);
+      setUsers(u);
+      setRoles(r);
+      setPermissions(p);
+      setBranches(b);
 
-      // Load role permission maps
+      // Fetch role-permissions map
       const map: Record<string, string[]> = {};
-      for (const role of rData) {
-        const rp = await db.rolePermissions.getByRoleId(role.id);
-        map[role.id] = rp.map(item => item.permission_id);
+      for (const role of r) {
+        const rpList = await db.rolePermissions.getByRoleId(role.id);
+        map[role.id] = rpList.map(item => item.permission_id);
       }
       setRolePermsMap(map);
     } catch (err) {
@@ -99,7 +99,7 @@ export const RbacList: React.FC = () => {
     fetchData();
   }, []);
 
-  // Employee Form Submit
+  // Employee Form Submit (Pure Role-Based)
   const handleUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userForm.name || !userForm.email || !userForm.role_id || !userForm.branch_id) {
@@ -112,15 +112,20 @@ export const RbacList: React.FC = () => {
       return;
     }
 
+    const payload = {
+      ...userForm,
+      permissions: [] // Pure role-based: clear custom overrides
+    };
+
     try {
       if (editingUser) {
-        await db.users.update(editingUser.id, userForm);
+        await db.users.update(editingUser.id, payload);
       } else {
-        await db.users.create(userForm);
+        await db.users.create(payload);
       }
       setShowUserModal(false);
       setEditingUser(null);
-      setUserForm({ name: '', email: '', phone: '', role_id: '', branch_id: '', status: 'Active', permissions: [], password: '' });
+      setUserForm({ name: '', email: '', phone: '', role_id: '', branch_id: '', status: 'Active', password: '' });
       setErrorMsg('');
       await fetchData();
       reloadSession();
@@ -308,7 +313,15 @@ export const RbacList: React.FC = () => {
                         onClick={() => {
                           setEditingUser(null);
                           setShowPassword(false);
-                          setUserForm({ name: '', email: '', phone: '', role_id: roles[0]?.id || '', branch_id: branches[0]?.id || '', status: 'Active', permissions: [], password: '' });
+                          setUserForm({
+                            name: '',
+                            email: '',
+                            phone: '',
+                            role_id: roles[0]?.id || '',
+                            branch_id: branches[0]?.id || '',
+                            status: 'Active',
+                            password: ''
+                          });
                           setShowUserModal(true);
                         }}
                         className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all w-full sm:w-auto justify-center"
@@ -328,7 +341,7 @@ export const RbacList: React.FC = () => {
                         <tr>
                           <th className="px-6 py-4">Name & Contact</th>
                           <th className="px-6 py-4">Branch</th>
-                          <th className="px-6 py-4">Role</th>
+                          <th className="px-6 py-4">Access Role</th>
                           <th className="px-6 py-4">Status</th>
                           <th className="px-6 py-4 text-right">Actions</th>
                         </tr>
@@ -354,7 +367,8 @@ export const RbacList: React.FC = () => {
                                 {u.branch?.name || <span className="italic text-xs text-muted-foreground/60">No Branch</span>}
                               </td>
                               <td className="px-6 py-4">
-                                <span className="bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full text-xs font-semibold">
+                                <span className="bg-primary/10 text-primary border border-primary/20 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1.5">
+                                  <Shield size={12} />
                                   {u.role?.name || 'Staff'}
                                 </span>
                               </td>
@@ -380,7 +394,6 @@ export const RbacList: React.FC = () => {
                                         role_id: u.role_id,
                                         branch_id: u.branch_id,
                                         status: u.status,
-                                        permissions: u.permissions || [],
                                         password: ''
                                       });
                                       setShowUserModal(true);
@@ -470,7 +483,7 @@ export const RbacList: React.FC = () => {
                             </td>
                             {roles.map(r => {
                               const hasPerm = (rolePermsMap[r.id] || []).includes(p.id);
-                              const isSuperAdmin = r.name === 'Super Admin';
+                              const isSuperAdmin = r.name === 'Super Admin' || r.name === 'Owner';
                               return (
                                 <td key={r.id} className="px-6 py-4 text-center">
                                   <button
@@ -592,10 +605,10 @@ export const RbacList: React.FC = () => {
         {/* EMPLOYEE ADD/EDIT MODAL */}
         {showUserModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-            <div className="glass border border-border w-full max-w-md rounded-2xl overflow-hidden shadow-2xl p-6 space-y-4">
+            <div className="glass border border-border w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-2xl shadow-2xl p-6 space-y-4">
               <div className="flex items-center justify-between border-b border-border pb-3">
                 <h3 className="font-bold text-foreground text-lg">{editingUser ? 'Edit Employee Details' : 'Register New Employee'}</h3>
-                <button onClick={() => setShowUserModal(false)} className="text-muted-foreground hover:text-foreground">
+                <button onClick={() => setShowUserModal(false)} className="text-muted-foreground hover:text-foreground cursor-pointer">
                   <X size={18} />
                 </button>
               </div>
@@ -689,19 +702,7 @@ export const RbacList: React.FC = () => {
                     <label className="text-muted-foreground font-semibold">Access Role *</label>
                     <select
                       value={userForm.role_id}
-                      onChange={(e) => {
-                        const newRoleId = e.target.value;
-                        const defaultPermIds = rolePermsMap[newRoleId] || [];
-                        const defaultNames = defaultPermIds.map(pId => {
-                          const p = permissions.find(perm => perm.id === pId);
-                          return p ? p.name : '';
-                        }).filter(Boolean);
-                        setUserForm(prev => ({
-                          ...prev,
-                          role_id: newRoleId,
-                          permissions: defaultNames
-                        }));
-                      }}
+                      onChange={(e) => setUserForm(prev => ({ ...prev, role_id: e.target.value }))}
                       className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground"
                     >
                       <option value="">Select Role</option>
@@ -738,31 +739,30 @@ export const RbacList: React.FC = () => {
                   </select>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-muted-foreground font-semibold">Direct User Permissions (Custom Configuration)</label>
-                  <div className="grid grid-cols-2 gap-2 max-h-[160px] overflow-y-auto border border-border bg-muted/20 p-2.5 rounded-lg text-foreground">
-                    {permissions.map(p => {
-                      const hasP = userForm.permissions.includes(p.name);
-                      return (
-                        <label key={p.id} className="flex items-center gap-2 cursor-pointer select-none text-[11px] hover:text-primary transition-colors">
-                          <input
-                            type="checkbox"
-                            checked={hasP}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setUserForm(prev => ({ ...prev, permissions: [...prev.permissions, p.name] }));
-                              } else {
-                                setUserForm(prev => ({ ...prev, permissions: prev.permissions.filter(n => n !== p.name) }));
-                              }
-                            }}
-                            className="rounded border-border text-primary focus:ring-0 focus:ring-offset-0 bg-transparent h-3.5 w-3.5"
-                          />
-                          <span>{p.name}</span>
-                        </label>
-                      );
-                    })}
+                {/* ROLE PERMISSION INFO BANNER */}
+                {userForm.role_id && (
+                  <div className="bg-primary/5 border border-primary/20 rounded-xl p-3.5 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-xs font-bold text-primary">
+                        <Shield size={15} />
+                        <span>Role: {roles.find(r => r.id === userForm.role_id)?.name}</span>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                        {(rolePermsMap[userForm.role_id] || []).length} Granted Permissions
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pt-0.5 max-h-[160px] overflow-y-auto">
+                      {((rolePermsMap[userForm.role_id] || []).map(pId => permissions.find(p => p.id === pId)?.name).filter(Boolean) as string[]).map(pName => (
+                        <span key={pName} className="text-[11px] bg-background px-2.5 py-1 rounded-md border border-border text-foreground font-medium shadow-2xs">
+                          {pName}
+                        </span>
+                      ))}
+                      {(rolePermsMap[userForm.role_id] || []).length === 0 && (
+                        <span className="text-xs text-muted-foreground italic">No permissions assigned to this role yet. Configure in Roles tab.</span>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="flex justify-end gap-2 pt-3 border-t border-border">
                   <button
