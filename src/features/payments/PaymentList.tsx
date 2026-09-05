@@ -198,7 +198,7 @@ export const PaymentList: React.FC = () => {
                         <td>
                           <div className="text-black font-semibold flex items-center gap-1.5 text-xs">
                             <Calendar size={13} className="text-primary" />
-                            {new Date(p.payment_date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                            {p.payment_date || p.created_at ? new Date(p.payment_date || p.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '—'}
                           </div>
                         </td>
                         <td>

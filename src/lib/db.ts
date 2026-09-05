@@ -1576,18 +1576,14 @@ export const db = {
           }
 
           if (data.initialPayment && data.initialPayment.amount > 0) {
-            const { error: pErr } = await supabase.from('payments').insert([{
-              id: generateUUID(),
+            await db.payments.create({
               sale_id: createdSale.id,
               amount: data.initialPayment.amount,
               payment_method: data.initialPayment.payment_method,
-              payment_date: new Date().toISOString(),
-              transaction_no: (data.initialPayment as any).transaction_no || null,
-              notes: (data.initialPayment as any).notes || null,
-              created_by: employeeId,
-              updated_by: employeeId
-            }]);
-            if (pErr) throw pErr;
+              transaction_no: (data.initialPayment as any).transaction_no || undefined,
+              notes: (data.initialPayment as any).notes || undefined,
+              person_name: data.person_name || undefined
+            });
           }
 
           if (data.quotation_id) {
@@ -2076,6 +2072,7 @@ export const db = {
 
               return {
                 ...p,
+                payment_date: p.payment_date || p.created_at || new Date().toISOString(),
                 is_refund: p.is_refund || p.amount < 0 || p.notes?.includes('[Refund]'),
                 refund_reason: p.refund_reason || (p.notes?.includes('[Refund]') ? p.notes.replace(/\[Refund\]\s*/, '').replace(/\[Member:\s*[^\]]+\]/g, '').trim() : undefined),
                 person_name: p.person_name || (p.notes?.match(/\[Member:\s*(.*?)\]/)?.[1]) || undefined,
@@ -2280,6 +2277,7 @@ export const db = {
           amount,
           payment_method: resolvedMethod,
           account_id: targetAccount ? sanitizeUUID(targetAccount.id) : null,
+          payment_date: now,
           transaction_no: data.transaction_no || null,
           notes: combinedNotes || null,
           is_deleted: false,
@@ -2512,6 +2510,7 @@ export const db = {
           amount: -refundAmount,
           payment_method: resolvedMethod,
           account_id: targetAccount ? sanitizeUUID(targetAccount.id) : null,
+          payment_date: now,
           notes: combinedNotes,
           is_deleted: false,
           received_by: validEmployeeId,
