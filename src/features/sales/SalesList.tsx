@@ -183,11 +183,8 @@ export const SalesList: React.FC = () => {
       const triggerAutoPrint = async () => {
         try {
           const ids = printId.split(',');
-          const details = [];
-          for (const sId of ids) {
-            const detail = await db.sales.getById(sId);
-            if (detail) details.push(detail);
-          }
+          const results = await Promise.all(ids.map(sId => db.sales.getById(sId)));
+          const details = results.filter(Boolean);
           if (details.length > 0) {
             setSelectedSaleDetails(details.length === 1 ? details[0] : details);
             setSelectedSaleId(ids[0]);

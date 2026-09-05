@@ -543,8 +543,8 @@ export const setActiveUserSession = (user: User) => {
   localStorage.setItem('azizi_active_session', JSON.stringify(user));
 };
 
-const delay = <T>(value: T, ms = 150): Promise<T> => {
-  return new Promise(resolve => setTimeout(() => resolve(value), ms));
+const delay = <T>(value: T): Promise<T> => {
+  return Promise.resolve(value);
 };
 
 // ---------------------------------------------------------
@@ -810,38 +810,52 @@ export const db = {
   customers: {
     getAll: async () => {
       let customersList: Customer[] = [];
-      let salesList: Sale[] = [];
-      let paymentsList: Payment[] = [];
+      let salesList: { id: string; customer_id?: string; grand_total: number }[] = [];
+      let paymentsList: { sale_id: string; amount: number }[] = [];
 
       if (isSupabaseConfigured && supabase) {
-        const { data: c, error: cErr } = await supabase.from('customers').select('*').eq('is_deleted', false);
-        const { data: s, error: sErr } = await supabase.from('sales').select('*').eq('is_deleted', false);
-        const { data: p, error: pErr } = await supabase.from('payments').select('*').eq('is_deleted', false);
-        if (cErr || sErr || pErr) throw cErr || sErr || pErr;
+        const [{ data: c, error: cErr }, { data: s, error: sErr }, { data: p, error: pErr }] = await Promise.all([
+          supabase.from('customers').select('*').eq('is_deleted', false).order('created_at', { ascending: false }),
+          supabase.from('sales').select('id, customer_id, grand_total').eq('is_deleted', false),
+          supabase.from('payments').select('sale_id, amount').or('is_deleted.is.null,is_deleted.eq.false')
+        ]);
+        if (cErr) throw cErr;
         customersList = c || [];
-        salesList = s || [];
-        paymentsList = p || [];
+        salesList = (s || []).map(x => ({ id: x.id, customer_id: x.customer_id, grand_total: Number(x.grand_total || 0) }));
+        paymentsList = (p || []).map(x => ({ sale_id: x.sale_id, amount: Number(x.amount || 0) }));
       } else {
         customersList = _customers.filter(c => !c.is_deleted);
         salesList = _sales.filter(s => !s.is_deleted);
         paymentsList = _payments.filter(p => !p.is_deleted);
       }
 
+      // Pre-aggregate payments by sale_id for O(1) lookup
+      const paymentsMap = new Map<string, number>();
+      paymentsList.forEach(p => {
+        paymentsMap.set(p.sale_id, (paymentsMap.get(p.sale_id) || 0) + p.amount);
+      });
+
+      // Pre-aggregate sales by customer_id for O(1) lookup
+      const salesMap = new Map<string, { totalPurchased: number; totalPaid: number; count: number }>();
+      salesList.forEach(s => {
+        if (!s.customer_id) return;
+        const current = salesMap.get(s.customer_id) || { totalPurchased: 0, totalPaid: 0, count: 0 };
+        current.totalPurchased += s.grand_total;
+        current.totalPaid += (paymentsMap.get(s.id) || 0);
+        current.count += 1;
+        salesMap.set(s.customer_id, current);
+      });
+
       return customersList.map(c => {
-        const customerSales = salesList.filter(s => s.customer_id === c.id);
-        const saleIds = customerSales.map(s => s.id);
-        const totalPurchased = customerSales.reduce((sum: number, s: Sale) => sum + s.grand_total, 0);
-        const totalPaid = paymentsList
-          .filter((p: Payment) => saleIds.includes(p.sale_id))
-          .reduce((sum: number, p: Payment) => sum + p.amount, 0);
-        const due = Math.max(0, totalPurchased - totalPaid);
+        const stat = salesMap.get(c.id) || { totalPurchased: 0, totalPaid: 0, count: 0 };
+        const due = Math.max(0, stat.totalPurchased - stat.totalPaid);
 
         return {
           ...c,
           due,
-          total_paid: totalPaid,
-          total_purchased: totalPurchased,
-          sales_count: customerSales.length
+          total_paid: stat.totalPaid,
+          total_purchased: stat.totalPurchased,
+          sales_count: stat.count
         };
       });
     },
@@ -858,11 +872,12 @@ export const db = {
         customerRecord = c;
 
         if (customerRecord) {
-          const { data: s, error: sErr } = await supabase.from('sales').select('*').eq('customer_id', id).eq('is_deleted', false);
-          const { data: p, error: pErr } = await supabase.from('payments').select('*').eq('is_deleted', false);
-          const { data: b, error: bErr } = await supabase.from('branches').select('*');
-          const { data: st, error: stErr } = await supabase.from('order_statuses').select('*');
-          if (sErr || pErr || bErr || stErr) throw sErr || pErr || bErr || stErr;
+          const [{ data: s }, { data: p }, { data: b }, { data: st }] = await Promise.all([
+            supabase.from('sales').select('*').eq('customer_id', id).eq('is_deleted', false).order('created_at', { ascending: false }),
+            supabase.from('payments').select('*').or('is_deleted.is.null,is_deleted.eq.false'),
+            supabase.from('branches').select('*'),
+            supabase.from('order_statuses').select('*')
+          ]);
 
           salesList = s || [];
           paymentsList = p || [];
@@ -1185,25 +1200,39 @@ export const db = {
   sales: {
     getAll: async (branchId?: string) => {
       if (isSupabaseConfigured && supabase) {
-        let query = supabase.from('sales').select('*, customer:customers(*), branch:branches(*), employee:users!employee_id(*), order_status:order_statuses(*)').eq('is_deleted', false);
+        let query = supabase.from('sales').select('*, customer:customers(*), branch:branches(*), employee:users!employee_id(*), order_status:order_statuses(*)').eq('is_deleted', false).order('created_at', { ascending: false });
         if (branchId) {
           query = query.eq('branch_id', branchId);
         }
-        const { data, error } = await query;
+        const { data: sales, error } = await query;
         if (error) throw error;
+        if (!sales || sales.length === 0) return [];
 
-        // Fetch inner items and payments
-        const resolvedSales = [];
-        for (const s of (data || [])) {
-          const { data: items } = await supabase.from('sale_items').select('*, service:services(*), staff:users!staff_id(*)').eq('sale_id', s.id);
-          const { data: pList } = await supabase.from('payments').select('*').eq('sale_id', s.id).eq('is_deleted', false);
-          resolvedSales.push({
-            ...s,
-            items: items || [],
-            payments: pList || []
-          });
-        }
-        return resolvedSales;
+        const saleIds = sales.map(s => s.id);
+
+        // Fetch all items and payments in 2 fast parallel queries instead of 2 * N sequential queries
+        const [{ data: allItems }, { data: allPayments }] = await Promise.all([
+          supabase.from('sale_items').select('*, service:services(*), staff:users!staff_id(*)').in('sale_id', saleIds),
+          supabase.from('payments').select('*').in('sale_id', saleIds).or('is_deleted.is.null,is_deleted.eq.false')
+        ]);
+
+        const itemsBySale = new Map<string, any[]>();
+        (allItems || []).forEach(item => {
+          if (!itemsBySale.has(item.sale_id)) itemsBySale.set(item.sale_id, []);
+          itemsBySale.get(item.sale_id)!.push(item);
+        });
+
+        const paymentsBySale = new Map<string, any[]>();
+        (allPayments || []).forEach(p => {
+          if (!paymentsBySale.has(p.sale_id)) paymentsBySale.set(p.sale_id, []);
+          paymentsBySale.get(p.sale_id)!.push(p);
+        });
+
+        return sales.map(s => ({
+          ...s,
+          items: itemsBySale.get(s.id) || [],
+          payments: paymentsBySale.get(s.id) || []
+        }));
       }
 
       let list = _sales.filter(s => !s.is_deleted);
@@ -1236,7 +1265,7 @@ export const db = {
         if (!s) return undefined;
 
         const { data: rawItems } = await supabase.from('sale_items').select('*, service:services(*), staff:users!staff_id(*)').eq('sale_id', id);
-        const { data: paymentsList } = await supabase.from('payments').select('*').eq('sale_id', id).eq('is_deleted', false).order('created_at', { ascending: true });
+        const { data: paymentsList } = await supabase.from('payments').select('*').eq('sale_id', id).or('is_deleted.is.null,is_deleted.eq.false').order('created_at', { ascending: true });
         const { data: history } = await supabase.from('order_status_history').select('*, new_status:order_statuses(*), user:users(*)').eq('sale_id', id).order('created_at', { ascending: false });
         const { data: dbExpenses } = await supabase.from('expenses').select('*').eq('sale_id', id).eq('is_deleted', false);
 
@@ -1873,9 +1902,104 @@ export const db = {
   },
 
   payments: {
+    getAll: async (branchId?: string) => {
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const [paymentsRes, salesRes, customersRes, branchesRes, usersRes] = await Promise.all([
+            supabase.from('payments').select('*').or('is_deleted.is.null,is_deleted.eq.false').order('created_at', { ascending: false }),
+            supabase.from('sales').select('id, invoice_no, branch_id, customer_id, person_name').eq('is_deleted', false),
+            supabase.from('customers').select('id, name, customer_type').eq('is_deleted', false),
+            supabase.from('branches').select('id, name'),
+            supabase.from('users').select('id, name')
+          ]);
+
+          if (paymentsRes.data) {
+            const salesMap = new Map((salesRes.data || []).map(s => [s.id, s]));
+            const customersMap = new Map((customersRes.data || []).map(c => [c.id, c]));
+            const branchesMap = new Map((branchesRes.data || []).map(b => [b.id, b]));
+            const usersMap = new Map((usersRes.data || []).map(u => [u.id, u]));
+
+            let list = paymentsRes.data.map((p: any) => {
+              const sale = salesMap.get(p.sale_id);
+              const customer = sale?.customer_id ? customersMap.get(sale.customer_id) : undefined;
+              const branch = sale?.branch_id ? branchesMap.get(sale.branch_id) : undefined;
+              const user = p.received_by ? usersMap.get(p.received_by) : undefined;
+
+              let saleCustomerName = 'Walk-in Customer';
+              if (customer) {
+                if (sale?.person_name) {
+                  saleCustomerName = `${sale.person_name} (${customer.name})`;
+                } else {
+                  saleCustomerName = customer.name;
+                }
+              } else if (sale?.person_name) {
+                saleCustomerName = sale.person_name;
+              }
+
+              return {
+                ...p,
+                is_refund: p.is_refund || p.amount < 0 || p.notes?.includes('[Refund]'),
+                refund_reason: p.refund_reason || (p.notes?.includes('[Refund]') ? p.notes.replace(/\[Refund\]\s*/, '').replace(/\[Member:\s*[^\]]+\]/g, '').trim() : undefined),
+                person_name: p.person_name || (p.notes?.match(/\[Member:\s*(.*?)\]/)?.[1]) || undefined,
+                sale_invoice: sale?.invoice_no || '',
+                sale_branch_id: sale?.branch_id || '',
+                sale_branch_name: branch?.name || 'Central Branch',
+                sale_customer_name: saleCustomerName,
+                received_by_name: user?.name || 'Cashier'
+              };
+            });
+
+            if (branchId && branchId !== 'all') {
+              list = list.filter((p: any) => p.sale_branch_id === branchId);
+            }
+            return list;
+          }
+        } catch (supaErr) {
+          console.warn('Supabase payments.getAll fallback:', supaErr);
+        }
+      }
+
+      let list = _payments.filter(p => !p.is_deleted);
+      const mapped = list.map(p => {
+        const sale = _sales.find(s => s.id === p.sale_id);
+        const customer = sale?.customer_id ? _customers.find(c => c.id === sale.customer_id) : undefined;
+        const branch = sale?.branch_id ? _branches.find(b => b.id === sale.branch_id) : undefined;
+        const user = p.received_by ? _users.find(u => u.id === p.received_by) : undefined;
+
+        let saleCustomerName = 'Walk-in Customer';
+        if (customer) {
+          if (sale?.person_name) {
+            saleCustomerName = `${sale.person_name} (${customer.name})`;
+          } else if (customer.company?.name) {
+            saleCustomerName = `${customer.name} (${customer.company.name})`;
+          } else {
+            saleCustomerName = customer.name;
+          }
+        } else if (sale?.person_name) {
+          saleCustomerName = sale.person_name;
+        }
+
+        return {
+          ...p,
+          is_refund: p.is_refund || p.amount < 0 || p.notes?.includes('[Refund]'),
+          refund_reason: p.refund_reason || (p.notes?.includes('[Refund]') ? p.notes.replace(/\[Refund\]\s*/, '').replace(/\[Member:\s*[^\]]+\]/g, '').trim() : undefined),
+          person_name: p.person_name || (p.notes?.match(/\[Member:\s*(.*?)\]/)?.[1]) || undefined,
+          sale_invoice: sale?.invoice_no || '',
+          sale_branch_id: sale?.branch_id || '',
+          sale_branch_name: branch?.name || 'Central Branch',
+          sale_customer_name: saleCustomerName,
+          received_by_name: user?.name || 'Cashier'
+        };
+      });
+
+      if (branchId && branchId !== 'all') {
+        return delay(mapped.filter(p => p.sale_branch_id === branchId));
+      }
+      return delay(mapped.sort((a, b) => new Date(b.payment_date || b.created_at).getTime() - new Date(a.payment_date || a.created_at).getTime()));
+    },
     getBySaleId: async (saleId: string) => {
       if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase.from('payments').select('*').eq('sale_id', saleId).eq('is_deleted', false).order('created_at', { ascending: true });
+        const { data, error } = await supabase.from('payments').select('*').eq('sale_id', saleId).or('is_deleted.is.null,is_deleted.eq.false').order('created_at', { ascending: true });
         if (error) throw error;
         return (data || []).map((p: any) => ({
           ...p,
@@ -1947,22 +2071,28 @@ export const db = {
       let salePersonName = sale?.person_name;
       let cust = sale?.customer_id ? _customers.find(c => c.id === sale.customer_id) : undefined;
 
-      if (!sale && isSupabaseConfigured && supabase) {
+      if ((!sale || !saleInvoiceNo) && isSupabaseConfigured && supabase && data.sale_id) {
         try {
-          const { data: supaSale } = await supabase.from('sales').select('*, customer:customers(*)').eq('id', data.sale_id).maybeSingle();
+          const { data: supaSale } = await supabase.from('sales').select('id, invoice_no, person_name, customer_id').eq('id', data.sale_id).maybeSingle();
           if (supaSale) {
             saleInvoiceNo = supaSale.invoice_no;
-            salePersonName = supaSale.person_name;
-            cust = supaSale.customer;
+            salePersonName = supaSale.person_name || salePersonName;
+            if (supaSale.customer_id) {
+              const { data: supaCust } = await supabase.from('customers').select('id, name, customer_type').eq('id', supaSale.customer_id).maybeSingle();
+              if (supaCust) {
+                cust = supaCust as any;
+              }
+            }
           }
         } catch (e) {
           console.warn('Could not load sale for payment journal:', e);
         }
       }
 
-      const clientName = data.person_name || salePersonName || cust?.company?.name || cust?.name || 'Client / Customer';
-      const referenceNo = saleInvoiceNo ? `#${saleInvoiceNo}` : undefined;
-      const journalDesc = `Payment collected from ${clientName}${saleInvoiceNo ? ` for Invoice #${saleInvoiceNo}` : ''}`;
+      const clientName = data.person_name || salePersonName || (cust as any)?.company?.name || cust?.name || 'Client / Customer';
+      const cleanInvoiceNo = saleInvoiceNo ? saleInvoiceNo.replace(/^#/, '') : undefined;
+      const referenceNo = cleanInvoiceNo ? `#${cleanInvoiceNo}` : undefined;
+      const journalDesc = `Payment collected from ${clientName}${cleanInvoiceNo ? ` for Invoice #${cleanInvoiceNo}` : ''}`;
 
       // Embed member tag in notes for seamless database compatibility
       const memberTag = data.person_name ? `[Member: ${data.person_name}]` : '';
@@ -1983,11 +2113,22 @@ export const db = {
         description: journalDesc,
         performed_by: activeUser?.id,
         created_at: now,
-        created_by: activeUser?.id
+        created_by: activeUser?.id,
+        sale: saleInvoiceNo ? { id: data.sale_id, invoice_no: cleanInvoiceNo! } : undefined
       };
       _journalEntries.unshift(journalEntry);
 
       if (isSupabaseConfigured && supabase) {
+        let validEmployeeId = employeeId;
+        if (employeeId) {
+          try {
+            const { data: uRow } = await supabase.from('users').select('id').eq('id', employeeId).maybeSingle();
+            if (!uRow) validEmployeeId = null;
+          } catch {
+            validEmployeeId = null;
+          }
+        }
+
         const payload = {
           id: payId,
           sale_id: data.sale_id,
@@ -1996,9 +2137,10 @@ export const db = {
           account_id: targetAccount ? sanitizeUUID(targetAccount.id) : null,
           transaction_no: data.transaction_no || null,
           notes: combinedNotes || null,
-          received_by: employeeId,
-          created_by: employeeId,
-          updated_by: employeeId
+          is_deleted: false,
+          received_by: validEmployeeId,
+          created_by: validEmployeeId,
+          updated_by: validEmployeeId
         };
         try {
           const { data: created, error } = await supabase.from('payments').insert([payload]).select().single();
@@ -2014,37 +2156,46 @@ export const db = {
                 balance_after: newBalance,
                 sale_id: data.sale_id,
                 payment_id: payId,
-                description: `Payment received for ${data.person_name ? `${data.person_name} ` : ''}Invoice #${saleInvoiceNo || ''}`,
-                created_by: employeeId
+                reference_no: referenceNo || null,
+                description: `Payment received for ${data.person_name ? `${data.person_name} ` : ''}Invoice #${cleanInvoiceNo || ''}`,
+                created_by: validEmployeeId
               }]);
             }
 
             await supabase.from('journal_entries').insert([{
-              ...journalEntry,
+              id: journalEntry.id,
+              entry_date: journalEntry.entry_date,
+              entry_type: journalEntry.entry_type,
+              from_account: journalEntry.from_account,
+              to_account: journalEntry.to_account,
+              amount: journalEntry.amount,
+              description: journalEntry.description,
               sale_id: sanitizeUUID(data.sale_id),
               payment_id: sanitizeUUID(payId),
               to_account_id: targetAccount ? sanitizeUUID(targetAccount.id) : null,
               reference_no: referenceNo || null,
-              performed_by: employeeId,
-              created_by: employeeId
+              performed_by: validEmployeeId,
+              created_by: validEmployeeId
             }]);
 
             // Recalculate Sale Payment Status
             const { data: saleData } = await supabase.from('sales').select('grand_total').eq('id', data.sale_id).maybeSingle();
-            const { data: allPayments } = await supabase.from('payments').select('amount').eq('sale_id', data.sale_id).eq('is_deleted', false);
+            const { data: allPayments } = await supabase.from('payments').select('amount').eq('sale_id', data.sale_id).or('is_deleted.is.null,is_deleted.eq.false');
 
-            const grand_total = saleData?.grand_total || 0;
-            const totalPaid = (allPayments || []).reduce((sum: number, p: any) => sum + p.amount, 0);
+            const grand_total = Number(saleData?.grand_total || 0);
+            const totalPaid = (allPayments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
 
             let payment_status: Sale['payment_status'] = 'Unpaid';
             if (totalPaid >= grand_total && grand_total > 0) payment_status = 'Paid';
             else if (totalPaid > 0) payment_status = 'Partially Paid';
 
-            await supabase.from('sales').update({ payment_status, updated_by: employeeId }).eq('id', data.sale_id);
+            await supabase.from('sales').update({ payment_status, updated_by: validEmployeeId }).eq('id', data.sale_id);
             return {
               ...created,
               person_name: data.person_name || undefined
             } as Payment;
+          } else if (error) {
+            console.error('Supabase payment insert error:', error);
           }
         } catch (supaErr) {
           console.warn('Supabase payment insert fallback:', supaErr);
@@ -2073,17 +2224,17 @@ export const db = {
       if (saleIndex !== -1) {
         const sale = _sales[saleIndex];
         const allSalePayments = _payments.filter((p: Payment) => p.sale_id === data.sale_id && !p.is_deleted);
-        const totalPaid = allSalePayments.reduce((sum: number, p: Payment) => sum + p.amount, 0);
+        const totalPaid = allSalePayments.reduce((sum: number, p: Payment) => sum + Number(p.amount || 0), 0);
         
         let payment_status: Sale['payment_status'] = 'Unpaid';
         if (totalPaid >= sale.grand_total && sale.grand_total > 0) payment_status = 'Paid';
         else if (totalPaid > 0) payment_status = 'Partially Paid';
 
-        _sales[saleIndex] = { ...sale, payment_status, updated_by: activeUser.id, updated_at: now };
+        _sales[saleIndex] = { ...sale, payment_status, updated_by: activeUser?.id, updated_at: now };
       }
 
       saveAll();
-      logAudit(activeUser.id, 'INSERT_PAYMENT', 'payments', newPay.id, null, newPay);
+      logAudit(activeUser?.id, 'INSERT_PAYMENT', 'payments', newPay.id, null, newPay);
       return delay(newPay);
     },
 
@@ -2146,22 +2297,28 @@ export const db = {
       let salePersonName = sale?.person_name;
       let cust = sale?.customer_id ? _customers.find(c => c.id === sale.customer_id) : undefined;
 
-      if (!sale && isSupabaseConfigured && supabase) {
+      if ((!sale || !saleInvoiceNo) && isSupabaseConfigured && supabase && data.sale_id) {
         try {
-          const { data: supaSale } = await supabase.from('sales').select('*, customer:customers(*)').eq('id', data.sale_id).maybeSingle();
+          const { data: supaSale } = await supabase.from('sales').select('id, invoice_no, person_name, customer_id').eq('id', data.sale_id).maybeSingle();
           if (supaSale) {
             saleInvoiceNo = supaSale.invoice_no;
-            salePersonName = supaSale.person_name;
-            cust = supaSale.customer;
+            salePersonName = supaSale.person_name || salePersonName;
+            if (supaSale.customer_id) {
+              const { data: supaCust } = await supabase.from('customers').select('id, name, customer_type').eq('id', supaSale.customer_id).maybeSingle();
+              if (supaCust) {
+                cust = supaCust as any;
+              }
+            }
           }
         } catch (e) {
           console.warn('Could not load sale for refund journal:', e);
         }
       }
 
-      const clientName = data.person_name || salePersonName || cust?.company?.name || cust?.name || 'Client / Customer';
-      const referenceNo = saleInvoiceNo ? `#${saleInvoiceNo}` : undefined;
-      const journalDesc = `Refund returned to ${clientName}${saleInvoiceNo ? ` for Invoice #${saleInvoiceNo}` : ''}: ${data.reason}`;
+      const clientName = data.person_name || salePersonName || (cust as any)?.company?.name || cust?.name || 'Client / Customer';
+      const cleanInvoiceNo = saleInvoiceNo ? saleInvoiceNo.replace(/^#/, '') : undefined;
+      const referenceNo = cleanInvoiceNo ? `#${cleanInvoiceNo}` : undefined;
+      const journalDesc = `Refund returned to ${clientName}${cleanInvoiceNo ? ` for Invoice #${cleanInvoiceNo}` : ''}: ${data.reason}`;
 
       // Embed tags in notes for seamless database compatibility
       const memberTag = data.person_name ? `[Member: ${data.person_name}]` : '';
@@ -2183,11 +2340,22 @@ export const db = {
         description: journalDesc,
         performed_by: activeUser?.id,
         created_at: now,
-        created_by: activeUser?.id
+        created_by: activeUser?.id,
+        sale: saleInvoiceNo ? { id: data.sale_id, invoice_no: cleanInvoiceNo! } : undefined
       };
       _journalEntries.unshift(journalEntry);
 
       if (isSupabaseConfigured && supabase) {
+        let validEmployeeId = employeeId;
+        if (employeeId) {
+          try {
+            const { data: uRow } = await supabase.from('users').select('id').eq('id', employeeId).maybeSingle();
+            if (!uRow) validEmployeeId = null;
+          } catch {
+            validEmployeeId = null;
+          }
+        }
+
         const payload = {
           id: payId,
           sale_id: data.sale_id,
@@ -2195,9 +2363,10 @@ export const db = {
           payment_method: resolvedMethod,
           account_id: targetAccount ? sanitizeUUID(targetAccount.id) : null,
           notes: combinedNotes,
-          received_by: employeeId,
-          created_by: employeeId,
-          updated_by: employeeId
+          is_deleted: false,
+          received_by: validEmployeeId,
+          created_by: validEmployeeId,
+          updated_by: validEmployeeId
         };
         try {
           const { data: created, error } = await supabase.from('payments').insert([payload]).select().single();
@@ -2213,39 +2382,48 @@ export const db = {
                 balance_after: newBalance,
                 sale_id: data.sale_id,
                 payment_id: payId,
-                description: `Refund returned for ${data.person_name ? `${data.person_name} ` : ''}Invoice #${saleInvoiceNo || ''}: ${data.reason}`,
-                created_by: employeeId
+                reference_no: referenceNo || null,
+                description: `Refund returned for ${data.person_name ? `${data.person_name} ` : ''}Invoice #${cleanInvoiceNo || ''}: ${data.reason}`,
+                created_by: validEmployeeId
               }]);
             }
 
             await supabase.from('journal_entries').insert([{
-              ...journalEntry,
+              id: journalEntry.id,
+              entry_date: journalEntry.entry_date,
+              entry_type: journalEntry.entry_type,
+              from_account: journalEntry.from_account,
+              to_account: journalEntry.to_account,
+              amount: journalEntry.amount,
+              description: journalEntry.description,
               sale_id: sanitizeUUID(data.sale_id),
               payment_id: sanitizeUUID(payId),
               from_account_id: targetAccount ? sanitizeUUID(targetAccount.id) : null,
               reference_no: referenceNo || null,
-              performed_by: employeeId,
-              created_by: employeeId
+              performed_by: validEmployeeId,
+              created_by: validEmployeeId
             }]);
 
             // Recalculate Sale Payment Status
             const { data: saleData } = await supabase.from('sales').select('grand_total').eq('id', data.sale_id).maybeSingle();
-            const { data: allPayments } = await supabase.from('payments').select('amount').eq('sale_id', data.sale_id).eq('is_deleted', false);
+            const { data: allPayments } = await supabase.from('payments').select('amount').eq('sale_id', data.sale_id).or('is_deleted.is.null,is_deleted.eq.false');
 
-            const grand_total = saleData?.grand_total || 0;
-            const netPaid = (allPayments || []).reduce((sum: number, p: any) => sum + p.amount, 0);
+            const grand_total = Number(saleData?.grand_total || 0);
+            const netPaid = (allPayments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
 
             let payment_status: Sale['payment_status'] = 'Unpaid';
             if (netPaid >= grand_total && grand_total > 0) payment_status = 'Paid';
             else if (netPaid > 0) payment_status = 'Partially Paid';
 
-            await supabase.from('sales').update({ payment_status, updated_by: employeeId }).eq('id', data.sale_id);
+            await supabase.from('sales').update({ payment_status, updated_by: validEmployeeId }).eq('id', data.sale_id);
             return {
               ...created,
               is_refund: true,
               refund_reason: data.reason,
               person_name: data.person_name || undefined
             } as Payment;
+          } else if (error) {
+            console.error('Supabase payment refund error:', error);
           }
         } catch (supaErr) {
           console.warn('Supabase payment refund fallback:', supaErr);
@@ -2276,18 +2454,30 @@ export const db = {
       if (saleIndex !== -1) {
         const sale = _sales[saleIndex];
         const allSalePayments = _payments.filter((p: Payment) => p.sale_id === data.sale_id && !p.is_deleted);
-        const netPaid = allSalePayments.reduce((sum: number, p: Payment) => sum + p.amount, 0);
+        const netPaid = allSalePayments.reduce((sum: number, p: Payment) => sum + Number(p.amount || 0), 0);
         
         let payment_status: Sale['payment_status'] = 'Unpaid';
         if (netPaid >= sale.grand_total && sale.grand_total > 0) payment_status = 'Paid';
         else if (netPaid > 0) payment_status = 'Partially Paid';
 
-        _sales[saleIndex] = { ...sale, payment_status, updated_by: activeUser.id, updated_at: now };
+        _sales[saleIndex] = { ...sale, payment_status, updated_by: activeUser?.id, updated_at: now };
       }
 
       saveAll();
-      logAudit(activeUser.id, 'REFUND_PAYMENT', 'payments', newPay.id, null, newPay);
+      logAudit(activeUser?.id, 'REFUND_PAYMENT', 'payments', newPay.id, null, newPay);
       return delay(newPay);
+    },
+    clearAll: async () => {
+      if (isSupabaseConfigured && supabase) {
+        try {
+          await supabase.from('payments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        } catch (e) {
+          console.warn('Supabase payments clear error:', e);
+        }
+      }
+      _payments = [];
+      saveToLocalStorage(KEYS.PAYMENTS, []);
+      return true;
     }
   },
 
@@ -2422,7 +2612,22 @@ export const db = {
 
       const sourceAcc = data.account_id ? _accounts.find(a => a.id === data.account_id) : _accounts.find(a => a.type === 'cash_drawer') || _accounts[0];
       const beneficiary = (data as any).paid_to || activeUser?.name || 'Staff Expense';
-      const sale = data.sale_id ? _sales.find(s => s.id === data.sale_id) : undefined;
+      let sale = data.sale_id ? _sales.find(s => s.id === data.sale_id) : undefined;
+      let saleInvoiceNo = sale?.invoice_no;
+
+      if ((!sale || !saleInvoiceNo) && isSupabaseConfigured && supabase && data.sale_id) {
+        try {
+          const { data: supaSale } = await supabase.from('sales').select('id, invoice_no, person_name').eq('id', data.sale_id).maybeSingle();
+          if (supaSale) {
+            saleInvoiceNo = supaSale.invoice_no;
+          }
+        } catch (e) {
+          console.warn('Could not load sale for expense journal:', e);
+        }
+      }
+
+      const cleanInvoiceNo = saleInvoiceNo ? saleInvoiceNo.replace(/^#/, '') : undefined;
+      const referenceNo = cleanInvoiceNo ? `#${cleanInvoiceNo}` : undefined;
 
       // Auto-create Double Entry Journal Record (Cash Out)
       const journalEntry: JournalEntry = {
@@ -2435,11 +2640,12 @@ export const db = {
         amount: amount,
         expense_id: expId,
         sale_id: data.sale_id,
-        reference_no: sale?.invoice_no ? `#${sale.invoice_no}` : undefined,
+        reference_no: referenceNo,
         description: data.description || `Expense paid to ${beneficiary}`,
         performed_by: activeUser?.id,
         created_at: now,
-        created_by: activeUser?.id
+        created_by: activeUser?.id,
+        sale: cleanInvoiceNo ? { id: data.sale_id!, invoice_no: cleanInvoiceNo } : undefined
       };
       _journalEntries.unshift(journalEntry);
 
@@ -2448,6 +2654,16 @@ export const db = {
         : (data.description || `Expense paid to ${beneficiary}`);
 
       if (isSupabaseConfigured && supabase) {
+        let validEmployeeId = sanitizeUUID(activeUser?.id);
+        if (validEmployeeId) {
+          try {
+            const { data: uRow } = await supabase.from('users').select('id').eq('id', validEmployeeId).maybeSingle();
+            if (!uRow) validEmployeeId = null;
+          } catch {
+            validEmployeeId = null;
+          }
+        }
+
         try {
           const { sale_item_id, ...cleanExpenseData } = data as any;
           const { data: created, error } = await supabase.from('expenses').insert([{
@@ -2455,9 +2671,12 @@ export const db = {
             description: encodedDesc,
             id: expId,
             amount,
+            is_deleted: false,
             sale_id: sanitizeUUID(data.sale_id),
             account_id: sanitizeUUID(data.account_id),
-            branch_id: sanitizeUUID(data.branch_id)
+            branch_id: sanitizeUUID(data.branch_id),
+            created_by: validEmployeeId,
+            updated_by: validEmployeeId
           }]).select().single();
           if (!error && created) {
             if (data.account_id) {
@@ -2467,12 +2686,19 @@ export const db = {
               }
             }
             await supabase.from('journal_entries').insert([{
-              ...journalEntry,
+              id: journalEntry.id,
+              entry_date: journalEntry.entry_date,
+              entry_type: journalEntry.entry_type,
+              from_account: journalEntry.from_account,
+              to_account: journalEntry.to_account,
+              amount: journalEntry.amount,
+              description: journalEntry.description,
               sale_id: sanitizeUUID(data.sale_id),
               expense_id: sanitizeUUID(expId),
               from_account_id: data.account_id ? sanitizeUUID(data.account_id) : null,
-              performed_by: sanitizeUUID(activeUser?.id),
-              created_by: sanitizeUUID(activeUser?.id)
+              reference_no: referenceNo || null,
+              performed_by: validEmployeeId,
+              created_by: validEmployeeId
             }]);
             return {
               ...created,
@@ -2536,10 +2762,12 @@ export const db = {
         if (branchId) query = query.eq('branch_id', branchId);
         const { data, error } = await query;
         if (!error && data && data.length > 0) {
-          // Compute live balance for each account from payments, expenses, and transactions
-          const { data: allPayments } = await supabase.from('payments').select('account_id, amount').eq('is_deleted', false);
-          const { data: allExpenses } = await supabase.from('expenses').select('account_id, amount').eq('is_deleted', false);
-          const { data: allTxns } = await supabase.from('account_transactions').select('account_id, amount, transaction_type');
+          // Compute live balance for each account from payments, expenses, and transactions in parallel
+          const [{ data: allPayments }, { data: allExpenses }, { data: allTxns }] = await Promise.all([
+            supabase.from('payments').select('account_id, amount').eq('is_deleted', false),
+            supabase.from('expenses').select('account_id, amount').eq('is_deleted', false),
+            supabase.from('account_transactions').select('account_id, amount, transaction_type')
+          ]);
 
           return data.map((acc: any) => {
             const payIn = (allPayments || []).filter((p: any) => p.account_id === acc.id).reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
@@ -3477,7 +3705,28 @@ export const db = {
         if (filters?.entry_type && filters.entry_type !== 'all') q = q.eq('entry_type', filters.entry_type);
         if (filters?.performed_by) q = q.eq('performed_by', filters.performed_by);
         const { data, error } = await q;
-        if (!error && data) return data as JournalEntry[];
+        if (!error && data) {
+          const salesIds = Array.from(new Set(data.map(j => j.sale_id).filter(Boolean)));
+          const salesMap = new Map<string, string>();
+          if (salesIds.length > 0) {
+            try {
+              const { data: salesList } = await supabase.from('sales').select('id, invoice_no').in('id', salesIds);
+              (salesList || []).forEach(s => salesMap.set(s.id, s.invoice_no));
+            } catch (e) {
+              console.warn('Could not batch load sales for journal references:', e);
+            }
+          }
+          return data.map((j: any) => {
+            const rawRef = j.reference_no;
+            const matchedInv = j.sale_id ? salesMap.get(j.sale_id) : undefined;
+            const saleRef = matchedInv ? (matchedInv.startsWith('#') ? matchedInv : `#${matchedInv}`) : undefined;
+            const descMatch = j.description?.match(/#(INV-[A-Za-z0-9-]+)/)?.[0];
+            return {
+              ...j,
+              reference_no: rawRef || saleRef || descMatch || undefined
+            } as JournalEntry;
+          });
+        }
       }
       let list = _journalEntries;
       if (filters?.entry_type && filters.entry_type !== 'all') {
@@ -3492,10 +3741,18 @@ export const db = {
       if (filters?.to_date) {
         list = list.filter(j => j.entry_date <= filters.to_date!);
       }
-      return delay(list.map(j => ({
-        ...j,
-        creator: _users.find(u => u.id === j.performed_by || u.id === j.created_by)
-      })));
+      return delay(list.map(j => {
+        const foundSale = j.sale_id ? _sales.find(s => s.id === j.sale_id) : undefined;
+        const rawRef = j.reference_no;
+        const saleRef = foundSale?.invoice_no ? (foundSale.invoice_no.startsWith('#') ? foundSale.invoice_no : `#${foundSale.invoice_no}`) : undefined;
+        const descMatch = j.description?.match(/#(INV-[A-Za-z0-9-]+)/)?.[0];
+        return {
+          ...j,
+          creator: _users.find(u => u.id === j.performed_by || u.id === j.created_by),
+          sale: foundSale ? { id: foundSale.id, invoice_no: foundSale.invoice_no } : (j as any).sale,
+          reference_no: rawRef || saleRef || descMatch || undefined
+        };
+      }));
     },
     create: async (data: Omit<JournalEntry, 'id' | 'created_at'>) => {
       const activeUser = getActiveUserSession();
@@ -3528,6 +3785,19 @@ export const db = {
       _journalEntries.unshift(entry);
       saveAll();
       return delay(entry);
+    },
+    clearAll: async () => {
+      if (isSupabaseConfigured && supabase) {
+        try {
+          await supabase.from('journal_entries').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        } catch (e) {
+          console.warn('Supabase journal clear error:', e);
+        }
+      }
+      _journalEntries = [];
+      saveToLocalStorage(KEYS.JOURNAL_ENTRIES, []);
+      return true;
     }
   }
 };
+

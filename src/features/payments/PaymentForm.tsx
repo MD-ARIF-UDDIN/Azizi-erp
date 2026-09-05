@@ -43,15 +43,14 @@ export const PaymentForm: React.FC = () => {
         const drawer = allAccounts.find(a => a.type === 'cash_drawer') || allAccounts[0];
         if (drawer) setAccountId(drawer.id);
 
-        if (saleId) {
-          const target = allSales.find(s => s.id === saleId);
+        const initialId = saleIdParam || saleId;
+        if (initialId) {
+          const target = allSales.find(s => s.id === initialId);
           if (target) {
-            setSelectedSale(target);
-            // Calculate remaining dues
-            const paidPayments = await db.payments.getBySaleId(target.id);
-            const totalPaid = paidPayments.reduce((sum, p) => sum + p.amount, 0);
-            const remaining = Math.max(0, target.grand_total - totalPaid);
+            const totalPaid = (target.payments || []).reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+            const remaining = Math.max(0, (Number(target.grand_total) || 0) - totalPaid);
             setSelectedSale({ ...target, remaining, totalPaid });
+            setSaleId(target.id);
             setAmount(remaining);
             if (target.person_name) {
               setPersonName(target.person_name);
@@ -65,9 +64,9 @@ export const PaymentForm: React.FC = () => {
       }
     };
     loadData();
-  }, [saleId]);
+  }, [saleIdParam]);
 
-  const handleSaleChange = async (selectedId: string) => {
+  const handleSaleChange = (selectedId: string) => {
     setSaleId(selectedId);
     setPersonName('');
     if (!selectedId) {
@@ -76,20 +75,15 @@ export const PaymentForm: React.FC = () => {
       return;
     }
 
-    try {
-      const target = unpaidSales.find(s => s.id === selectedId);
-      if (target) {
-        const paidPayments = await db.payments.getBySaleId(target.id);
-        const totalPaid = paidPayments.reduce((sum, p) => sum + p.amount, 0);
-        const remaining = Math.max(0, target.grand_total - totalPaid);
-        setSelectedSale({ ...target, remaining, totalPaid });
-        setAmount(remaining);
-        if (target.person_name) {
-          setPersonName(target.person_name);
-        }
+    const target = unpaidSales.find(s => s.id === selectedId);
+    if (target) {
+      const totalPaid = (target.payments || []).reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+      const remaining = Math.max(0, (Number(target.grand_total) || 0) - totalPaid);
+      setSelectedSale({ ...target, remaining, totalPaid });
+      setAmount(remaining);
+      if (target.person_name) {
+        setPersonName(target.person_name);
       }
-    } catch (err) {
-      console.error(err);
     }
   };
 

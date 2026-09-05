@@ -50,15 +50,18 @@ export const Dashboard: React.FC = () => {
       setLoading(true);
       try {
         const branchFilter = activeBranchId === 'all' ? undefined : activeBranchId;
-        const sData = await db.sales.getAll(branchFilter);
-        const eData = await db.expenses.getAll(branchFilter);
+        const [sData, eData, allUsers, docs] = await Promise.all([
+          db.sales.getAll(branchFilter),
+          db.expenses.getAll(branchFilter),
+          db.users.getAll(),
+          db.clientDocuments.getAll()
+        ]);
         
         // Resolve payments based on filtered branch
-        const allUsers = await db.users.getAll();
         const pList: any[] = [];
         for (const sale of sData) {
-          const sPayments = await db.payments.getBySaleId(sale.id);
-          sPayments.forEach(p => {
+          const sPayments = sale.payments || [];
+          sPayments.forEach((p: any) => {
             pList.push({
               ...p,
               sale_invoice: sale.invoice_no,
@@ -71,9 +74,8 @@ export const Dashboard: React.FC = () => {
         // Sort payments desc
         pList.sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime());
 
-        // Fetch tracked documents
-        const docs = await db.clientDocuments.getAll();
-        docs.sort((a, b) => new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime());
+        // Sort tracked documents
+        docs.sort((a: any, b: any) => new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime());
 
         setSales(sData);
         setExpenses(eData);

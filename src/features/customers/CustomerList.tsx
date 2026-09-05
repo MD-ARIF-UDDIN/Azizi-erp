@@ -667,8 +667,8 @@ export const CustomerList: React.FC = () => {
 
       const resolvedSales = [];
       for (const sale of unpaidSales) {
-        const payments = await db.payments.getBySaleId(sale.id);
-        const totalPaid = payments.reduce((sum: number, p: any) => sum + p.amount, 0);
+        const payments = sale.payments || [];
+        const totalPaid = payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
         const remaining = Math.max(0, sale.grand_total - totalPaid);
         if (remaining > 0) {
           resolvedSales.push({

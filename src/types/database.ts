@@ -350,5 +350,7 @@ export interface JournalEntry {
   created_at: string;
   created_by?: string;
   creator?: User;
+  sale?: { id: string; invoice_no: string; customer_id?: string };
 }
+
 

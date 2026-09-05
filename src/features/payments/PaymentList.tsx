@@ -32,39 +32,12 @@ export const PaymentList: React.FC = () => {
   const fetchPayments = async () => {
     setLoading(true);
     try {
-      const [allSales, allUsers, allAccounts] = await Promise.all([
-        db.sales.getAll(),
-        db.users.getAll(),
+      const [allPayments, allAccounts] = await Promise.all([
+        db.payments.getAll(activeBranchId),
         db.accounts.getAll()
       ]);
       setAccounts(allAccounts);
-      
-      // Let's resolve payments
-      const resolved: any[] = [];
-      for (const sale of allSales) {
-        const salePayments = await db.payments.getBySaleId(sale.id);
-        salePayments.forEach(p => {
-          resolved.push({
-            ...p,
-            sale_invoice: sale.invoice_no,
-            sale_branch_id: sale.branch_id,
-            sale_branch_name: sale.branch?.name || 'Central Branch',
-            sale_customer_name: sale.customer 
-              ? sale.person_name
-                ? `${sale.person_name} (${sale.customer.name})`
-                : sale.customer.company?.name
-                ? `${sale.customer.name} (${sale.customer.company.name})`
-                : sale.customer.name
-              : 'Walk-in Customer',
-            received_by_name: allUsers.find(u => u.id === p.received_by)?.name || 'Cashier'
-          });
-        });
-      }
-
-      // Sort by date desc
-      resolved.sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime());
-      
-      setPayments(resolved);
+      setPayments(allPayments);
     } catch (err) {
       console.error(err);
     } finally {

@@ -54,10 +54,11 @@ export const JournalList: React.FC = () => {
   const filteredEntries = entries.filter(e => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
+    const ref = e.reference_no || (e.sale?.invoice_no ? `#${e.sale.invoice_no}` : '') || (e.description?.match(/#(INV-[A-Za-z0-9-]+)/)?.[0] || '');
     return (
       e.from_account?.toLowerCase().includes(q) ||
       e.to_account?.toLowerCase().includes(q) ||
-      e.reference_no?.toLowerCase().includes(q) ||
+      ref.toLowerCase().includes(q) ||
       e.description?.toLowerCase().includes(q) ||
       e.creator?.name?.toLowerCase().includes(q)
     );
@@ -258,13 +259,16 @@ export const JournalList: React.FC = () => {
 
                         {/* 4. Reference / Invoice # */}
                         <td className="px-4 py-3 whitespace-nowrap">
-                          {j.reference_no ? (
-                            <span className="px-2 py-0.5 rounded bg-muted font-mono font-bold text-[11px] text-foreground border border-border">
-                              {j.reference_no}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground text-[11px]">—</span>
-                          )}
+                          {(() => {
+                            const ref = j.reference_no || (j.sale?.invoice_no ? `#${j.sale.invoice_no}` : undefined) || (j.description?.match(/#(INV-[A-Za-z0-9-]+)/)?.[0]);
+                            return ref ? (
+                              <span className="px-2 py-0.5 rounded bg-muted font-mono font-bold text-[11px] text-foreground border border-border">
+                                {ref}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-[11px]">—</span>
+                            );
+                          })()}
                         </td>
 
                         {/* 5. Cash In Column (Green or -) */}
