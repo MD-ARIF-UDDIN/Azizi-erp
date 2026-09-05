@@ -443,9 +443,12 @@ export const SalesList: React.FC = () => {
     const reasonText = p.refund_reason || (p.notes ? p.notes.replace(/\[Member:\s*[^\]]+\]/g, '').replace(/\[Refund\]\s*/, '').trim() : '');
     const cleanNotes = p.notes ? p.notes.replace(/\[Member:\s*[^\]]+\]/g, '').replace(/\[Refund\]\s*/, '').trim() : '';
 
+    const payCode = p.id ? p.id.slice(0, 8).toUpperCase() : (p.created_at ? new Date(p.created_at).getTime().toString().slice(-6) : Date.now().toString().slice(-6));
+    const voucherNumber = isRef ? `REF-${payCode}` : `PAY-${payCode}`;
+
     setPrintableVoucherData({
       type: isRef ? 'refund' : 'receipt',
-      voucherNo: p.transaction_no || (isRef ? `REF-${p.id ? p.id.slice(-6).toUpperCase() : Date.now().toString().slice(-6)}` : `VCH-${p.id ? p.id.slice(-6).toUpperCase() : Date.now().toString().slice(-6)}`),
+      voucherNo: voucherNumber,
       date: p.payment_date || p.created_at || new Date().toISOString(),
       amount: amountVal,
       paymentMethod: p.payment_method || 'Cash',
@@ -453,7 +456,7 @@ export const SalesList: React.FC = () => {
       reason: isRef ? (reasonText || 'Customer Refund / Return') : (cleanNotes || `Payment collected against invoice #${sale?.invoice_no || ''}`),
       account: targetAccount,
       sale: sale,
-      transactionNo: p.transaction_no
+      transactionNo: p.transaction_no || undefined
     });
 
     setTimeout(() => {
@@ -489,9 +492,11 @@ export const SalesList: React.FC = () => {
         setSelectedSaleDetails(detail);
       }
 
+      const payCode = createdPay?.id ? createdPay.id.slice(0, 8).toUpperCase() : Date.now().toString().slice(-6);
+
       setPrintableVoucherData({
         type: 'receipt',
-        voucherNo: payTxnNo || `VCH-${createdPay?.id ? createdPay.id.slice(-6).toUpperCase() : Date.now().toString().slice(-6)}`,
+        voucherNo: `PAY-${payCode}`,
         date: new Date().toISOString(),
         amount: payAmount,
         paymentMethod: payMethod,
@@ -544,9 +549,11 @@ export const SalesList: React.FC = () => {
         setSelectedSaleDetails(detail);
       }
 
+      const refCode = refundRecord?.id ? refundRecord.id.slice(0, 8).toUpperCase() : Date.now().toString().slice(-6);
+
       setPrintableVoucherData({
         type: 'refund',
-        voucherNo: `REF-${refundRecord?.id ? refundRecord.id.slice(-6).toUpperCase() : Date.now().toString().slice(-6)}`,
+        voucherNo: `REF-${refCode}`,
         sale: detail,
         amount: payAmount,
         reason: refundReason.trim(),
@@ -2289,7 +2296,7 @@ export const SalesList: React.FC = () => {
                       <table className="w-full text-xs">
                         <thead className="bg-muted/20 sticky top-0">
                           <tr>
-                            <th className="px-2.5 py-1 text-left text-muted-foreground font-semibold">Date</th>
+                            <th className="px-2.5 py-1 text-left text-muted-foreground font-semibold">Ref / Date</th>
                             <th className="px-2.5 py-1 text-left text-muted-foreground font-semibold">Member</th>
                             <th className="px-2.5 py-1 text-left text-muted-foreground font-semibold">Mode</th>
                             <th className="px-2.5 py-1 text-left text-muted-foreground font-semibold">Reason/Note</th>
@@ -2300,9 +2307,17 @@ export const SalesList: React.FC = () => {
                         <tbody className="divide-y divide-border/40">
                           {payments.map((p: any, idx: number) => {
                             const isRef = p.is_refund || p.amount < 0;
+                            const payCode = p.id ? p.id.slice(0, 8).toUpperCase() : (p.created_at ? new Date(p.created_at).getTime().toString().slice(-6) : `TXN-${idx + 1}`);
                             return (
                               <tr key={p.id || idx} className={isRef ? 'bg-rose-50/40' : ''}>
-                                <td className="px-2.5 py-1 text-muted-foreground">{new Date(p.payment_date || p.created_at).toLocaleDateString()}</td>
+                                <td className="px-2.5 py-1">
+                                  <div className={`font-mono text-[9px] font-bold ${isRef ? 'text-rose-700' : 'text-primary'}`}>
+                                    {isRef ? `REF-${payCode}` : `PAY-${payCode}`}
+                                  </div>
+                                  <div className="text-[9px] text-muted-foreground">
+                                    {new Date(p.payment_date || p.created_at).toLocaleDateString()}
+                                  </div>
+                                </td>
                                 <td className="px-2.5 py-1">
                                   {p.person_name ? (
                                     <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-primary/10 text-primary text-[9px] font-bold">
