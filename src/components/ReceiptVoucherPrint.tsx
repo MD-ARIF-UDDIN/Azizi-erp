@@ -13,39 +13,12 @@ export interface PrintableVoucherData {
   transactionNo?: string;
 }
 
-export function numberToWords(num: number): string {
-  const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
-  const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-  
-  const inWords = (n: number): string => {
-    if (n === 0) return '';
-    if (n < 20) return a[n];
-    if (n < 100) return b[Math.floor(n / 10)] + (n % 10 ? ' ' + a[n % 10] : '');
-    if (n < 1000) return a[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' + inWords(n % 100) : '');
-    if (n < 1000000) return inWords(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 ? ' ' + inWords(n % 1000) : '');
-    return inWords(Math.floor(n / 1000000)) + ' Million' + (n % 1000000 ? ' ' + inWords(n % 1000000) : '');
-  };
-
-  const integerPart = Math.floor(Math.abs(num));
-  const decimalPart = Math.round((Math.abs(num) - integerPart) * 100);
-
-  if (integerPart === 0 && decimalPart === 0) return 'Zero UAE Dirhams Only';
-
-  let result = (integerPart > 0 ? inWords(integerPart) : 'Zero') + ' UAE Dirhams';
-  if (decimalPart > 0) {
-    result += ' and ' + inWords(decimalPart) + ' Fills';
-  }
-  return result + ' Only';
-}
-
 export const ReceiptVoucherPrint: React.FC<{ data: PrintableVoucherData | null }> = ({ data }) => {
   if (!data) return null;
 
   const isReceipt = data.type === 'receipt';
   const custName = data.sale?.customer?.name || data.sale?.sale_customer_name || 'Walk-in Customer';
   const compName = data.sale?.customer?.company?.name || data.sale?.sale_customer_company_name;
-  const custPhone = data.sale?.customer?.phone || data.sale?.customer?.company?.phone;
-  const custTrn = data.sale?.customer?.trn;
 
   const rawPerson = data.personName?.trim();
   const invoiceMemberName =
@@ -55,237 +28,169 @@ export const ReceiptVoucherPrint: React.FC<{ data: PrintableVoucherData | null }
     (data.reason && data.reason.match(/\[Member:\s*([^\]]+)\]/)?.[1]?.trim()) ||
     undefined);
 
-  const primaryColor = isReceipt ? '#000ba0' : '#b91c1c';
-  const primaryLight = isReceipt ? '#eff6ff' : '#fef2f2';
-  const primaryBorder = isReceipt ? '#93c5fd' : '#fca5a5';
+  const isDistinctMember = Boolean(
+    invoiceMemberName &&
+    invoiceMemberName !== '' &&
+    invoiceMemberName.toLowerCase() !== custName.toLowerCase() &&
+    (!compName || invoiceMemberName.toLowerCase() !== compName.toLowerCase())
+  );
 
   return (
-    <div className="hidden print:block fixed inset-0 bg-white text-slate-900 p-8 font-sans text-xs print-voucher-sheet">
-      <div className="max-w-4xl mx-auto border border-slate-300 rounded-lg p-7 bg-white space-y-5 shadow-none">
+    <div className="hidden print:block fixed inset-0 bg-white text-black p-6 sm:p-8 font-sans text-xs print-voucher-sheet">
+      <div className="max-w-3xl mx-auto border-2 border-[#000ba0] p-6 rounded-xl space-y-4 bg-white">
         
-        {/* TOP OFFICIAL LETTERHEAD */}
-        <div className="flex items-center justify-between border-b-2 border-[#000ba0] pb-4">
-          <div className="flex items-center gap-4">
-            <img src="/logo.png" alt="AZIZI" className="w-20 h-20 object-contain shrink-0" />
+        {/* 1. Header */}
+        <div className="flex items-center justify-between border-b-2 border-gray-200 pb-3">
+          <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="AZIZI" className="w-16 h-16 object-contain" />
             <div>
-              <div className="text-sm font-black text-[#000ba0] uppercase tracking-wide">
+              <div className="text-base font-black text-[#000ba0] leading-tight" style={{ fontFamily: "'Cairo', 'Inter', sans-serif" }}>
+                مكتب عزيزي للكتابة وعمل الأختام ذ.م.م - فرع ۱
+              </div>
+              <div className="text-xs font-black text-[#f28f00] tracking-wider uppercase">
                 AZIZI TYPING &amp; STAMP MAKING BR. 1
               </div>
-              <div className="text-xs font-semibold text-slate-700 mt-0.5">
-                Musaffah M37, Abu Dhabi, United Arab Emirates
-              </div>
-              <div className="text-[11px] text-slate-600 mt-0.5 flex items-center gap-3">
-                <span><strong>Tel:</strong> +971 54 279 7933</span>
-                <span>•</span>
-                <span><strong>Email:</strong> azizitypingbr@gmail.com</span>
-              </div>
-              <div className="text-[10px] text-slate-500 mt-0.5">
-                Near Irani Masjid, Industrial Area
+              <div className="text-[10px] text-gray-600 font-semibold mt-0.5">
+                Musaffah M37, Abu Dhabi, UAE • Tel: 0542797933 • azizitypingbr@gmail.com
               </div>
             </div>
           </div>
-
-          <div className="text-right space-y-0.5">
-            <div className="text-lg font-black text-[#000ba0] leading-tight" style={{ fontFamily: "'Cairo', 'Segoe UI', Tahoma, sans-serif" }}>
-              مكتب عزيزي للكتابة وعمل الأختام ذ.م.م - فرع ۱
+          <div className="text-right">
+            <div className={`px-3 py-1 text-white font-extrabold text-xs rounded uppercase tracking-wider ${
+              isReceipt ? 'bg-[#000ba0]' : 'bg-[#be123c]'
+            }`}>
+              {isReceipt ? 'RECEIPT VOUCHER' : 'REFUND VOUCHER'}
             </div>
-            <div className="text-xs font-bold text-[#f28f00]">
-              خدمات الطباعة، تخليص المعاملات، وعمل الأختام
-            </div>
-            <div className="text-[11px] text-slate-600 font-medium">
-              مصفح م٣٧، أبوظبي، الإمارات العربية المتحدة
-            </div>
-            <div className="text-[10px] text-slate-500">
-              هاتف: ٠٥٤٢٧٩٧٩٣٣
+            <div className="text-[10px] text-gray-500 font-mono mt-1 font-bold">
+              No: {data.voucherNo || (isReceipt ? `PAY-${Date.now().toString().slice(-6)}` : `REF-${Date.now().toString().slice(-6)}`)}
             </div>
           </div>
         </div>
 
-        {/* VOUCHER TITLE & META HEADER */}
-        <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-md p-3.5">
-          <div>
-            <div className="flex items-center gap-2">
-              <span 
-                className="px-2.5 py-1 text-white font-black text-xs rounded uppercase tracking-wider"
-                style={{ backgroundColor: primaryColor }}
-              >
-                {isReceipt ? 'RECEIPT VOUCHER' : 'REFUND VOUCHER'}
-              </span>
-              <span className="text-xs font-bold text-slate-700" style={{ fontFamily: "'Cairo', sans-serif" }}>
-                {isReceipt ? 'سند قبض مالي رسمي' : 'سند صرف واسترجاع مالي'}
-              </span>
-            </div>
-            <p className="text-[10px] text-slate-500 mt-1 italic">
-              {isReceipt 
-                ? 'Official acknowledgement of payment received for professional services' 
-                : 'Official acknowledgement of funds returned / refunded'}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-right text-xs">
-            <div>
-              <span className="text-[10px] text-slate-500 uppercase font-semibold block">Voucher No / رقم السند:</span>
-              <span className="font-mono font-black text-slate-900 text-sm tracking-wider" style={{ color: primaryColor }}>
-                {data.voucherNo}
-              </span>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-500 uppercase font-semibold block">Date &amp; Time / التاريخ:</span>
-              <span className="font-semibold text-slate-800 text-[11px]">
-                {new Date(data.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
-              </span>
-            </div>
-          </div>
+        {/* 2. Banner / Title in Arabic & English */}
+        <div className={`py-1.5 px-4 text-center font-black tracking-wide text-xs rounded text-white ${
+          isReceipt ? 'bg-[#000ba0]' : 'bg-[#be123c]'
+        }`}>
+          {isReceipt 
+            ? 'OFFICIAL PAYMENT RECEIPT VOUCHER • سند قبض رسمي' 
+            : 'OFFICIAL PAYMENT RETURN & REFUND VOUCHER • سند صرف واسترجاع'}
         </div>
 
-        {/* STRUCTURED PARTICULARS TABLE */}
-        <table className="w-full border-collapse border border-slate-300 text-xs">
+        {/* 3. Voucher Main Info Grid */}
+        <table className="w-full border-collapse border border-gray-300 text-xs">
           <tbody>
-            {/* Received From & Member / Applicant */}
-            <tr className="border-b border-slate-300">
-              <td className="p-3 bg-slate-50 font-bold text-slate-700 w-[24%] border-r border-slate-300 align-top">
-                <div className="font-bold text-slate-800">{isReceipt ? 'Received From:' : 'Paid / Returned To:'}</div>
-                <div className="text-[10px] text-slate-500 font-normal">{isReceipt ? 'استلمنا من السيد / السادة' : 'صرف إلى السيد / السادة'}</div>
+            <tr className="border-b border-gray-300">
+              <td className="p-2 bg-gray-50 font-bold text-gray-700 w-1/4 border-r border-gray-300">
+                Date &amp; Time:
               </td>
-              <td className={`p-3 font-semibold text-slate-900 border-r border-slate-300 ${invoiceMemberName ? 'w-[36%]' : 'w-[76%]'}`} colSpan={invoiceMemberName ? 1 : 3}>
-                <div className="text-sm font-black text-slate-900">{custName}</div>
+              <td className="p-2 font-semibold text-black w-1/4 border-r border-gray-300">
+                {new Date(data.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'medium' })}
+              </td>
+              <td className="p-2 bg-gray-50 font-bold text-gray-700 w-1/4 border-r border-gray-300">
+                Invoice Reference #:
+              </td>
+              <td className="p-2 font-mono font-bold text-[#000ba0] w-1/4">
+                {data.sale?.invoice_no ? `#${data.sale.invoice_no}` : (data.sale?.invoice_no || '—')}
+              </td>
+            </tr>
+
+            <tr className="border-b border-gray-300">
+              <td className="p-2 bg-gray-50 font-bold text-gray-700 border-r border-gray-300">
+                {isReceipt ? 'Received From:' : 'Paid / Returned To:'}
+              </td>
+              <td className="p-2 font-bold text-black border-r border-gray-300" colSpan={isDistinctMember ? 1 : 3}>
+                {custName}
                 {compName && compName.toLowerCase() !== custName.toLowerCase() && (
-                  <div className="text-xs text-slate-600 font-semibold mt-0.5">Company: {compName}</div>
-                )}
-                {(custPhone || custTrn) && (
-                  <div className="text-[10px] text-slate-500 mt-1 flex items-center gap-3">
-                    {custPhone && <span><strong>Phone:</strong> {custPhone}</span>}
-                    {custTrn && <span><strong>TRN:</strong> {custTrn}</span>}
-                  </div>
+                  <span className="text-[11px] text-gray-600 block font-semibold">({compName})</span>
                 )}
               </td>
-              {invoiceMemberName && (
+              {isDistinctMember && (
                 <>
-                  <td className="p-3 bg-slate-50 font-bold text-slate-700 w-[20%] border-r border-slate-300 align-top">
-                    <div className="font-bold text-slate-800">For Member / Applicant:</div>
-                    <div className="text-[10px] text-slate-500 font-normal">لصالح المعاملة / العضو</div>
+                  <td className="p-2 bg-gray-50 font-bold text-gray-700 border-r border-gray-300">
+                    For Member / Applicant:
                   </td>
-                  <td className="p-3 font-bold text-slate-900 w-[20%] align-top">
-                    <div className="text-xs font-black text-slate-900 bg-slate-100 px-2 py-1 rounded border border-slate-200 inline-block">
-                      👤 {invoiceMemberName}
-                    </div>
+                  <td className="p-2 font-bold text-black">
+                    {invoiceMemberName}
                   </td>
                 </>
               )}
             </tr>
 
-            {/* Payment Mode & References */}
-            <tr className="border-b border-slate-300">
-              <td className="p-3 bg-slate-50 font-bold text-slate-700 border-r border-slate-300">
-                <div className="font-bold text-slate-800">Payment Mode:</div>
-                <div className="text-[10px] text-slate-500 font-normal">طريقة الدفع</div>
+            <tr className="border-b border-gray-300">
+              <td className="p-2 bg-gray-50 font-bold text-gray-700 border-r border-gray-300">
+                Payment Mode:
               </td>
-              <td className="p-3 font-bold text-slate-900 border-r border-slate-300">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 rounded text-xs text-slate-900 font-bold border border-slate-200">
-                  {isReceipt ? '💵 ' : '↩ '}{data.paymentMethod || 'Cash'}
-                </span>
+              <td className="p-2 font-bold text-black border-r border-gray-300" colSpan={data.transactionNo ? 1 : 3}>
+                {data.paymentMethod || 'Cash'}
               </td>
-              <td className="p-3 bg-slate-50 font-bold text-slate-700 border-r border-slate-300">
-                <div className="font-bold text-slate-800">Invoice Reference #:</div>
-                <div className="text-[10px] text-slate-500 font-normal">رقم الفاتورة المرجعية</div>
-              </td>
-              <td className="p-3 font-mono font-bold text-slate-900">
-                {data.sale?.invoice_no ? (
-                  <span className="px-2 py-0.5 bg-blue-50 text-[#000ba0] border border-blue-200 rounded text-xs font-black">
-                    #{data.sale.invoice_no}
-                  </span>
-                ) : '—'}
-                {data.transactionNo && (
-                  <div className="text-[10px] text-slate-600 font-mono mt-1">
-                    <strong>Ref / Slip:</strong> {data.transactionNo}
-                  </div>
-                )}
-              </td>
+              {data.transactionNo && (
+                <>
+                  <td className="p-2 bg-gray-50 font-bold text-gray-700 border-r border-gray-300">
+                    Transaction / Ref No:
+                  </td>
+                  <td className="p-2 font-mono font-bold text-black">
+                    {data.transactionNo}
+                  </td>
+                </>
+              )}
             </tr>
 
-            {/* The Sum Of (In Words) */}
-            <tr className="border-b border-slate-300">
-              <td className="p-3 bg-slate-50 font-bold text-slate-700 border-r border-slate-300">
-                <div className="font-bold text-slate-800">The Sum Of (In Words):</div>
-                <div className="text-[10px] text-slate-500 font-normal">المبلغ بالحروف</div>
+            <tr className="border-b border-gray-300">
+              <td className="p-2 bg-gray-50 font-bold text-gray-700 border-r border-gray-300">
+                {isReceipt ? 'Payment Remarks / Purpose:' : 'Reason for Refund:'}
               </td>
-              <td className="p-3 font-bold text-slate-900 italic text-xs" colSpan={3}>
-                <span className="text-slate-900 font-black">{numberToWords(data.amount)}</span>
-              </td>
-            </tr>
-
-            {/* Purpose / Remarks */}
-            <tr className="border-b border-slate-300">
-              <td className="p-3 bg-slate-50 font-bold text-slate-700 border-r border-slate-300">
-                <div className="font-bold text-slate-800">Being / Purpose:</div>
-                <div className="text-[10px] text-slate-500 font-normal">وذلك مقابل / البيان</div>
-              </td>
-              <td className="p-3 text-slate-800 font-medium text-xs leading-relaxed" colSpan={3}>
-                {data.reason || (isReceipt ? `Settlement of Typing, Visa & Government Services Invoice #${data.sale?.invoice_no || ''}` : 'Application cancellation / Refund')}
+              <td className="p-2 italic text-gray-900" colSpan={3}>
+                {data.reason || (isReceipt ? `Payment collected against invoice #${data.sale?.invoice_no || ''}` : 'Application cancellation / fee return')}
               </td>
             </tr>
           </tbody>
         </table>
 
-        {/* AMOUNT HIGHLIGHT BOX */}
-        <div 
-          className="p-4 rounded-lg border-2 flex items-center justify-between"
-          style={{ backgroundColor: primaryLight, borderColor: primaryBorder }}
-        >
+        {/* 4. Amount Highlight Box */}
+        <div className={`p-4 rounded-xl border flex items-center justify-between ${
+          isReceipt 
+            ? 'bg-emerald-50 border-emerald-300 text-emerald-950' 
+            : 'bg-rose-50 border-rose-300 text-rose-950'
+        }`}>
           <div>
-            <span className="text-xs uppercase font-black tracking-wider block" style={{ color: primaryColor }}>
-              {isReceipt ? 'TOTAL AMOUNT RECEIVED • المبلغ المستلم' : 'TOTAL AMOUNT REFUNDED • المبلغ المسترجع'}
+            <span className="text-[11px] uppercase font-black tracking-wider block">
+              {isReceipt ? 'AMOUNT RECEIVED (المبلغ المستلم)' : 'AMOUNT REFUNDED (المبلغ المسترجع)'}
             </span>
-            <span className="text-[11px] text-slate-600 font-medium">
-              Official Currency: United Arab Emirates Dirham (AED)
+            <span className="text-xs text-gray-600 font-medium italic">
+              Currency: United Arab Emirates Dirham (AED)
             </span>
           </div>
           <div className="text-right">
-            <span className="text-3xl font-black font-mono tracking-tight" style={{ color: primaryColor }}>
-              {data.amount.toFixed(2)} <span className="text-base font-bold font-sans">AED</span>
+            <span className="text-2xl font-black font-mono tracking-tight">
+              {data.amount.toFixed(2)} AED
             </span>
           </div>
         </div>
 
-        {/* SIGNATURES AND OFFICIAL STAMP BLOCK */}
-        <div className="grid grid-cols-3 gap-6 pt-4 pb-2 text-center text-xs">
-          <div className="flex flex-col justify-between h-24">
-            <div className="text-[11px] font-bold text-slate-700">
-              Cashier / Prepared By
-              <span className="block text-[9px] text-slate-400 font-normal">توقيع المحاسب / المستلم</span>
-            </div>
-            <div>
-              <div className="border-t border-slate-400 pt-1 font-semibold text-slate-900 text-xs">
-                Authorized Cashier
-              </div>
+        {/* 5. Signatures & Stamp Footer */}
+        <div className="grid grid-cols-3 gap-4 pt-6 text-center text-xs">
+          <div className="space-y-8">
+            <span className="font-bold text-gray-700 block">Received By (Cashier)</span>
+            <div className="border-t border-gray-400 pt-1 font-semibold text-gray-900">
+              Authorized Cashier
             </div>
           </div>
-
           <div className="flex flex-col items-center justify-center">
-            <div className="w-24 h-24 border border-slate-300 rounded-full flex flex-col items-center justify-center p-1 text-center bg-slate-50/50">
-              <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">AZIZI TYPING</span>
-              <span className="text-[8px] font-bold text-slate-400">OFFICIAL STAMP</span>
-              <span className="text-[7px] text-slate-400 mt-0.5">ختم الشركة</span>
+            <div className="w-20 h-20 border-2 border-dashed border-gray-300 rounded-full flex items-center justify-center text-[9px] text-gray-400 font-bold uppercase">
+              Official Stamp
             </div>
           </div>
-
-          <div className="flex flex-col justify-between h-24">
-            <div className="text-[11px] font-bold text-slate-700">
-              Customer / Depositor Signature
-              <span className="block text-[9px] text-slate-400 font-normal">توقيع العميل / المودع</span>
-            </div>
-            <div>
-              <div className="border-t border-slate-400 pt-1 font-semibold text-slate-900 text-xs">
-                Signature &amp; Date
-              </div>
+          <div className="space-y-8">
+            <span className="font-bold text-gray-700 block">Customer / Payer Signature</span>
+            <div className="border-t border-gray-400 pt-1 font-semibold text-gray-900">
+              Signature &amp; Date
             </div>
           </div>
         </div>
 
-        {/* FOOTER BAR */}
-        <div className="border-t border-slate-200 pt-2 flex items-center justify-between text-[9px] text-slate-500">
-          <span>Official Computer Generated Voucher • Azizi Typing &amp; Stamp Making Br. 1</span>
-          <span>Musaffah M37, Abu Dhabi • 0542797933</span>
+        {/* 6. Footer Note */}
+        <div className="border-t border-gray-200 pt-2 text-center text-[9px] text-gray-500">
+          Thank you for your business. Computer generated official voucher — Azizi Typing &amp; Stamp Making Br. 1
         </div>
 
       </div>
