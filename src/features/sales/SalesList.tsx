@@ -428,13 +428,17 @@ export const SalesList: React.FC = () => {
   const handleSubmitPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payingSaleId || payAmount <= 0) return;
+    if (!payAccountId) {
+      alert('Deposit To Account is mandatory. Please select an account.');
+      return;
+    }
     setPaySaving(true);
     try {
       await db.payments.create({
         sale_id: payingSaleId,
         amount: payAmount,
         payment_method: payMethod,
-        account_id: payAccountId || undefined,
+        account_id: payAccountId,
         transaction_no: payTxnNo || undefined,
         notes: payNotes || undefined,
         person_name: payPersonName.trim() || undefined
@@ -462,6 +466,10 @@ export const SalesList: React.FC = () => {
   const handleSubmitRefund = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payingSaleId || payAmount <= 0) return;
+    if (!payAccountId) {
+      alert('Payout From Account is mandatory. Please select an account.');
+      return;
+    }
     if (!refundReason.trim()) {
       alert('Please specify the reason for the refund / money return.');
       return;
@@ -472,7 +480,7 @@ export const SalesList: React.FC = () => {
         sale_id: payingSaleId,
         amount: payAmount,
         payment_method: payMethod,
-        account_id: payAccountId || undefined,
+        account_id: payAccountId,
         reason: refundReason.trim(),
         person_name: payPersonName.trim() || undefined
       });
@@ -2306,8 +2314,10 @@ export const SalesList: React.FC = () => {
                         <select
                           value={payAccountId}
                           onChange={(e) => setPayAccountId(e.target.value)}
+                          required
                           className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
                         >
+                          <option value="">-- Select Account * --</option>
                           {accounts.map(a => (
                             <option key={a.id} value={a.id}>
                               {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)
@@ -2416,8 +2426,10 @@ export const SalesList: React.FC = () => {
                         <select
                           value={payAccountId}
                           onChange={(e) => setPayAccountId(e.target.value)}
+                          required
                           className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-rose-500 cursor-pointer"
                         >
+                          <option value="">-- Select Account * --</option>
                           {accounts.map(a => (
                             <option key={a.id} value={a.id}>
                               {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)

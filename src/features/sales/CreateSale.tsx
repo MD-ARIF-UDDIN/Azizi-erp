@@ -502,11 +502,16 @@ export const CreateSale: React.FC = () => {
     try {
       for (const entry of advanceEntries) {
         if (entry.amount > 0) {
+          if (!entry.accountId) {
+            setErrorMsg(`Deposit To Account is mandatory. Please select an account for invoice #${entry.invoiceNo}`);
+            setSavingAdvance(false);
+            return;
+          }
           await db.payments.create({
             sale_id: entry.saleId,
             amount: entry.amount,
             payment_method: entry.paymentMethod || 'Cash',
-            account_id: entry.accountId || undefined,
+            account_id: entry.accountId,
             person_name: entry.memberName || undefined,
             notes: entry.notes ? entry.notes.trim() : undefined
           });
@@ -1411,7 +1416,7 @@ export const CreateSale: React.FC = () => {
                       {/* Deposit To Account */}
                       <div className="sm:col-span-3 space-y-1">
                         <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                          Deposit To Account
+                          Deposit To Account *
                         </label>
                         <select
                           value={entry.accountId}
@@ -1420,8 +1425,10 @@ export const CreateSale: React.FC = () => {
                             updated[idx].accountId = e.target.value;
                             setAdvanceEntries(updated);
                           }}
+                          required
                           className="w-full px-2.5 py-2 bg-background border border-border rounded-lg text-xs font-bold text-foreground cursor-pointer"
                         >
+                          <option value="">-- Select Account * --</option>
                           {accounts.map(a => (
                             <option key={a.id} value={a.id}>
                               {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name}

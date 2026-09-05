@@ -90,6 +90,10 @@ export const PaymentForm: React.FC = () => {
       setErrorMsg('Payment amount must be greater than zero.');
       return;
     }
+    if (!accountId) {
+      setErrorMsg('Deposit To Account is mandatory. Please select an account.');
+      return;
+    }
     if (selectedSale && amount > selectedSale.remaining) {
       setErrorMsg(`Amount cannot exceed the remaining due of ${selectedSale.remaining.toFixed(2)} AED.`);
       return;
@@ -103,7 +107,7 @@ export const PaymentForm: React.FC = () => {
         sale_id: saleId,
         amount,
         payment_method: paymentMethod,
-        account_id: accountId || undefined,
+        account_id: accountId,
         transaction_no: transactionNo || undefined,
         notes: notes || undefined
       });
@@ -250,16 +254,17 @@ export const PaymentForm: React.FC = () => {
             {/* Deposit To Account */}
             <div className="space-y-1.5 text-xs">
               <label htmlFor="account" className="text-muted-foreground font-semibold flex items-center gap-1">
-                <Wallet size={13} /> Deposit To Account (Optional)
+                <Wallet size={13} /> Deposit To Account *
               </label>
               <select
                 id="account"
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
+                required
                 className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-sm font-semibold text-foreground cursor-pointer"
                 disabled={loading || !selectedSale}
               >
-                <option value="">-- Auto-resolve / Default Drawer --</option>
+                <option value="">-- Select Deposit Account * --</option>
                 {accounts.map(a => (
                   <option key={a.id} value={a.id}>
                     {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)
