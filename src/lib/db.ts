@@ -3015,7 +3015,9 @@ export const db = {
 
       if (isSupabaseConfigured && supabase) {
         let query = supabase.from('accounts').select('*, branch:branches(*)').eq('is_deleted', false).order('created_at', { ascending: true });
-        if (branchId) query = query.eq('branch_id', branchId);
+        if (branchId && branchId !== 'all') {
+          query = query.or(`branch_id.eq.${branchId},branch_id.is.null`);
+        }
         const { data, error } = await query;
         if (!error && data) {
           if (data.length === 0) return setCached(cacheKey, [], 10000);
