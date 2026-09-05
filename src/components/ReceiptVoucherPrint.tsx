@@ -48,17 +48,12 @@ export const ReceiptVoucherPrint: React.FC<{ data: PrintableVoucherData | null }
   const custTrn = data.sale?.customer?.trn;
 
   const rawPerson = data.personName?.trim();
-  const isDistinctMember = Boolean(
-    rawPerson &&
-    rawPerson !== '' &&
-    rawPerson.toLowerCase() !== custName.toLowerCase() &&
-    (!compName || rawPerson.toLowerCase() !== compName.toLowerCase())
-  );
-
-  const grandTotal = Number(data.sale?.grand_total) || 0;
-  const paymentsList = data.sale?.payments || [];
-  const totalPaid = paymentsList.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
-  const remainingDue = grandTotal > 0 ? Math.max(0, grandTotal - totalPaid) : 0;
+  const invoiceMemberName =
+    (rawPerson && rawPerson !== '') ? rawPerson :
+    (data.sale?.person_name?.trim() ||
+    data.sale?.items?.find((i: any) => i.person_name?.trim())?.person_name?.trim() ||
+    (data.reason && data.reason.match(/\[Member:\s*([^\]]+)\]/)?.[1]?.trim()) ||
+    undefined);
 
   const primaryColor = isReceipt ? '#000ba0' : '#b91c1c';
   const primaryLight = isReceipt ? '#eff6ff' : '#fef2f2';
@@ -146,15 +141,15 @@ export const ReceiptVoucherPrint: React.FC<{ data: PrintableVoucherData | null }
         {/* STRUCTURED PARTICULARS TABLE */}
         <table className="w-full border-collapse border border-slate-300 text-xs">
           <tbody>
-            {/* Received From */}
+            {/* Received From & Member / Applicant */}
             <tr className="border-b border-slate-300">
-              <td className="p-3 bg-slate-50 font-bold text-slate-700 w-[28%] border-r border-slate-300 align-top">
+              <td className="p-3 bg-slate-50 font-bold text-slate-700 w-[24%] border-r border-slate-300 align-top">
                 <div className="font-bold text-slate-800">{isReceipt ? 'Received From:' : 'Paid / Returned To:'}</div>
                 <div className="text-[10px] text-slate-500 font-normal">{isReceipt ? 'استلمنا من السيد / السادة' : 'صرف إلى السيد / السادة'}</div>
               </td>
-              <td className="p-3 font-semibold text-slate-900 border-r border-slate-300" colSpan={isDistinctMember ? 1 : 3}>
+              <td className={`p-3 font-semibold text-slate-900 border-r border-slate-300 ${invoiceMemberName ? 'w-[36%]' : 'w-[76%]'}`} colSpan={invoiceMemberName ? 1 : 3}>
                 <div className="text-sm font-black text-slate-900">{custName}</div>
-                {compName && compName !== custName && (
+                {compName && compName.toLowerCase() !== custName.toLowerCase() && (
                   <div className="text-xs text-slate-600 font-semibold mt-0.5">Company: {compName}</div>
                 )}
                 {(custPhone || custTrn) && (
@@ -164,14 +159,16 @@ export const ReceiptVoucherPrint: React.FC<{ data: PrintableVoucherData | null }
                   </div>
                 )}
               </td>
-              {isDistinctMember && (
+              {invoiceMemberName && (
                 <>
-                  <td className="p-3 bg-slate-50 font-bold text-slate-700 w-[22%] border-r border-slate-300 align-top">
+                  <td className="p-3 bg-slate-50 font-bold text-slate-700 w-[20%] border-r border-slate-300 align-top">
                     <div className="font-bold text-slate-800">For Member / Applicant:</div>
-                    <div className="text-[10px] text-slate-500 font-normal">لصالح العميل / صاحب المعاملة</div>
+                    <div className="text-[10px] text-slate-500 font-normal">لصالح المعاملة / العضو</div>
                   </td>
-                  <td className="p-3 font-bold text-slate-900 w-[28%] align-top">
-                    <div className="text-xs font-black text-slate-900">{rawPerson}</div>
+                  <td className="p-3 font-bold text-slate-900 w-[20%] align-top">
+                    <div className="text-xs font-black text-slate-900 bg-slate-100 px-2 py-1 rounded border border-slate-200 inline-block">
+                      👤 {invoiceMemberName}
+                    </div>
                   </td>
                 </>
               )}
@@ -249,39 +246,6 @@ export const ReceiptVoucherPrint: React.FC<{ data: PrintableVoucherData | null }
             </span>
           </div>
         </div>
-
-        {/* INVOICE ACCOUNT STATEMENT BREAKDOWN (IF ATTACHED TO SALE) */}
-        {data.sale && grandTotal > 0 && (
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5">
-            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
-              Invoice Statement Summary • ملخص حساب الفاتورة
-            </div>
-            <div className="grid grid-cols-4 gap-3 text-center">
-              <div className="p-2 bg-white rounded border border-slate-200">
-                <span className="text-[10px] text-slate-500 font-semibold block">Total Invoice Amount</span>
-                <span className="text-xs font-black font-mono text-slate-900">{grandTotal.toFixed(2)} AED</span>
-              </div>
-              <div className="p-2 bg-white rounded border border-slate-200">
-                <span className="text-[10px] text-slate-500 font-semibold block">Total Paid So Far</span>
-                <span className="text-xs font-black font-mono text-emerald-700">{totalPaid.toFixed(2)} AED</span>
-              </div>
-              <div className="p-2 bg-white rounded border border-slate-200">
-                <span className="text-[10px] text-slate-500 font-semibold block">Balance Remaining</span>
-                <span className={`text-xs font-black font-mono ${remainingDue > 0 ? 'text-amber-700' : 'text-slate-900'}`}>
-                  {remainingDue.toFixed(2)} AED
-                </span>
-              </div>
-              <div className="p-2 bg-white rounded border border-slate-200">
-                <span className="text-[10px] text-slate-500 font-semibold block">Account Status</span>
-                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded inline-block mt-0.5 ${
-                  remainingDue <= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                }`}>
-                  {remainingDue <= 0 ? 'Fully Paid / مسدد' : 'Partially Paid / جزئي'}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* SIGNATURES AND OFFICIAL STAMP BLOCK */}
         <div className="grid grid-cols-3 gap-6 pt-4 pb-2 text-center text-xs">
