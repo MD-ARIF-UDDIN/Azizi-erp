@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../lib/db';
-import type { Customer, ClientDocument, Service } from '../../types/database';
+import type { Customer, ClientDocument, Service, Account } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
 import { useNavigate } from 'react-router-dom';
@@ -32,7 +32,8 @@ import {
   CheckCircle2,
   ChevronDown,
   FileSpreadsheet,
-  Coins
+  Coins,
+  Wallet
 } from 'lucide-react';
 
 const handleWhatsAppShare = (sale: any) => {
@@ -95,6 +96,7 @@ export const CustomerList: React.FC = () => {
   
   // Data States
   const [customers, setCustomers] = useState<(Customer & { due: number; sales_count: number })[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   const [selectedCustDocs, setSelectedCustDocs] = useState<ClientDocument[]>([]);
@@ -134,6 +136,7 @@ export const CustomerList: React.FC = () => {
     grandTotal: number;
     amount: number;
     method: 'Cash' | 'Card' | 'Mobile Banking' | 'Bank Transfer';
+    accountId: string;
     notes: string;
   }[]>([]);
   const [qsCreatedSaleIds, setQsCreatedSaleIds] = useState<string[]>([]);
@@ -145,6 +148,7 @@ export const CustomerList: React.FC = () => {
   const [qpSelectedSaleId, setQpSelectedSaleId] = useState('');
   const [qpAmount, setQpAmount] = useState(0);
   const [qpMethod, setQpMethod] = useState<'Cash' | 'Card' | 'Mobile Banking' | 'Bank Transfer'>('Cash');
+  const [qpAccountId, setQpAccountId] = useState('');
   const [qpTxNo, setQpTxNo] = useState('');
   const [qpNotes, setQpNotes] = useState('');
   const [qpPersonName, setQpPersonName] = useState('');
@@ -330,7 +334,12 @@ export const CustomerList: React.FC = () => {
   const fetchCustomers = async () => {
     setLoading(true);
     try {
-      const data = await db.customers.getAll();
+      const [data, allAccounts] = await Promise.all([
+        db.customers.getAll(),
+        db.accounts.getAll()
+      ]);
+      setAccounts(allAccounts.filter((a: Account) => a.is_active));
+
       let allDocs: ClientDocument[] = [];
       try {
         allDocs = await db.clientDocuments.getAll();
@@ -587,6 +596,7 @@ export const CustomerList: React.FC = () => {
         createdSales.push(createdSale);
       }
 
+      const defaultAcc = accounts.find(a => a.type === 'cash_drawer') || accounts[0];
       const advanceList = createdSales.map((s, idx) => ({
         saleId: s.id,
         invoiceNo: s.invoice_no,
@@ -594,6 +604,7 @@ export const CustomerList: React.FC = () => {
         grandTotal: s.grand_total,
         amount: 0,
         method: 'Cash' as const,
+        accountId: defaultAcc?.id || '',
         notes: ''
       }));
 
@@ -609,6 +620,13 @@ export const CustomerList: React.FC = () => {
   };
 
   const handleQsSaveAdvance = async () => {
+    for (const entry of qsAdvanceEntries) {
+      if (entry.amount > 0 && !entry.accountId) {
+        alert(`Deposit To Account is mandatory. Please select an account for invoice #${entry.invoiceNo}`);
+        return;
+      }
+    }
+
     setQsSavingAdvance(true);
     try {
       for (const entry of qsAdvanceEntries) {
@@ -617,6 +635,7 @@ export const CustomerList: React.FC = () => {
             sale_id: entry.saleId,
             amount: entry.amount,
             payment_method: entry.method,
+            account_id: entry.accountId,
             person_name: entry.memberName !== 'Company General' ? entry.memberName : undefined,
             notes: entry.notes || undefined
           });
@@ -684,11 +703,20 @@ export const CustomerList: React.FC = () => {
         return;
       }
 
+      let currentAccounts = accounts;
+      if (currentAccounts.length === 0) {
+        const accs = await db.accounts.getAll();
+        currentAccounts = accs.filter(a => a.is_active);
+        setAccounts(currentAccounts);
+      }
+      const defaultDrawer = currentAccounts.find(a => a.type === 'cash_drawer') || currentAccounts[0];
+
       setQpCustomer(cust);
       setQpSales(resolvedSales);
       setQpSelectedSaleId(resolvedSales[0].id);
       setQpAmount(resolvedSales[0].remaining);
       setQpMethod('Cash');
+      setQpAccountId(defaultDrawer ? defaultDrawer.id : '');
       setQpTxNo('');
       setQpNotes('');
       setQpPersonName(resolvedSales[0]?.person_name || '');
@@ -721,6 +749,10 @@ export const CustomerList: React.FC = () => {
       setQpError('Amount must be greater than zero.');
       return;
     }
+    if (!qpAccountId) {
+      setQpError('Deposit To Account is mandatory. Please select an account.');
+      return;
+    }
     const targetSale = qpSales.find(s => s.id === qpSelectedSaleId);
     if (targetSale && qpAmount > targetSale.remaining) {
       setQpError(`Amount cannot exceed the remaining due of ${targetSale.remaining.toFixed(2)} AED.`);
@@ -734,6 +766,7 @@ export const CustomerList: React.FC = () => {
         sale_id: qpSelectedSaleId,
         amount: qpAmount,
         payment_method: qpMethod,
+        account_id: qpAccountId,
         transaction_no: qpTxNo || undefined,
         notes: qpNotes || undefined,
         person_name: qpPersonName.trim() || undefined
@@ -2163,7 +2196,7 @@ export const CustomerList: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1">
                     
                     {/* Amount */}
-                    <div className="sm:col-span-4 space-y-1">
+                    <div className="sm:col-span-3 space-y-1">
                       <div className="flex items-center justify-between">
                         <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                           Advance Paid (AED)
@@ -2225,15 +2258,39 @@ export const CustomerList: React.FC = () => {
                         }}
                         className="w-full px-2.5 py-2 bg-background border border-border rounded-lg text-xs font-semibold text-foreground cursor-pointer"
                       >
-                        <option value="Cash">Cash</option>
-                        <option value="Card">Card</option>
-                        <option value="Mobile Banking">Mobile Banking</option>
-                        <option value="Bank Transfer">Bank Transfer</option>
+                        <option value="Cash">💵 Cash</option>
+                        <option value="Card">💳 Card</option>
+                        <option value="Mobile Banking">📱 Mobile Banking</option>
+                        <option value="Bank Transfer">🏦 Bank Transfer</option>
+                      </select>
+                    </div>
+
+                    {/* Deposit To Account */}
+                    <div className="sm:col-span-3 space-y-1">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                        <Wallet size={11} className="text-primary" />
+                        <span>Deposit To *</span>
+                      </label>
+                      <select
+                        value={entry.accountId}
+                        onChange={(e) => {
+                          const updated = [...qsAdvanceEntries];
+                          updated[idx].accountId = e.target.value;
+                          setQsAdvanceEntries(updated);
+                        }}
+                        className="w-full px-2.5 py-2 bg-background border border-border rounded-lg text-xs font-semibold text-foreground cursor-pointer"
+                      >
+                        <option value="">-- Select Account * --</option>
+                        {accounts.map(a => (
+                          <option key={a.id} value={a.id}>
+                            {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)
+                          </option>
+                        ))}
                       </select>
                     </div>
 
                     {/* Note / Remarks */}
-                    <div className="sm:col-span-5 space-y-1">
+                    <div className="sm:col-span-3 space-y-1">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                         <FileText size={11} />
                         <span>Payment Note / Ref</span>
@@ -2323,8 +2380,6 @@ export const CustomerList: React.FC = () => {
                 </select>
               </div>
 
-
-
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-muted-foreground font-semibold">Payment Method</label>
@@ -2333,15 +2388,15 @@ export const CustomerList: React.FC = () => {
                     onChange={e => setQpMethod(e.target.value as any)}
                     className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground text-xs focus:ring-2 focus:ring-primary/50 outline-none"
                   >
-                    <option value="Cash">Cash</option>
-                    <option value="Card">Card</option>
-                    <option value="Mobile Banking">Mobile Banking</option>
-                    <option value="Bank Transfer">Bank Transfer</option>
+                    <option value="Cash">💵 Cash</option>
+                    <option value="Card">💳 Card</option>
+                    <option value="Mobile Banking">📱 Mobile Banking</option>
+                    <option value="Bank Transfer">🏦 Bank Transfer</option>
                   </select>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-muted-foreground font-semibold">Amount to Collect (AED)</label>
+                  <label className="text-muted-foreground font-semibold">Amount to Collect (AED) *</label>
                   <input
                     type="number"
                     min={0.01}
@@ -2352,6 +2407,24 @@ export const CustomerList: React.FC = () => {
                     className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-foreground text-xs focus:ring-2 focus:ring-primary/50 outline-none font-semibold text-right"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-muted-foreground font-semibold flex items-center gap-1">
+                  <Wallet size={13} className="text-primary" /> Deposit To Account *
+                </label>
+                <select
+                  value={qpAccountId}
+                  onChange={e => setQpAccountId(e.target.value)}
+                  className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground text-xs focus:ring-2 focus:ring-primary/50 outline-none"
+                >
+                  <option value="">-- Select Deposit Account * --</option>
+                  {accounts.map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="space-y-1.5">
