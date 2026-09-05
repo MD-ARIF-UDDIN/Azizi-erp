@@ -543,6 +543,48 @@ export const setActiveUserSession = (user: User) => {
   localStorage.setItem('azizi_active_session', JSON.stringify(user));
 };
 
+// ---------------------------------------------------------
+// HIGH PERFORMANCE IN-MEMORY CACHE (0ms Sub-Second Navigation)
+// ---------------------------------------------------------
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  ttl: number;
+}
+
+const _memCache = new Map<string, CacheEntry<any>>();
+
+export const getCached = <T>(key: string): T | undefined => {
+  const entry = _memCache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() - entry.timestamp > entry.ttl) {
+    _memCache.delete(key);
+    return undefined;
+  }
+  return entry.data;
+};
+
+export const setCached = <T>(key: string, data: T, ttlMs: number = 10000): T => {
+  _memCache.set(key, {
+    data,
+    timestamp: Date.now(),
+    ttl: ttlMs
+  });
+  return data;
+};
+
+export const invalidateCache = (prefix?: string) => {
+  if (!prefix) {
+    _memCache.clear();
+    return;
+  }
+  for (const key of _memCache.keys()) {
+    if (key.startsWith(prefix)) {
+      _memCache.delete(key);
+    }
+  }
+};
+
 const delay = <T>(value: T): Promise<T> => {
   return Promise.resolve(value);
 };
@@ -553,12 +595,16 @@ const delay = <T>(value: T): Promise<T> => {
 export const db = {
   branches: {
     getAll: async () => {
+      const cacheKey = 'branches:all';
+      const cached = getCached<Branch[]>(cacheKey);
+      if (cached) return cached;
+
       if (isSupabaseConfigured && supabase) {
         const { data, error } = await supabase.from('branches').select('*').eq('is_deleted', false);
         if (error) throw error;
-        return data as Branch[];
+        return setCached(cacheKey, data as Branch[], 30000);
       }
-      return delay(_branches.filter(b => !b.is_deleted));
+      return setCached(cacheKey, _branches.filter(b => !b.is_deleted), 30000);
     },
     getById: async (id: string) => {
       if (isSupabaseConfigured && supabase) {
@@ -569,6 +615,7 @@ export const db = {
       return delay(_branches.find(b => b.id === id && !b.is_deleted));
     },
     create: async (data: Omit<Branch, 'id' | 'is_deleted' | 'created_at' | 'updated_at'>) => {
+      invalidateCache('branches');
       if (isSupabaseConfigured && supabase) {
         const { data: created, error } = await supabase.from('branches').insert([data]).select().single();
         if (error) throw error;
@@ -587,6 +634,7 @@ export const db = {
       return delay(newBranch);
     },
     update: async (id: string, data: Partial<Omit<Branch, 'id' | 'created_at' | 'updated_at'>>) => {
+      invalidateCache('branches');
       if (isSupabaseConfigured && supabase) {
         const { data: updated, error } = await supabase.from('branches').update(data).eq('id', id).select().single();
         if (error) throw error;
@@ -602,6 +650,7 @@ export const db = {
       return delay(updated);
     },
     delete: async (id: string) => {
+      invalidateCache('branches');
       if (isSupabaseConfigured && supabase) {
         const { error } = await supabase.from('branches').update({ is_deleted: true }).eq('id', id);
         if (error) throw error;
@@ -620,12 +669,16 @@ export const db = {
 
   roles: {
     getAll: async () => {
+      const cacheKey = 'roles:all';
+      const cached = getCached<Role[]>(cacheKey);
+      if (cached) return cached;
+
       if (isSupabaseConfigured && supabase) {
         const { data, error } = await supabase.from('roles').select('*').eq('is_deleted', false);
         if (error) throw error;
-        return data as Role[];
+        return setCached(cacheKey, data as Role[], 30000);
       }
-      return delay(_roles.filter(r => !r.is_deleted));
+      return setCached(cacheKey, _roles.filter(r => !r.is_deleted), 30000);
     },
     getById: async (id: string) => {
       if (isSupabaseConfigured && supabase) {
@@ -636,6 +689,7 @@ export const db = {
       return delay(_roles.find(r => r.id === id && !r.is_deleted));
     },
     create: async (data: Omit<Role, 'id' | 'is_deleted' | 'created_at' | 'updated_at'>) => {
+      invalidateCache('roles');
       if (isSupabaseConfigured && supabase) {
         const { data: created, error } = await supabase.from('roles').insert([data]).select().single();
         if (error) throw error;
@@ -654,6 +708,7 @@ export const db = {
       return delay(newRole);
     },
     update: async (id: string, data: Partial<Omit<Role, 'id' | 'created_at' | 'updated_at'>>) => {
+      invalidateCache('roles');
       if (isSupabaseConfigured && supabase) {
         const { data: updated, error } = await supabase.from('roles').update(data).eq('id', id).select().single();
         if (error) throw error;
@@ -672,25 +727,34 @@ export const db = {
 
   permissions: {
     getAll: async () => {
+      const cacheKey = 'permissions:all';
+      const cached = getCached<Permission[]>(cacheKey);
+      if (cached) return cached;
+
       if (isSupabaseConfigured && supabase) {
         const { data, error } = await supabase.from('permissions').select('*');
         if (error) throw error;
-        return data as Permission[];
+        return setCached(cacheKey, data as Permission[], 60000);
       }
-      return delay(_permissions);
+      return setCached(cacheKey, _permissions, 60000);
     },
   },
 
   rolePermissions: {
     getByRoleId: async (roleId: string) => {
+      const cacheKey = `role_permissions:${roleId}`;
+      const cached = getCached<RolePermission[]>(cacheKey);
+      if (cached) return cached;
+
       if (isSupabaseConfigured && supabase) {
         const { data, error } = await supabase.from('role_permissions').select('*').eq('role_id', roleId);
         if (error) throw error;
-        return data as RolePermission[];
+        return setCached(cacheKey, data as RolePermission[], 60000);
       }
-      return delay(_rolePermissions.filter(rp => rp.role_id === roleId));
+      return setCached(cacheKey, _rolePermissions.filter(rp => rp.role_id === roleId), 60000);
     },
     updateRolePermissions: async (roleId: string, permissionIds: string[]) => {
+      invalidateCache('role_permissions');
       if (isSupabaseConfigured && supabase) {
         // Delete existing
         const { error: delErr } = await supabase.from('role_permissions').delete().eq('role_id', roleId);
@@ -722,16 +786,20 @@ export const db = {
 
   users: {
     getAll: async () => {
+      const cacheKey = 'users:all';
+      const cached = getCached<User[]>(cacheKey);
+      if (cached) return cached;
+
       if (isSupabaseConfigured && supabase) {
         const { data, error } = await supabase.from('users').select('*, role:roles(*), branch:branches(*)').eq('is_deleted', false);
         if (error) throw error;
-        return data as User[];
+        return setCached(cacheKey, data as User[], 20000);
       }
-      return delay(_users.filter(u => !u.is_deleted).map(u => ({
+      return setCached(cacheKey, _users.filter(u => !u.is_deleted).map(u => ({
         ...u,
         role: _roles.find(r => r.id === u.role_id),
         branch: _branches.find(b => b.id === u.branch_id)
-      })));
+      })), 20000);
     },
     getById: async (id: string) => {
       if (isSupabaseConfigured && supabase) {
@@ -748,6 +816,7 @@ export const db = {
       });
     },
     create: async (data: Omit<User, 'id' | 'is_deleted' | 'created_at' | 'updated_at'>) => {
+      invalidateCache('users');
       const userPassword = data.password || 'password';
       if (isSupabaseConfigured && supabase) {
         const payload: any = { ...data, password: userPassword };
@@ -771,6 +840,7 @@ export const db = {
       return delay(newUser);
     },
     update: async (id: string, data: Partial<Omit<User, 'id' | 'created_at' | 'updated_at'>>) => {
+      invalidateCache('users');
       if (isSupabaseConfigured && supabase) {
         const updatePayload: any = { ...data };
         if (!updatePayload.password) delete updatePayload.password;
@@ -791,6 +861,7 @@ export const db = {
       return delay(updated);
     },
     delete: async (id: string) => {
+      invalidateCache('users');
       if (isSupabaseConfigured && supabase) {
         const { error } = await supabase.from('users').update({ is_deleted: true }).eq('id', id);
         if (error) throw error;
@@ -809,6 +880,10 @@ export const db = {
 
   customers: {
     getAll: async () => {
+      const cacheKey = 'customers:all';
+      const cached = getCached<Customer[]>(cacheKey);
+      if (cached) return cached;
+
       let customersList: Customer[] = [];
       let salesList: { id: string; customer_id?: string; grand_total: number }[] = [];
       let paymentsList: { sale_id: string; amount: number }[] = [];
@@ -846,7 +921,7 @@ export const db = {
         salesMap.set(s.customer_id, current);
       });
 
-      return customersList.map(c => {
+      const res = customersList.map(c => {
         const stat = salesMap.get(c.id) || { totalPurchased: 0, totalPaid: 0, count: 0 };
         const due = Math.max(0, stat.totalPurchased - stat.totalPaid);
 
@@ -858,6 +933,8 @@ export const db = {
           sales_count: stat.count
         };
       });
+
+      return setCached(cacheKey, res, 15000);
     },
     getById: async (id: string) => {
       let customerRecord: Customer | undefined;
@@ -872,17 +949,21 @@ export const db = {
         customerRecord = c;
 
         if (customerRecord) {
-          const [{ data: s }, { data: p }, { data: b }, { data: st }] = await Promise.all([
+          const [{ data: s }, { data: b }, { data: st }] = await Promise.all([
             supabase.from('sales').select('*').eq('customer_id', id).eq('is_deleted', false).order('created_at', { ascending: false }),
-            supabase.from('payments').select('*').or('is_deleted.is.null,is_deleted.eq.false'),
             supabase.from('branches').select('*'),
             supabase.from('order_statuses').select('*')
           ]);
 
           salesList = s || [];
-          paymentsList = p || [];
           branchesList = b || [];
           statusesList = st || [];
+
+          if (salesList.length > 0) {
+            const sIds = salesList.map(x => x.id);
+            const { data: p } = await supabase.from('payments').select('*').in('sale_id', sIds).or('is_deleted.is.null,is_deleted.eq.false');
+            paymentsList = p || [];
+          }
         }
       } else {
         customerRecord = _customers.find(x => x.id === id && !x.is_deleted);
@@ -928,6 +1009,8 @@ export const db = {
       };
     },
     create: async (data: Omit<Customer, 'id' | 'is_deleted' | 'created_at' | 'updated_at'>) => {
+      invalidateCache('customers');
+      invalidateCache('sales');
       if (isSupabaseConfigured && supabase) {
         const payload = { ...data, id: generateUUID() };
         const { data: created, error } = await supabase.from('customers').insert([payload]).select().single();
@@ -947,6 +1030,8 @@ export const db = {
       return delay(newCust);
     },
     update: async (id: string, data: Partial<Omit<Customer, 'id' | 'created_at' | 'updated_at'>>) => {
+      invalidateCache('customers');
+      invalidateCache('sales');
       if (isSupabaseConfigured && supabase) {
         const { data: updated, error } = await supabase.from('customers').update(data).eq('id', id).select().single();
         if (error) throw error;
@@ -962,6 +1047,8 @@ export const db = {
       return delay(updated);
     },
     delete: async (id: string) => {
+      invalidateCache('customers');
+      invalidateCache('sales');
       if (isSupabaseConfigured && supabase) {
         const { error } = await supabase.from('customers').update({ is_deleted: true }).eq('id', id);
         if (error) throw error;
@@ -977,6 +1064,8 @@ export const db = {
       return delay(true);
     },
     deleteAll: async () => {
+      invalidateCache('customers');
+      invalidateCache('sales');
       if (isSupabaseConfigured && supabase) {
         const { error } = await supabase.from('customers').update({ is_deleted: true }).neq('id', '00000000-0000-0000-0000-000000000000');
         if (error) throw error;
@@ -990,12 +1079,16 @@ export const db = {
 
   serviceCategories: {
     getAll: async () => {
+      const cacheKey = 'service_categories:all';
+      const cached = getCached<ServiceCategory[]>(cacheKey);
+      if (cached) return cached;
+
       if (isSupabaseConfigured && supabase) {
         const { data, error } = await supabase.from('service_categories').select('*').eq('is_deleted', false);
         if (error) throw error;
-        return data as ServiceCategory[];
+        return setCached(cacheKey, data as ServiceCategory[], 30000);
       }
-      return delay(_categories.filter(c => !c.is_deleted));
+      return setCached(cacheKey, _categories.filter(c => !c.is_deleted), 30000);
     },
     getById: async (id: string) => {
       if (isSupabaseConfigured && supabase) {
@@ -1006,6 +1099,8 @@ export const db = {
       return delay(_categories.find(c => c.id === id && !c.is_deleted));
     },
     create: async (data: Omit<ServiceCategory, 'id' | 'is_deleted' | 'created_at' | 'updated_at'>) => {
+      invalidateCache('service_categories');
+      invalidateCache('services');
       if (isSupabaseConfigured && supabase) {
         const { data: created, error } = await supabase.from('service_categories').insert([data]).select().single();
         if (error) throw error;
@@ -1024,6 +1119,8 @@ export const db = {
       return delay(newCat);
     },
     update: async (id: string, data: Partial<Omit<ServiceCategory, 'id' | 'created_at' | 'updated_at'>>) => {
+      invalidateCache('service_categories');
+      invalidateCache('services');
       if (isSupabaseConfigured && supabase) {
         const { data: updated, error } = await supabase.from('service_categories').update(data).eq('id', id).select().single();
         if (error) throw error;
@@ -1039,6 +1136,8 @@ export const db = {
       return delay(updated);
     },
     delete: async (id: string) => {
+      invalidateCache('service_categories');
+      invalidateCache('services');
       if (isSupabaseConfigured && supabase) {
         const { error } = await supabase.from('service_categories').update({ is_deleted: true }).eq('id', id);
         if (error) throw error;
@@ -1057,15 +1156,19 @@ export const db = {
 
   services: {
     getAll: async () => {
+      const cacheKey = 'services:all';
+      const cached = getCached<Service[]>(cacheKey);
+      if (cached) return cached;
+
       if (isSupabaseConfigured && supabase) {
         const { data, error } = await supabase.from('services').select('*, category:service_categories(*)').eq('is_deleted', false);
         if (error) throw error;
-        return data as Service[];
+        return setCached(cacheKey, data as Service[], 25000);
       }
-      return delay(_services.filter(s => !s.is_deleted).map(s => ({
+      return setCached(cacheKey, _services.filter(s => !s.is_deleted).map(s => ({
         ...s,
         category: _categories.find(c => c.id === s.category_id)
-      })));
+      })), 25000);
     },
     getById: async (id: string) => {
       if (isSupabaseConfigured && supabase) {
@@ -1081,6 +1184,7 @@ export const db = {
       });
     },
     create: async (data: Omit<Service, 'id' | 'is_deleted' | 'created_at' | 'updated_at'>) => {
+      invalidateCache('services');
       if (isSupabaseConfigured && supabase) {
         const payload = { ...data, id: generateUUID() };
         const { data: created, error } = await supabase.from('services').insert([payload]).select().single();
@@ -1100,6 +1204,7 @@ export const db = {
       return delay(newSrv);
     },
     update: async (id: string, data: Partial<Omit<Service, 'id' | 'created_at' | 'updated_at'>>) => {
+      invalidateCache('services');
       if (isSupabaseConfigured && supabase) {
         const { data: updated, error } = await supabase.from('services').update(data).eq('id', id).select().single();
         if (error) throw error;
@@ -1115,6 +1220,7 @@ export const db = {
       return delay(updated);
     },
     delete: async (id: string) => {
+      invalidateCache('services');
       if (isSupabaseConfigured && supabase) {
         const { error } = await supabase.from('services').update({ is_deleted: true }).eq('id', id);
         if (error) throw error;
@@ -1133,19 +1239,24 @@ export const db = {
 
   orderStatuses: {
     getAll: async () => {
+      const cacheKey = 'order_statuses:all';
+      const cached = getCached<OrderStatus[]>(cacheKey);
+      if (cached) return cached;
+
       if (isSupabaseConfigured && supabase) {
         const { data, error } = await supabase.from('order_statuses').select('*').eq('is_deleted', false).order('sequence', { ascending: true });
         if (error) throw error;
         if (!data || data.length === 0) {
           const defaultStatuses = SEED_ORDER_STATUSES();
           const { data: seeded, error: seedErr } = await supabase.from('order_statuses').upsert(defaultStatuses, { onConflict: 'id' }).select();
-          if (!seedErr && seeded && seeded.length > 0) return seeded as OrderStatus[];
+          if (!seedErr && seeded && seeded.length > 0) return setCached(cacheKey, seeded as OrderStatus[], 30000);
         }
-        return (data || []) as OrderStatus[];
+        return setCached(cacheKey, (data || []) as OrderStatus[], 30000);
       }
-      return delay(_statuses.filter(s => !s.is_deleted).sort((a, b) => a.sequence - b.sequence));
+      return setCached(cacheKey, _statuses.filter(s => !s.is_deleted).sort((a, b) => a.sequence - b.sequence), 30000);
     },
     create: async (data: Omit<OrderStatus, 'id' | 'is_deleted' | 'is_system' | 'created_at' | 'updated_at'>) => {
+      invalidateCache('order_statuses');
       if (isSupabaseConfigured && supabase) {
         const { data: created, error } = await supabase.from('order_statuses').insert([data]).select().single();
         if (error) throw error;
@@ -1165,6 +1276,7 @@ export const db = {
       return delay(newStatus);
     },
     update: async (id: string, data: Partial<Omit<OrderStatus, 'id' | 'is_system' | 'created_at' | 'updated_at'>>) => {
+      invalidateCache('order_statuses');
       if (isSupabaseConfigured && supabase) {
         const { data: updated, error } = await supabase.from('order_statuses').update(data).eq('id', id).select().single();
         if (error) throw error;
@@ -1180,6 +1292,7 @@ export const db = {
       return delay(updated);
     },
     delete: async (id: string) => {
+      invalidateCache('order_statuses');
       if (isSupabaseConfigured && supabase) {
         const { error } = await supabase.from('order_statuses').update({ is_deleted: true }).eq('id', id);
         if (error) throw error;
@@ -1199,6 +1312,10 @@ export const db = {
 
   sales: {
     getAll: async (branchId?: string) => {
+      const cacheKey = `sales:${branchId || 'all'}`;
+      const cached = getCached<Sale[]>(cacheKey);
+      if (cached) return cached;
+
       if (isSupabaseConfigured && supabase) {
         let query = supabase.from('sales').select('*, customer:customers(*), branch:branches(*), employee:users!employee_id(*), order_status:order_statuses(*)').eq('is_deleted', false).order('created_at', { ascending: false });
         if (branchId) {
@@ -1206,7 +1323,7 @@ export const db = {
         }
         const { data: sales, error } = await query;
         if (error) throw error;
-        if (!sales || sales.length === 0) return [];
+        if (!sales || sales.length === 0) return setCached(cacheKey, [], 10000);
 
         const saleIds = sales.map(s => s.id);
 
@@ -1227,18 +1344,20 @@ export const db = {
           paymentsBySale.get(p.sale_id)!.push(p);
         });
 
-        return sales.map(s => ({
+        const result = sales.map(s => ({
           ...s,
           items: itemsBySale.get(s.id) || [],
           payments: paymentsBySale.get(s.id) || []
         }));
+
+        return setCached(cacheKey, result, 10000);
       }
 
       let list = _sales.filter(s => !s.is_deleted);
       if (branchId) {
         list = list.filter(s => s.branch_id === branchId);
       }
-      return delay(list.map(s => ({
+      const result = list.map(s => ({
         ...s,
         customer: _customers.find(c => c.id === s.customer_id),
         branch: _branches.find(b => b.id === s.branch_id),
@@ -1255,7 +1374,9 @@ export const db = {
           refund_reason: p.refund_reason || (p.notes?.includes('[Refund]') ? p.notes.replace(/\[Refund\]\s*/, '').replace(/\[Member:\s*[^\]]+\]/g, '').trim() : undefined),
           person_name: p.person_name || (p.notes?.match(/\[Member:\s*(.*?)\]/)?.[1]) || undefined
         }))
-      })));
+      }));
+
+      return setCached(cacheKey, result, 10000);
     },
     getById: async (id: string) => {
       if (isSupabaseConfigured && supabase) {
@@ -1367,6 +1488,11 @@ export const db = {
       quotation_id?: string;
       expenses?: Array<{ amount: number; description: string; account_id?: string; category_id?: string; payment_method?: Expense['payment_method'] }>;
     }) => {
+      invalidateCache('sales');
+      invalidateCache('customers');
+      invalidateCache('accounts');
+      invalidateCache('journal');
+      invalidateCache('payments');
       const subtotal = data.items.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
       const grand_total = Math.max(0, subtotal - data.discount);
       const activeUser = getActiveUserSession();
@@ -1621,6 +1747,7 @@ export const db = {
       return allExpenses.filter(e => e.sale_id === saleId);
     },
     updateStatus: async (saleId: string, newStatusId: string, remarks?: string) => {
+      invalidateCache('sales');
       const activeUser = getActiveUserSession();
       const employeeId = sanitizeUUID(activeUser?.id);
       
@@ -1673,6 +1800,10 @@ export const db = {
       return delay(updated);
     },
     delete: async (id: string) => {
+      invalidateCache('sales');
+      invalidateCache('customers');
+      invalidateCache('accounts');
+      invalidateCache('journal');
       if (isSupabaseConfigured && supabase) {
         const { error } = await supabase.from('sales').update({ is_deleted: true }).eq('id', id);
         if (error) throw error;
@@ -1688,6 +1819,10 @@ export const db = {
       return delay(true);
     },
     addItem: async (saleId: string, item: { service_id: string; quantity: number; unit_price: number; expense?: number; account_id?: string; person_name?: string; service_date?: string; staff_id?: string }) => {
+      invalidateCache('sales');
+      invalidateCache('customers');
+      invalidateCache('accounts');
+      invalidateCache('journal');
       const activeUser = getActiveUserSession();
       const employeeId = sanitizeUUID(activeUser?.id);
       const targetStaffId = item.staff_id ? sanitizeUUID(item.staff_id) : employeeId;
@@ -1902,6 +2037,10 @@ export const db = {
 
   payments: {
     getAll: async (branchId?: string) => {
+      const cacheKey = `payments:${branchId || 'all'}`;
+      const cached = getCached<any[]>(cacheKey);
+      if (cached) return cached;
+
       if (isSupabaseConfigured && supabase) {
         try {
           const [paymentsRes, salesRes, customersRes, branchesRes, usersRes] = await Promise.all([
@@ -1951,7 +2090,7 @@ export const db = {
             if (branchId && branchId !== 'all') {
               list = list.filter((p: any) => p.sale_branch_id === branchId);
             }
-            return list;
+            return setCached(cacheKey, list, 10000);
           }
         } catch (supaErr) {
           console.warn('Supabase payments.getAll fallback:', supaErr);
@@ -1991,10 +2130,12 @@ export const db = {
         };
       });
 
+      let res = mapped;
       if (branchId && branchId !== 'all') {
-        return delay(mapped.filter(p => p.sale_branch_id === branchId));
+        res = mapped.filter(p => p.sale_branch_id === branchId);
       }
-      return delay(mapped.sort((a, b) => new Date(b.payment_date || b.created_at).getTime() - new Date(a.payment_date || a.created_at).getTime()));
+      res.sort((a, b) => new Date(b.payment_date || b.created_at).getTime() - new Date(a.payment_date || a.created_at).getTime());
+      return setCached(cacheKey, res, 10000);
     },
     getBySaleId: async (saleId: string) => {
       if (isSupabaseConfigured && supabase) {
@@ -2023,6 +2164,11 @@ export const db = {
       notes?: string;
       person_name?: string;
     }) => {
+      invalidateCache('payments');
+      invalidateCache('sales');
+      invalidateCache('accounts');
+      invalidateCache('journal');
+      invalidateCache('customers');
       const activeUser = getActiveUserSession();
       const employeeId = sanitizeUUID(activeUser?.id);
       const payId = generateUUID();
@@ -2245,6 +2391,11 @@ export const db = {
       reason: string;
       person_name?: string;
     }) => {
+      invalidateCache('payments');
+      invalidateCache('sales');
+      invalidateCache('accounts');
+      invalidateCache('journal');
+      invalidateCache('customers');
       const activeUser = getActiveUserSession();
       const employeeId = sanitizeUUID(activeUser?.id);
       const payId = generateUUID();
@@ -2467,6 +2618,11 @@ export const db = {
       return delay(newPay);
     },
     clearAll: async () => {
+      invalidateCache('payments');
+      invalidateCache('sales');
+      invalidateCache('accounts');
+      invalidateCache('journal');
+      invalidateCache('customers');
       if (isSupabaseConfigured && supabase) {
         try {
           await supabase.from('payments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
@@ -2756,6 +2912,10 @@ export const db = {
 
   accounts: {
     getAll: async (branchId?: string) => {
+      const cacheKey = `accounts:${branchId || 'all'}`;
+      const cached = getCached<Account[]>(cacheKey);
+      if (cached) return cached;
+
       if (isSupabaseConfigured && supabase) {
         let query = supabase.from('accounts').select('*, branch:branches(*)').eq('is_deleted', false).order('created_at', { ascending: true });
         if (branchId) query = query.eq('branch_id', branchId);
@@ -2768,7 +2928,7 @@ export const db = {
             supabase.from('account_transactions').select('account_id, amount, transaction_type')
           ]);
 
-          return data.map((acc: any) => {
+          const res = data.map((acc: any) => {
             const payIn = (allPayments || []).filter((p: any) => p.account_id === acc.id).reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
             const expOut = (allExpenses || []).filter((e: any) => e.account_id === acc.id).reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
             const txns = (allTxns || [])
@@ -2781,11 +2941,13 @@ export const db = {
               balance: liveBalance !== 0 ? liveBalance : (Number(acc.balance) || 0)
             } as Account;
           });
+
+          return setCached(cacheKey, res, 10000);
         }
       }
       let list = _accounts.filter(a => !a.is_deleted);
       if (branchId) list = list.filter(a => !a.branch_id || a.branch_id === branchId);
-      return delay(list.map(a => {
+      const res = list.map(a => {
         const payIn = _payments.filter(p => p.account_id === a.id && !p.is_deleted).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
         const expOut = _expenses.filter(e => e.account_id === a.id && !e.is_deleted).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
         const txns = _accountTransactions
@@ -2801,13 +2963,17 @@ export const db = {
           balance: finalBalance,
           branch: _branches.find(b => b.id === a.branch_id)
         };
-      }));
+      });
+
+      return setCached(cacheKey, res, 10000);
     },
     getById: async (id: string) => {
       const all = await db.accounts.getAll();
       return all.find(a => a.id === id);
     },
     create: async (data: Omit<Account, 'id' | 'is_deleted' | 'created_at' | 'updated_at'>) => {
+      invalidateCache('accounts');
+      invalidateCache('journal');
       const activeUser = getActiveUserSession();
       const id = generateUUID();
       const now = new Date().toISOString();
@@ -3699,6 +3865,10 @@ export const db = {
 
   journal: {
     getAll: async (filters?: { entry_type?: string; performed_by?: string; from_date?: string; to_date?: string }) => {
+      const cacheKey = `journal:${JSON.stringify(filters || {})}`;
+      const cached = getCached<JournalEntry[]>(cacheKey);
+      if (cached) return cached;
+
       if (isSupabaseConfigured && supabase) {
         let q = supabase.from('journal_entries').select('*, creator:users(id, name, username, email)').order('entry_date', { ascending: false });
         if (filters?.entry_type && filters.entry_type !== 'all') q = q.eq('entry_type', filters.entry_type);
@@ -3715,7 +3885,7 @@ export const db = {
               console.warn('Could not batch load sales for journal references:', e);
             }
           }
-          return data.map((j: any) => {
+          const res = data.map((j: any) => {
             const rawRef = j.reference_no;
             const matchedInv = j.sale_id ? salesMap.get(j.sale_id) : undefined;
             const saleRef = matchedInv ? (matchedInv.startsWith('#') ? matchedInv : `#${matchedInv}`) : undefined;
@@ -3725,6 +3895,7 @@ export const db = {
               reference_no: rawRef || saleRef || descMatch || undefined
             } as JournalEntry;
           });
+          return setCached(cacheKey, res, 10000);
         }
       }
       let list = _journalEntries;
@@ -3740,7 +3911,7 @@ export const db = {
       if (filters?.to_date) {
         list = list.filter(j => j.entry_date <= filters.to_date!);
       }
-      return delay(list.map(j => {
+      const res = list.map(j => {
         const foundSale = j.sale_id ? _sales.find(s => s.id === j.sale_id) : undefined;
         const rawRef = j.reference_no;
         const saleRef = foundSale?.invoice_no ? (foundSale.invoice_no.startsWith('#') ? foundSale.invoice_no : `#${foundSale.invoice_no}`) : undefined;
@@ -3751,9 +3922,12 @@ export const db = {
           sale: foundSale ? { id: foundSale.id, invoice_no: foundSale.invoice_no } : (j as any).sale,
           reference_no: rawRef || saleRef || descMatch || undefined
         };
-      }));
+      });
+      return setCached(cacheKey, res, 10000);
     },
     create: async (data: Omit<JournalEntry, 'id' | 'created_at'>) => {
+      invalidateCache('journal');
+      invalidateCache('accounts');
       const activeUser = getActiveUserSession();
       const now = new Date().toISOString();
       const entry: JournalEntry = {
@@ -3786,6 +3960,8 @@ export const db = {
       return delay(entry);
     },
     clearAll: async () => {
+      invalidateCache('journal');
+      invalidateCache('accounts');
       if (isSupabaseConfigured && supabase) {
         try {
           await supabase.from('journal_entries').delete().neq('id', '00000000-0000-0000-0000-000000000000');
