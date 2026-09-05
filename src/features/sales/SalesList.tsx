@@ -2269,47 +2269,6 @@ export const SalesList: React.FC = () => {
                       )}
                     </div>
 
-                    {/* Member Allocation Field */}
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between">
-                        <span>Payment For Member / Applicant</span>
-                        <span className="text-[9px] font-normal text-muted-foreground">Select member or whole invoice</span>
-                      </label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <select
-                          value={payPersonName}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setPayPersonName(val);
-                            const saleItems = payingSaleDetails.items || [];
-                            const matching = saleItems.filter((it: any) => it.person_name === val);
-                            const itemTotal = matching.reduce((s: number, it: any) => s + it.subtotal, 0);
-                            if (itemTotal > 0) {
-                              setPayAmount(parseFloat(itemTotal.toFixed(2)));
-                            }
-                          }}
-                          className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
-                        >
-                          <option value="">Entire Invoice / All Members</option>
-                          {Array.from(new Set((payingSaleDetails.items || []).map((it: any) => it.person_name).filter(Boolean))).map((m: any, idx: number) => {
-                            const itemTotal = (payingSaleDetails.items || []).filter((it: any) => it.person_name === m).reduce((s: number, it: any) => s + it.subtotal, 0);
-                            return (
-                              <option key={idx} value={m}>
-                                👤 {m} ({itemTotal.toFixed(2)} AED)
-                              </option>
-                            );
-                          })}
-                        </select>
-                        <input
-                          type="text"
-                          value={payPersonName}
-                          onChange={(e) => setPayPersonName(e.target.value)}
-                          placeholder="Or custom member name"
-                          className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium text-foreground focus:ring-1 focus:ring-emerald-500"
-                        />
-                      </div>
-                    </div>
-
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Amount (AED)</label>

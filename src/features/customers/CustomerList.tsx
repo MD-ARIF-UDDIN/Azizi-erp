@@ -2323,52 +2323,7 @@ export const CustomerList: React.FC = () => {
                 </select>
               </div>
 
-              {/* Member / Person Allocation */}
-              {(() => {
-                const currentSale = qpSales.find(s => s.id === qpSelectedSaleId);
-                const items = currentSale?.items || [];
-                const distinctMembers = Array.from(new Set(items.map((it: any) => it.person_name).filter(Boolean)));
-                return (
-                  <div className="space-y-1.5 bg-muted/20 p-2.5 rounded-lg border border-border">
-                    <label className="text-[11px] font-bold text-foreground flex items-center justify-between">
-                      <span>Payment For Member / Applicant</span>
-                      <span className="text-[10px] font-normal text-muted-foreground">Optional</span>
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <select
-                        value={qpPersonName}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setQpPersonName(val);
-                          const matching = items.filter((it: any) => it.person_name === val);
-                          const total = matching.reduce((s: number, it: any) => s + it.subtotal, 0);
-                          if (total > 0 && total <= (currentSale?.remaining || 0)) {
-                            setQpAmount(parseFloat(total.toFixed(2)));
-                          }
-                        }}
-                        className="w-full px-2.5 py-1.5 bg-popover border border-border rounded-lg text-foreground text-xs focus:ring-1 focus:ring-primary outline-none cursor-pointer"
-                      >
-                        <option value="">Entire Invoice / All Members</option>
-                        {distinctMembers.map((m: any, idx: number) => {
-                          const itemTotal = items.filter((it: any) => it.person_name === m).reduce((s: number, it: any) => s + it.subtotal, 0);
-                          return (
-                            <option key={idx} value={m}>
-                              👤 {m} ({itemTotal.toFixed(2)} AED)
-                            </option>
-                          );
-                        })}
-                      </select>
-                      <input
-                        type="text"
-                        placeholder="Or custom member name"
-                        value={qpPersonName}
-                        onChange={e => setQpPersonName(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-muted/50 border border-border rounded-lg text-foreground text-xs focus:ring-1 focus:ring-primary outline-none"
-                      />
-                    </div>
-                  </div>
-                );
-              })()}
+
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">

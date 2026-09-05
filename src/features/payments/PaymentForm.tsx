@@ -3,7 +3,7 @@ import { db } from '../../lib/db';
 import type { Account } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, DollarSign, FileText, Receipt, Save, User, Wallet } from 'lucide-react';
+import { ChevronLeft, DollarSign, FileText, Receipt, Save, Wallet } from 'lucide-react';
 
 export const PaymentForm: React.FC = () => {
   const navigate = useNavigate();
@@ -21,7 +21,6 @@ export const PaymentForm: React.FC = () => {
   const [accountId, setAccountId] = useState('');
   const [transactionNo, setTransactionNo] = useState('');
   const [notes, setNotes] = useState('');
-  const [personName, setPersonName] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
@@ -52,9 +51,6 @@ export const PaymentForm: React.FC = () => {
             setSelectedSale({ ...target, remaining, totalPaid });
             setSaleId(target.id);
             setAmount(remaining);
-            if (target.person_name) {
-              setPersonName(target.person_name);
-            }
           }
         }
       } catch (err) {
@@ -68,7 +64,6 @@ export const PaymentForm: React.FC = () => {
 
   const handleSaleChange = (selectedId: string) => {
     setSaleId(selectedId);
-    setPersonName('');
     if (!selectedId) {
       setSelectedSale(null);
       setAmount(0);
@@ -81,9 +76,6 @@ export const PaymentForm: React.FC = () => {
       const remaining = Math.max(0, (Number(target.grand_total) || 0) - totalPaid);
       setSelectedSale({ ...target, remaining, totalPaid });
       setAmount(remaining);
-      if (target.person_name) {
-        setPersonName(target.person_name);
-      }
     }
   };
 
@@ -111,8 +103,7 @@ export const PaymentForm: React.FC = () => {
         amount,
         account_id: accountId || undefined,
         transaction_no: transactionNo || undefined,
-        notes: notes || undefined,
-        person_name: personName.trim() || undefined
+        notes: notes || undefined
       });
       navigate('/payments');
     } catch (err: any) {
@@ -208,60 +199,6 @@ export const PaymentForm: React.FC = () => {
               <div>
                 <span className="text-muted-foreground">Remaining Dues</span>
                 <div className="font-bold text-rose-400 mt-0.5">{(selectedSale.remaining ?? 0).toFixed(2)} AED</div>
-              </div>
-            </div>
-          )}
-
-          {/* Member / Person Allocation */}
-          {selectedSale && (
-            <div className="space-y-1.5 text-xs bg-muted/20 p-3.5 rounded-xl border border-border">
-              <label className="text-foreground font-bold flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <User size={13} className="text-primary" />
-                  Payment For Member / Applicant
-                </span>
-                <span className="text-[10px] text-muted-foreground font-normal">Select specific member or leave as entire invoice</span>
-              </label>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
-                {/* Quick Select from Invoice Items */}
-                <div>
-                  <select
-                    value={personName}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setPersonName(val);
-                      const saleItems = selectedSale.items || [];
-                      const matchingItems = saleItems.filter((it: any) => it.person_name === val);
-                      const itemTotal = matchingItems.reduce((s: number, it: any) => s + it.subtotal, 0);
-                      if (itemTotal > 0 && itemTotal <= (selectedSale.remaining || 0)) {
-                        setAmount(itemTotal);
-                      }
-                    }}
-                    className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-xs font-semibold text-foreground cursor-pointer"
-                  >
-                    <option value="">Entire Invoice / All Members</option>
-                    {Array.from(new Set((selectedSale.items || []).map((it: any) => it.person_name).filter(Boolean))).map((m: any, idx: number) => {
-                      const itemTotal = (selectedSale.items || []).filter((it: any) => it.person_name === m).reduce((s: number, it: any) => s + it.subtotal, 0);
-                      return (
-                        <option key={idx} value={m}>
-                          👤 {m} ({itemTotal.toFixed(2)} AED)
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-
-                {/* Custom Member Name write-in */}
-                <div>
-                  <input
-                    type="text"
-                    placeholder="Or type specific member name..."
-                    value={personName}
-                    onChange={(e) => setPersonName(e.target.value)}
-                    className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-xs text-foreground font-semibold"
-                  />
-                </div>
               </div>
             </div>
           )}
