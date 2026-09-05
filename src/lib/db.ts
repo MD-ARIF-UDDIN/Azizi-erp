@@ -2261,22 +2261,37 @@ export const db = {
       _journalEntries.unshift(journalEntry);
 
       if (isSupabaseConfigured && supabase) {
-        let validEmployeeId = employeeId;
+        let validEmployeeId: string | null = null;
         if (employeeId) {
           try {
             const { data: uRow } = await supabase.from('users').select('id').eq('id', employeeId).maybeSingle();
-            if (!uRow) validEmployeeId = null;
+            if (uRow) validEmployeeId = uRow.id;
           } catch {
             validEmployeeId = null;
           }
         }
 
-        const payload = {
+        let validAccountId: string | null = null;
+        if (targetAccount?.id) {
+          const checkAccId = sanitizeUUID(targetAccount.id);
+          if (checkAccId) {
+            try {
+              const { data: accRow } = await supabase.from('accounts').select('id').eq('id', checkAccId).maybeSingle();
+              if (accRow) validAccountId = accRow.id;
+            } catch {
+              validAccountId = null;
+            }
+          }
+        }
+
+        const cleanSaleId = sanitizeUUID(data.sale_id) || data.sale_id;
+
+        const basePayload: any = {
           id: payId,
-          sale_id: data.sale_id,
+          sale_id: cleanSaleId,
           amount,
           payment_method: resolvedMethod,
-          account_id: targetAccount ? sanitizeUUID(targetAccount.id) : null,
+          account_id: validAccountId,
           payment_date: now,
           transaction_no: data.transaction_no || null,
           notes: combinedNotes || null,
@@ -2285,54 +2300,91 @@ export const db = {
           created_by: validEmployeeId,
           updated_by: validEmployeeId
         };
+
         try {
-          const { data: created, error } = await supabase.from('payments').insert([payload]).select().single();
+          let { data: created, error } = await supabase.from('payments').insert([basePayload]).select().single();
+
+          if (error) {
+            console.warn('Initial Supabase payment insert failed, trying schema fallback:', error.message);
+            const fallbackPayload: any = {
+              id: payId,
+              sale_id: cleanSaleId,
+              amount,
+              payment_method: resolvedMethod,
+              transaction_no: data.transaction_no || null,
+              notes: combinedNotes || null,
+              is_deleted: false
+            };
+            const fbRes = await supabase.from('payments').insert([fallbackPayload]).select().single();
+            created = fbRes.data;
+            error = fbRes.error;
+          }
+
           if (!error && created) {
-            if (targetAccount) {
-              const { data: curAcc } = await supabase.from('accounts').select('balance').eq('id', targetAccount.id).maybeSingle();
-              const newBalance = (curAcc?.balance || 0) + amount;
-              await supabase.from('accounts').update({ balance: newBalance }).eq('id', targetAccount.id);
-              await supabase.from('account_transactions').insert([{
-                account_id: targetAccount.id,
-                transaction_type: 'income',
-                amount: amount,
-                balance_after: newBalance,
-                sale_id: data.sale_id,
-                payment_id: payId,
-                reference_no: referenceNo || null,
-                description: `Payment received for ${data.person_name ? `${data.person_name} ` : ''}Invoice #${cleanInvoiceNo || ''}`,
-                created_by: validEmployeeId
-              }]);
+            if (validAccountId) {
+              try {
+                const { data: curAcc } = await supabase.from('accounts').select('balance').eq('id', validAccountId).maybeSingle();
+                const newBalance = (curAcc?.balance || 0) + amount;
+                await supabase.from('accounts').update({ balance: newBalance }).eq('id', validAccountId);
+                await supabase.from('account_transactions').insert([{
+                  account_id: validAccountId,
+                  transaction_type: 'income',
+                  amount: amount,
+                  balance_after: newBalance,
+                  sale_id: cleanSaleId,
+                  payment_id: payId,
+                  reference_no: referenceNo || null,
+                  description: `Payment received for ${data.person_name ? `${data.person_name} ` : ''}Invoice #${cleanInvoiceNo || ''}`,
+                  created_by: validEmployeeId
+                }]);
+              } catch (accErr) {
+                console.warn('Account balance update warning:', accErr);
+              }
             }
 
-            await supabase.from('journal_entries').insert([{
-              id: journalEntry.id,
-              entry_date: journalEntry.entry_date,
-              entry_type: journalEntry.entry_type,
-              from_account: journalEntry.from_account,
-              to_account: journalEntry.to_account,
-              amount: journalEntry.amount,
-              description: journalEntry.description,
-              sale_id: sanitizeUUID(data.sale_id),
-              payment_id: sanitizeUUID(payId),
-              to_account_id: targetAccount ? sanitizeUUID(targetAccount.id) : null,
-              reference_no: referenceNo || null,
-              performed_by: validEmployeeId,
-              created_by: validEmployeeId
-            }]);
+            try {
+              await supabase.from('journal_entries').insert([{
+                id: journalEntry.id,
+                entry_date: journalEntry.entry_date,
+                entry_type: journalEntry.entry_type,
+                from_account: journalEntry.from_account,
+                to_account: journalEntry.to_account,
+                amount: journalEntry.amount,
+                description: journalEntry.description,
+                sale_id: sanitizeUUID(data.sale_id),
+                payment_id: sanitizeUUID(payId),
+                to_account_id: validAccountId,
+                reference_no: referenceNo || null,
+                performed_by: validEmployeeId,
+                created_by: validEmployeeId
+              }]);
+            } catch (jErr) {
+              console.warn('Journal entry insert warning:', jErr);
+            }
 
             // Recalculate Sale Payment Status
-            const { data: saleData } = await supabase.from('sales').select('grand_total').eq('id', data.sale_id).maybeSingle();
-            const { data: allPayments } = await supabase.from('payments').select('amount').eq('sale_id', data.sale_id).or('is_deleted.is.null,is_deleted.eq.false');
+            try {
+              const { data: saleData } = await supabase.from('sales').select('grand_total').eq('id', data.sale_id).maybeSingle();
+              const { data: allPayments } = await supabase.from('payments').select('amount').eq('sale_id', data.sale_id).or('is_deleted.is.null,is_deleted.eq.false');
 
-            const grand_total = Number(saleData?.grand_total || 0);
-            const totalPaid = (allPayments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+              const grand_total = Number(saleData?.grand_total || 0);
+              const totalPaid = (allPayments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
 
-            let payment_status: Sale['payment_status'] = 'Unpaid';
-            if (totalPaid >= grand_total && grand_total > 0) payment_status = 'Paid';
-            else if (totalPaid > 0) payment_status = 'Partially Paid';
+              let payment_status: Sale['payment_status'] = 'Unpaid';
+              if (totalPaid >= grand_total && grand_total > 0) payment_status = 'Paid';
+              else if (totalPaid > 0) payment_status = 'Partially Paid';
 
-            await supabase.from('sales').update({ payment_status, updated_by: validEmployeeId }).eq('id', data.sale_id);
+              await supabase.from('sales').update({ payment_status, updated_by: validEmployeeId }).eq('id', data.sale_id);
+            } catch (statusErr) {
+              console.warn('Sale status update warning:', statusErr);
+            }
+
+            invalidateCache('payments');
+            invalidateCache('sales');
+            invalidateCache('accounts');
+            invalidateCache('journal');
+            invalidateCache('customers');
+
             return {
               ...created,
               person_name: data.person_name || undefined
@@ -2494,22 +2546,37 @@ export const db = {
       _journalEntries.unshift(journalEntry);
 
       if (isSupabaseConfigured && supabase) {
-        let validEmployeeId = employeeId;
+        let validEmployeeId: string | null = null;
         if (employeeId) {
           try {
             const { data: uRow } = await supabase.from('users').select('id').eq('id', employeeId).maybeSingle();
-            if (!uRow) validEmployeeId = null;
+            if (uRow) validEmployeeId = uRow.id;
           } catch {
             validEmployeeId = null;
           }
         }
 
-        const payload = {
+        let validAccountId: string | null = null;
+        if (targetAccount?.id) {
+          const checkAccId = sanitizeUUID(targetAccount.id);
+          if (checkAccId) {
+            try {
+              const { data: accRow } = await supabase.from('accounts').select('id').eq('id', checkAccId).maybeSingle();
+              if (accRow) validAccountId = accRow.id;
+            } catch {
+              validAccountId = null;
+            }
+          }
+        }
+
+        const cleanSaleId = sanitizeUUID(data.sale_id) || data.sale_id;
+
+        const basePayload: any = {
           id: payId,
-          sale_id: data.sale_id,
+          sale_id: cleanSaleId,
           amount: -refundAmount,
           payment_method: resolvedMethod,
-          account_id: targetAccount ? sanitizeUUID(targetAccount.id) : null,
+          account_id: validAccountId,
           payment_date: now,
           notes: combinedNotes,
           is_deleted: false,
@@ -2517,54 +2584,90 @@ export const db = {
           created_by: validEmployeeId,
           updated_by: validEmployeeId
         };
+
         try {
-          const { data: created, error } = await supabase.from('payments').insert([payload]).select().single();
+          let { data: created, error } = await supabase.from('payments').insert([basePayload]).select().single();
+
+          if (error) {
+            console.warn('Initial Supabase refund insert failed, trying schema fallback:', error.message);
+            const fallbackPayload: any = {
+              id: payId,
+              sale_id: cleanSaleId,
+              amount: -refundAmount,
+              payment_method: resolvedMethod,
+              notes: combinedNotes,
+              is_deleted: false
+            };
+            const fbRes = await supabase.from('payments').insert([fallbackPayload]).select().single();
+            created = fbRes.data;
+            error = fbRes.error;
+          }
+
           if (!error && created) {
-            if (targetAccount) {
-              const { data: curAcc } = await supabase.from('accounts').select('balance').eq('id', targetAccount.id).maybeSingle();
-              const newBalance = (curAcc?.balance || 0) - refundAmount;
-              await supabase.from('accounts').update({ balance: newBalance }).eq('id', targetAccount.id);
-              await supabase.from('account_transactions').insert([{
-                account_id: targetAccount.id,
-                transaction_type: 'withdrawal',
-                amount: refundAmount,
-                balance_after: newBalance,
-                sale_id: data.sale_id,
-                payment_id: payId,
-                reference_no: referenceNo || null,
-                description: `Refund returned for ${data.person_name ? `${data.person_name} ` : ''}Invoice #${cleanInvoiceNo || ''}: ${data.reason}`,
-                created_by: validEmployeeId
-              }]);
+            if (validAccountId) {
+              try {
+                const { data: curAcc } = await supabase.from('accounts').select('balance').eq('id', validAccountId).maybeSingle();
+                const newBalance = (curAcc?.balance || 0) - refundAmount;
+                await supabase.from('accounts').update({ balance: newBalance }).eq('id', validAccountId);
+                await supabase.from('account_transactions').insert([{
+                  account_id: validAccountId,
+                  transaction_type: 'withdrawal',
+                  amount: refundAmount,
+                  balance_after: newBalance,
+                  sale_id: cleanSaleId,
+                  payment_id: payId,
+                  reference_no: referenceNo || null,
+                  description: `Refund returned for ${data.person_name ? `${data.person_name} ` : ''}Invoice #${cleanInvoiceNo || ''}: ${data.reason}`,
+                  created_by: validEmployeeId
+                }]);
+              } catch (accErr) {
+                console.warn('Account balance update warning:', accErr);
+              }
             }
 
-            await supabase.from('journal_entries').insert([{
-              id: journalEntry.id,
-              entry_date: journalEntry.entry_date,
-              entry_type: journalEntry.entry_type,
-              from_account: journalEntry.from_account,
-              to_account: journalEntry.to_account,
-              amount: journalEntry.amount,
-              description: journalEntry.description,
-              sale_id: sanitizeUUID(data.sale_id),
-              payment_id: sanitizeUUID(payId),
-              from_account_id: targetAccount ? sanitizeUUID(targetAccount.id) : null,
-              reference_no: referenceNo || null,
-              performed_by: validEmployeeId,
-              created_by: validEmployeeId
-            }]);
+            try {
+              await supabase.from('journal_entries').insert([{
+                id: journalEntry.id,
+                entry_date: journalEntry.entry_date,
+                entry_type: journalEntry.entry_type,
+                from_account: journalEntry.from_account,
+                to_account: journalEntry.to_account,
+                amount: journalEntry.amount,
+                description: journalEntry.description,
+                sale_id: sanitizeUUID(data.sale_id),
+                payment_id: sanitizeUUID(payId),
+                from_account_id: validAccountId,
+                reference_no: referenceNo || null,
+                performed_by: validEmployeeId,
+                created_by: validEmployeeId
+              }]);
+            } catch (jErr) {
+              console.warn('Journal entry insert warning:', jErr);
+            }
 
             // Recalculate Sale Payment Status
-            const { data: saleData } = await supabase.from('sales').select('grand_total').eq('id', data.sale_id).maybeSingle();
-            const { data: allPayments } = await supabase.from('payments').select('amount').eq('sale_id', data.sale_id).or('is_deleted.is.null,is_deleted.eq.false');
+            try {
+              const { data: saleData } = await supabase.from('sales').select('grand_total').eq('id', data.sale_id).maybeSingle();
+              const { data: allPayments } = await supabase.from('payments').select('amount').eq('sale_id', data.sale_id).or('is_deleted.is.null,is_deleted.eq.false');
 
-            const grand_total = Number(saleData?.grand_total || 0);
-            const netPaid = (allPayments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+              const grand_total = Number(saleData?.grand_total || 0);
+              const netPaid = (allPayments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
 
-            let payment_status: Sale['payment_status'] = 'Unpaid';
-            if (netPaid >= grand_total && grand_total > 0) payment_status = 'Paid';
-            else if (netPaid > 0) payment_status = 'Partially Paid';
+              let payment_status: Sale['payment_status'] = 'Unpaid';
+              if (netPaid >= grand_total && grand_total > 0) payment_status = 'Paid';
+              else if (netPaid > 0) payment_status = 'Partially Paid';
 
-            await supabase.from('sales').update({ payment_status, updated_by: validEmployeeId }).eq('id', data.sale_id);
+              await supabase.from('sales').update({ payment_status, updated_by: validEmployeeId }).eq('id', data.sale_id);
+            } catch (statusErr) {
+              console.warn('Sale status update warning:', statusErr);
+            }
+
+            invalidateCache('payments');
+            invalidateCache('sales');
+            invalidateCache('accounts');
+            invalidateCache('journal');
+            invalidateCache('customers');
+
             return {
               ...created,
               is_refund: true,
