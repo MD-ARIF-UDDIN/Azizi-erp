@@ -452,12 +452,7 @@ const SEED_TERMS_CONDITIONS = (): TermsConditions[] => {
   ];
 };
 
-const SEED_ACCOUNTS = (): Account[] => [
-  { id: 'a1111111-1111-1111-1111-111111111111', name: 'Main Cash Drawer', type: 'cash_drawer', balance: 0, is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'a2222222-2222-2222-2222-222222222222', name: 'ICP / E-Dirham Card', type: 'card', bank_name: 'FAB Bank', account_number: '7829', balance: 0, is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'a3333333-3333-3333-3333-333333333333', name: 'Amer & Tasheel Portal Card', type: 'card', bank_name: 'ENBD Bank', account_number: '4310', balance: 0, is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'a4444444-4444-4444-4444-444444444444', name: 'Corporate Bank Account', type: 'bank', bank_name: 'Mashreq Bank', account_number: '9012', balance: 0, is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
-];
+const SEED_ACCOUNTS = (): Account[] => [];
 
 const SEED_DOCUMENT_TYPES = (): DocumentType[] => [
   { id: 'dt111111-1111-1111-1111-111111111111', name: 'Visa', description: 'UAE Residence / Employment / Partner Visa', is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
@@ -3022,7 +3017,9 @@ export const db = {
         let query = supabase.from('accounts').select('*, branch:branches(*)').eq('is_deleted', false).order('created_at', { ascending: true });
         if (branchId) query = query.eq('branch_id', branchId);
         const { data, error } = await query;
-        if (!error && data && data.length > 0) {
+        if (!error && data) {
+          if (data.length === 0) return setCached(cacheKey, [], 10000);
+
           // Compute live balance for each account from payments, expenses, and transactions in parallel
           const [{ data: allPayments }, { data: allExpenses }, { data: allTxns }] = await Promise.all([
             supabase.from('payments').select('account_id, amount').eq('is_deleted', false),
@@ -3118,6 +3115,8 @@ export const db = {
       return delay(newAcc);
     },
     update: async (id: string, data: Partial<Omit<Account, 'id' | 'created_at' | 'updated_at'>>) => {
+      invalidateCache('accounts');
+      invalidateCache('journal');
       const activeUser = getActiveUserSession();
       const now = new Date().toISOString();
 
@@ -3144,6 +3143,8 @@ export const db = {
       return delay(updated);
     },
     delete: async (id: string) => {
+      invalidateCache('accounts');
+      invalidateCache('journal');
       const activeUser = getActiveUserSession();
       if (isSupabaseConfigured && supabase) {
         await supabase.from('accounts').update({ is_deleted: true }).eq('id', id);
