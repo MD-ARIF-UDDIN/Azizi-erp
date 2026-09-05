@@ -10,7 +10,7 @@ import {
   ReceiptText,
   Clock,
   X,
-  MessageSquare,
+  MessageCircle,
   Trash2,
   CheckCircle,
   FileCheck2,
@@ -467,7 +467,7 @@ export const QuotationsList: React.FC = () => {
                         onClick={() => handleWhatsAppShare(quote)}
                         className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
                       >
-                        <MessageSquare size={14} />
+                        <MessageCircle size={14} />
                         <span className="hidden sm:inline">WhatsApp</span>
                       </button>
 

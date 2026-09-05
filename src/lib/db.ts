@@ -3980,9 +3980,11 @@ export const db = {
       if (cached) return cached;
 
       if (isSupabaseConfigured && supabase) {
-        let q = supabase.from('journal_entries').select('*, creator:users(id, name, username, email)').order('entry_date', { ascending: false });
+        let q = supabase.from('journal_entries').select('*, creator:users!performed_by(id, name, email)').order('entry_date', { ascending: false });
         if (filters?.entry_type && filters.entry_type !== 'all') q = q.eq('entry_type', filters.entry_type);
         if (filters?.performed_by) q = q.eq('performed_by', filters.performed_by);
+        if (filters?.from_date) q = q.gte('entry_date', filters.from_date);
+        if (filters?.to_date) q = q.lte('entry_date', filters.to_date);
         const { data, error } = await q;
         if (!error && data) {
           const salesIds = Array.from(new Set(data.map(j => j.sale_id).filter(Boolean)));
@@ -4006,6 +4008,8 @@ export const db = {
             } as JournalEntry;
           });
           return setCached(cacheKey, res, 10000);
+        } else if (error) {
+          console.warn('Supabase journal load error:', error);
         }
       }
       let list = _journalEntries;

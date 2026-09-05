@@ -12,16 +12,18 @@ import {
   Printer,
   ReceiptText,
   Activity,
+  Eye,
   Clock,
   X,
   CreditCard,
-  MessageSquare,
+  MessageCircle,
   Download,
   Pencil,
   Trash2,
   Wallet,
   Building2,
   User,
+  RotateCcw,
   Undo2,
   CheckCircle2
 } from 'lucide-react';
@@ -103,6 +105,7 @@ export const SalesList: React.FC = () => {
   const [addServiceId, setAddServiceId] = useState('');
   const [addQty, setAddQty] = useState(1);
   const [addPrice, setAddPrice] = useState(0);
+  const [addServiceDate, setAddServiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [editSaving, setEditSaving] = useState(false);
 
   // New Gov Fee / Expense form for selected service:
@@ -261,6 +264,7 @@ export const SalesList: React.FC = () => {
       setAddServiceId('');
       setAddQty(1);
       setAddPrice(0);
+      setAddServiceDate(new Date().toISOString().split('T')[0]);
 
       const defaultCard = accounts.find(a => a.type === 'card') || accounts[0];
       setSvcExpenseAccountId(defaultCard?.id || '');
@@ -346,6 +350,7 @@ export const SalesList: React.FC = () => {
         quantity: addQty,
         unit_price: addPrice,
         person_name: memberName,
+        service_date: addServiceDate || new Date().toISOString().split('T')[0],
         staff_id: user?.id
       });
       const detail = await db.sales.getById(editingSaleId);
@@ -967,9 +972,9 @@ export const SalesList: React.FC = () => {
                                   <button
                                     onClick={() => handleOpenDetail(s.id)}
                                     className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-black flex items-center justify-center transition-all cursor-pointer shadow-2xs"
-                                    title="View Full Details"
+                                    title="View Invoice Details"
                                   >
-                                    <Clock size={13} />
+                                    <Eye size={13} />
                                   </button>
                                   <button
                                     onClick={async (e) => {
@@ -995,7 +1000,7 @@ export const SalesList: React.FC = () => {
                                     className="w-7 h-7 rounded-full bg-emerald-500/10 hover:bg-emerald-500 text-emerald-600 dark:text-emerald-400 hover:text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                                     title="Send WhatsApp Receipt"
                                   >
-                                    <MessageSquare size={13} />
+                                    <MessageCircle size={13} />
                                   </button>
                                   <button
                                     onClick={() => handleOpenEditItems(s.id)}
@@ -1010,7 +1015,7 @@ export const SalesList: React.FC = () => {
                                       className="w-7 h-7 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                                       title="Return / Refund Money"
                                     >
-                                      <Undo2 size={13} />
+                                      <RotateCcw size={13} />
                                     </button>
                                   )}
                                 </div>
@@ -1084,7 +1089,7 @@ export const SalesList: React.FC = () => {
                         onClick={() => handleWhatsAppShare(mainSale)}
                         className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
                       >
-                        <MessageSquare size={14} />
+                        <MessageCircle size={14} />
                         <span className="hidden sm:inline">WhatsApp</span>
                       </button>
 
@@ -1214,8 +1219,9 @@ export const SalesList: React.FC = () => {
                                 <thead>
                                   <tr className="bg-[#000ba0] text-white font-extrabold text-[11px]">
                                     <th className="px-3 py-1.5 text-center border-r border-gray-300 w-10">SR#</th>
+                                    <th className="px-3 py-1.5 text-center border-r border-gray-300 w-24">Date</th>
                                     <th className="px-3 py-1.5 border-r border-gray-300">Description of Service</th>
-                                    <th className="px-3 py-1.5 text-center border-r border-gray-300 w-24">QTY</th>
+                                    <th className="px-3 py-1.5 text-center border-r border-gray-300 w-20">QTY</th>
                                     <th className="px-3 py-1.5 text-right border-r border-gray-300 w-24">Price</th>
                                     <th className="px-3 py-1.5 text-right border-r border-gray-300 w-20">Discount</th>
                                     <th className="px-3 py-1.5 text-right w-24">Total</th>
@@ -1230,6 +1236,9 @@ export const SalesList: React.FC = () => {
                                       rows.push(
                                         <tr key={item.id || iIdx} className="border-b border-gray-300 h-7 text-black">
                                           <td className="px-3 py-1 text-center border-r border-gray-300 font-bold">{iIdx + 1}</td>
+                                          <td className="px-3 py-1 text-center border-r border-gray-300 font-mono text-[11px] whitespace-nowrap">
+                                            {item.service_date ? new Date(item.service_date).toLocaleDateString() : (item.created_at ? new Date(item.created_at).toLocaleDateString() : new Date(saleItem.created_at).toLocaleDateString())}
+                                          </td>
                                           <td className="px-3 py-1 border-r border-gray-300 font-medium">
                                             <span>{item.service?.name || 'Service'}</span>
                                             {item.notes && <span className="text-[10px] text-gray-500 italic block">{item.notes}</span>}
@@ -1252,6 +1261,7 @@ export const SalesList: React.FC = () => {
                                           <td className="px-3 py-1 border-r border-gray-300"></td>
                                           <td className="px-3 py-1 border-r border-gray-300"></td>
                                           <td className="px-3 py-1 border-r border-gray-300"></td>
+                                          <td className="px-3 py-1 border-r border-gray-300"></td>
                                           <td className="px-3 py-1 text-right"></td>
                                         </tr>
                                       );
@@ -1262,7 +1272,7 @@ export const SalesList: React.FC = () => {
                                 </tbody>
                                 <tfoot>
                                   <tr className="bg-[#f28f00] text-white font-extrabold border-t border-gray-300 text-xs">
-                                    <td className="px-3 py-1.5 text-center border-r border-gray-300 uppercase tracking-wider" colSpan={5}>
+                                    <td className="px-3 py-1.5 text-center border-r border-gray-300 uppercase tracking-wider" colSpan={6}>
                                       Sub Total
                                     </td>
                                     <td className="px-3 py-1.5 text-right font-mono font-black">
@@ -1723,7 +1733,9 @@ export const SalesList: React.FC = () => {
                       <thead className="bg-slate-100 text-slate-700 font-bold font-heading text-xs uppercase tracking-wider sticky top-0 z-10 border-b border-slate-200">
                         <tr>
                           <th className="text-center py-3 px-3 w-10">#</th>
-                          <th className="py-3 px-4 min-w-[240px]">Service Name</th>
+                          <th className="py-3 px-4 min-w-[180px]">Service Name</th>
+                          <th className="text-center py-3 px-3 w-28">Service Date</th>
+                          <th className="text-center py-3 px-3 w-32">Staff</th>
                           <th className="text-center py-3 px-3 w-16">Qty</th>
                           <th className="text-right py-3 px-4 w-28">Rate</th>
                           <th className="text-right py-3 px-4 w-32">Total Billed</th>
@@ -1735,7 +1747,7 @@ export const SalesList: React.FC = () => {
                       <tbody className="divide-y divide-slate-100">
                         {editingSaleItems.length === 0 ? (
                           <tr>
-                            <td colSpan={8} className="py-12 text-center text-slate-500">
+                            <td colSpan={10} className="py-12 text-center text-slate-500">
                               <div className="max-w-md mx-auto space-y-1">
                                 <ReceiptText size={24} className="mx-auto text-slate-400 opacity-60" />
                                 <div className="font-bold font-heading text-slate-700 text-sm">
@@ -1763,9 +1775,21 @@ export const SalesList: React.FC = () => {
                                   <div className="font-bold font-heading text-slate-900 text-sm leading-snug">
                                     {item.service?.name || 'Service'}
                                   </div>
-                                  <div className="text-[11px] text-slate-400 font-medium mt-0.5">
-                                    Staff: {item.staff?.name || editingSale?.employee?.name || 'Staff'}
-                                  </div>
+                                  {item.person_name && (
+                                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                      👤 For: {item.person_name}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="text-center py-3.5 px-3 font-mono text-xs text-slate-600 whitespace-nowrap">
+                                  {item.service_date 
+                                    ? new Date(item.service_date).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
+                                    : (item.created_at ? new Date(item.created_at).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' }) : '—')}
+                                </td>
+                                <td className="text-center py-3.5 px-3 whitespace-nowrap">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-semibold font-sans text-xs border border-slate-200">
+                                    👤 {item.staff?.name || editingSale?.employee?.name || user?.name || 'Staff'}
+                                  </span>
                                 </td>
                                 <td className="text-center py-3.5 px-3">
                                   <span className="inline-block px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-800 font-bold font-heading text-xs">
@@ -1836,7 +1860,7 @@ export const SalesList: React.FC = () => {
 
                     <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                       {/* Service Selector */}
-                      <div className="sm:col-span-6">
+                      <div className="sm:col-span-4">
                         <label className="text-[10px] font-bold font-heading uppercase tracking-wider text-slate-600 block mb-1">
                           Select Service
                         </label>
@@ -1856,6 +1880,19 @@ export const SalesList: React.FC = () => {
                             </option>
                           ))}
                         </select>
+                      </div>
+
+                      {/* Service Date */}
+                      <div className="sm:col-span-2">
+                        <label className="text-[10px] font-bold font-heading uppercase tracking-wider text-slate-600 block mb-1">
+                          Service Date
+                        </label>
+                        <input
+                          type="date"
+                          value={addServiceDate}
+                          onChange={(e) => setAddServiceDate(e.target.value)}
+                          className="w-full px-2 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold font-sans text-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none cursor-pointer"
+                        />
                       </div>
 
                       {/* Qty */}

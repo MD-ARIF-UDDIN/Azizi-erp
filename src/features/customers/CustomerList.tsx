@@ -17,13 +17,14 @@ import {
   FileText,
   AlertTriangle,
   History,
+  Eye,
   Calendar,
   Printer,
   ShoppingCart,
   ReceiptText,
   Percent,
   CreditCard,
-  MessageSquare,
+  MessageCircle,
   User,
   Users,
   Building2,
@@ -164,6 +165,7 @@ export const CustomerList: React.FC = () => {
   const [addServiceId, setAddServiceId] = useState('');
   const [addQty, setAddQty] = useState(1);
   const [addPrice, setAddPrice] = useState(0);
+  const [addServiceDate, setAddServiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [editSaving, setEditSaving] = useState(false);
 
   // --- Create/Edit Customer Modal State ---
@@ -290,6 +292,7 @@ export const CustomerList: React.FC = () => {
       setAddServiceId('');
       setAddQty(1);
       setAddPrice(0);
+      setAddServiceDate(new Date().toISOString().split('T')[0]);
       setEditItemsModalOpen(true);
     } catch (err) {
       console.error(err);
@@ -300,7 +303,13 @@ export const CustomerList: React.FC = () => {
     if (!editingSaleId || !addServiceId || addQty <= 0) return;
     setEditSaving(true);
     try {
-      await db.sales.addItem(editingSaleId, { service_id: addServiceId, quantity: addQty, unit_price: addPrice, staff_id: user?.id });
+      await db.sales.addItem(editingSaleId, {
+        service_id: addServiceId,
+        quantity: addQty,
+        unit_price: addPrice,
+        service_date: addServiceDate || new Date().toISOString().split('T')[0],
+        staff_id: user?.id
+      });
       const detail = await db.sales.getById(editingSaleId);
       setEditingSale(detail);
       setEditingSaleItems(detail?.items || []);
@@ -1094,9 +1103,9 @@ export const CustomerList: React.FC = () => {
                                 <button
                                   onClick={() => handleOpenDetail(c)}
                                   className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-black flex items-center justify-center transition-all cursor-pointer shadow-2xs"
-                                  title="Customer Details & Documents"
+                                  title="View Customer Profile & Invoices"
                                 >
-                                  <History size={13} />
+                                  <Eye size={13} />
                                 </button>
                                 {hasPermission('Customer.Update') && (
                                   <button
@@ -1466,7 +1475,7 @@ export const CustomerList: React.FC = () => {
                                       }}
                                       className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 text-emerald-600 dark:text-emerald-400 hover:text-white transition-all cursor-pointer"
                                     >
-                                      <MessageSquare size={13} />
+                                      <MessageCircle size={13} />
                                     </button>
                                     {hasPermission('Sales.Update') && (
                                       <button
@@ -2516,6 +2525,7 @@ export const CustomerList: React.FC = () => {
                   <thead className="bg-muted/20">
                     <tr>
                       <th className="px-3 py-2 text-left text-muted-foreground font-semibold">Service</th>
+                      <th className="px-3 py-2 text-center text-muted-foreground font-semibold">Service Date</th>
                       <th className="px-3 py-2 text-center text-muted-foreground font-semibold">Staff</th>
                       <th className="px-3 py-2 text-center text-muted-foreground font-semibold">Qty</th>
                       <th className="px-3 py-2 text-right text-muted-foreground font-semibold">Price</th>
@@ -2531,6 +2541,11 @@ export const CustomerList: React.FC = () => {
                           {item.person_name && (
                             <div className="text-[10px] text-muted-foreground italic">(For: {item.person_name})</div>
                           )}
+                        </td>
+                        <td className="px-3 py-2 text-center text-[11px] font-mono text-muted-foreground whitespace-nowrap">
+                          {item.service_date 
+                            ? new Date(item.service_date).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })
+                            : (item.created_at ? new Date(item.created_at).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' }) : '—')}
                         </td>
                         <td className="px-3 py-2 text-center text-[11px] font-medium text-foreground">
                           <span className="px-2 py-0.5 rounded bg-muted/80 text-foreground font-semibold border border-border/60">
@@ -2560,22 +2575,33 @@ export const CustomerList: React.FC = () => {
             {/* Add New Item */}
             <div className="border border-violet-500/20 bg-violet-500/5 rounded-xl p-4 space-y-3">
               <p className="text-[11px] font-bold text-violet-600 uppercase tracking-wider">Add New Item</p>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Service</label>
-                <select
-                  value={addServiceId}
-                  onChange={(e) => {
-                    const svc = allServices.find(s => s.id === e.target.value);
-                    setAddServiceId(e.target.value);
-                    if (svc) setAddPrice(svc.price);
-                  }}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-violet-500 cursor-pointer"
-                >
-                  <option value="">-- Select a Service --</option>
-                  {allServices.map(s => (
-                    <option key={s.id} value={s.id}>{s.name} — {s.price.toFixed(2)} AED</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2 space-y-1.5">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Service</label>
+                  <select
+                    value={addServiceId}
+                    onChange={(e) => {
+                      const svc = allServices.find(s => s.id === e.target.value);
+                      setAddServiceId(e.target.value);
+                      if (svc) setAddPrice(svc.price);
+                    }}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-violet-500 cursor-pointer"
+                  >
+                    <option value="">-- Select a Service --</option>
+                    {allServices.map(s => (
+                      <option key={s.id} value={s.id}>{s.name} — {s.price.toFixed(2)} AED</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Service Date</label>
+                  <input
+                    type="date"
+                    value={addServiceDate}
+                    onChange={(e) => setAddServiceDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-border bg-card text-xs font-semibold text-foreground focus:ring-1 focus:ring-violet-500 cursor-pointer"
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -3007,8 +3033,9 @@ export const CustomerList: React.FC = () => {
                 <thead>
                   <tr className="bg-[#000ba0] text-white font-extrabold text-[11px]">
                     <th className="px-3 py-1.5 text-center border-r border-gray-300 w-10">SR#</th>
+                    <th className="px-3 py-1.5 text-center border-r border-gray-300 w-24">Date</th>
                     <th className="px-3 py-1.5 border-r border-gray-300">Description of Service</th>
-                    <th className="px-3 py-1.5 text-center border-r border-gray-300 w-24">QTY</th>
+                    <th className="px-3 py-1.5 text-center border-r border-gray-300 w-20">QTY</th>
                     <th className="px-3 py-1.5 text-right border-r border-gray-300 w-24">Price</th>
                     <th className="px-3 py-1.5 text-right border-r border-gray-300 w-20">Discount</th>
                     <th className="px-3 py-1.5 text-right w-24">Total</th>
@@ -3023,6 +3050,9 @@ export const CustomerList: React.FC = () => {
                       rows.push(
                         <tr key={item.id || iIdx} className="border-b border-gray-300 h-7 text-black">
                           <td className="px-3 py-1 text-center border-r border-gray-300 font-bold">{iIdx + 1}</td>
+                          <td className="px-3 py-1 text-center border-r border-gray-300 font-mono text-[11px] whitespace-nowrap">
+                            {item.service_date ? new Date(item.service_date).toLocaleDateString() : (item.created_at ? new Date(item.created_at).toLocaleDateString() : new Date(printSaleData.created_at).toLocaleDateString())}
+                          </td>
                           <td className="px-3 py-1 border-r border-gray-300 font-medium">
                             <span>{item.service?.name || 'Service'}</span>
                             {item.notes && <span className="text-[10px] text-gray-500 italic block">{item.notes}</span>}
@@ -3044,6 +3074,7 @@ export const CustomerList: React.FC = () => {
                           <td className="px-3 py-1 border-r border-gray-300"></td>
                           <td className="px-3 py-1 border-r border-gray-300"></td>
                           <td className="px-3 py-1 border-r border-gray-300"></td>
+                          <td className="px-3 py-1 border-r border-gray-300"></td>
                           <td className="px-3 py-1 text-right"></td>
                         </tr>
                       );
@@ -3054,7 +3085,7 @@ export const CustomerList: React.FC = () => {
                 </tbody>
                 <tfoot>
                   <tr className="bg-[#f28f00] text-white font-extrabold border-t border-gray-300 text-xs">
-                    <td className="px-3 py-1.5 text-center border-r border-gray-300 uppercase tracking-wider" colSpan={5}>
+                    <td className="px-3 py-1.5 text-center border-r border-gray-300 uppercase tracking-wider" colSpan={6}>
                       Sub Total
                     </td>
                     <td className="px-3 py-1.5 text-right font-mono font-black">
