@@ -889,7 +889,7 @@ export const db = {
       let paymentsList: { sale_id: string; amount: number }[] = [];
 
       if (isSupabaseConfigured && supabase) {
-        const [{ data: c, error: cErr }, { data: s, error: sErr }, { data: p, error: pErr }] = await Promise.all([
+        const [{ data: c, error: cErr }, { data: s }, { data: p }] = await Promise.all([
           supabase.from('customers').select('*').eq('is_deleted', false).order('created_at', { ascending: false }),
           supabase.from('sales').select('id, customer_id, grand_total').eq('is_deleted', false),
           supabase.from('payments').select('sale_id, amount').or('is_deleted.is.null,is_deleted.eq.false')
