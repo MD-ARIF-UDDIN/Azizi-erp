@@ -404,7 +404,8 @@ input:focus, select:focus, textarea:focus {
   }
 
   /* The printable sheet itself */
-  .print-invoice-sheet {
+  .print-invoice-sheet,
+  .print-voucher-sheet {
     display: block !important;
     position: static !important;
     width: 100% !important;
@@ -421,13 +422,30 @@ input:focus, select:focus, textarea:focus {
     visibility: visible !important;
   }
 
-  /* Preserve flex and grid layouts inside invoice sheets */
-  .print-invoice-sheet .flex {
+  /* Preserve flex and grid layouts inside invoice sheets & voucher sheets */
+  .print-invoice-sheet .flex,
+  .print-voucher-sheet .flex {
     display: flex !important;
   }
 
-  .print-invoice-sheet .grid {
+  .print-invoice-sheet .grid,
+  .print-voucher-sheet .grid {
     display: grid !important;
+  }
+
+  .print-invoice-sheet .grid-cols-2,
+  .print-invoice-sheet .md\:grid-cols-2,
+  .print-voucher-sheet .grid-cols-2,
+  .print-voucher-sheet .grid-cols-3 {
+    display: grid !important;
+  }
+
+  .print-voucher-sheet .grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .print-voucher-sheet .grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 
   .print-invoice-sheet .grid-cols-2,
@@ -435,21 +453,25 @@ input:focus, select:focus, textarea:focus {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
-  .print-invoice-sheet table {
+  .print-invoice-sheet table,
+  .print-voucher-sheet table {
     border-collapse: collapse !important;
     width: 100% !important;
     display: table !important;
   }
 
   .print-invoice-sheet table th,
-  .print-invoice-sheet table td {
+  .print-invoice-sheet table td,
+  .print-voucher-sheet table th,
+  .print-voucher-sheet table td {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     color-adjust: exact !important;
   }
 
-  /* Individual invoice container: ensure it never breaks across pages unless multi-page is forced */
-  .print-invoice-sheet > div {
+  /* Individual invoice/voucher container: ensure it never breaks across pages */
+  .print-invoice-sheet > div,
+  .print-voucher-sheet > div {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }
