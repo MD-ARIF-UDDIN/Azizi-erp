@@ -1210,9 +1210,8 @@ export const db = {
 
         const saleIds = sales.map(s => s.id);
 
-        // Fetch all items and payments in 2 fast parallel queries instead of 2 * N sequential queries
         const [{ data: allItems }, { data: allPayments }] = await Promise.all([
-          supabase.from('sale_items').select('*, service:services(*), staff:users!staff_id(*)').in('sale_id', saleIds),
+          supabase.from('sale_items').select('id, sale_id, service_id, quantity, unit_price, subtotal, person_name, service:services(id, name, code)').in('sale_id', saleIds),
           supabase.from('payments').select('*').in('sale_id', saleIds).or('is_deleted.is.null,is_deleted.eq.false')
         ]);
 
