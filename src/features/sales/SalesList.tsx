@@ -2656,27 +2656,20 @@ export const SalesList: React.FC = () => {
                     <td className="p-2 bg-gray-50 font-bold text-gray-700 border-r border-gray-300">
                       Payment Mode:
                     </td>
-                    <td className="p-2 font-bold text-black border-r border-gray-300">
+                    <td className="p-2 font-bold text-black border-r border-gray-300" colSpan={printableVoucherData.transactionNo ? 1 : 3}>
                       {printableVoucherData.paymentMethod || 'Cash'}
                     </td>
-                    <td className="p-2 bg-gray-50 font-bold text-gray-700 border-r border-gray-300">
-                      {printableVoucherData.type === 'receipt' ? 'Deposited To Account:' : 'Paid Out From Account:'}
-                    </td>
-                    <td className="p-2 font-bold text-black">
-                      {printableVoucherData.account?.name || 'Main Cash Drawer'}
-                    </td>
+                    {printableVoucherData.transactionNo && (
+                      <>
+                        <td className="p-2 bg-gray-50 font-bold text-gray-700 border-r border-gray-300">
+                          Transaction / Ref No:
+                        </td>
+                        <td className="p-2 font-mono font-bold text-black">
+                          {printableVoucherData.transactionNo}
+                        </td>
+                      </>
+                    )}
                   </tr>
-
-                  {printableVoucherData.transactionNo && (
-                    <tr className="border-b border-gray-300">
-                      <td className="p-2 bg-gray-50 font-bold text-gray-700 border-r border-gray-300">
-                        Transaction / Ref No:
-                      </td>
-                      <td className="p-2 font-mono font-semibold text-black" colSpan={3}>
-                        {printableVoucherData.transactionNo}
-                      </td>
-                    </tr>
-                  )}
 
                   <tr className="border-b border-gray-300">
                     <td className="p-2 bg-gray-50 font-bold text-gray-700 border-r border-gray-300">
