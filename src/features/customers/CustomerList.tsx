@@ -2831,6 +2831,7 @@ export const CustomerList: React.FC = () => {
         const totalRefunded = Math.abs(allPayments.filter((p: any) => p.amount < 0 || p.is_refund).reduce((s: number, p: any) => s + p.amount, 0));
         const netPaid = totalCollected - totalRefunded;
         const due = Math.max(0, printSaleData.grand_total - netPaid);
+        const advance = Math.max(0, netPaid - (printSaleData.grand_total || 0));
 
         return (
           <div className="hidden print:block fixed inset-0 bg-white p-6 sm:p-8 z-[9999] text-black text-xs font-sans print-invoice-sheet leading-normal">
@@ -3080,6 +3081,12 @@ export const CustomerList: React.FC = () => {
                     <span>Due Amount</span>
                     <span className="font-mono">{due.toFixed(2)} AED</span>
                   </div>
+                  {advance > 0 && (
+                    <div className="flex justify-between bg-sky-50 text-sky-900 font-extrabold px-3 py-1.5 text-xs">
+                      <span>Advance Money</span>
+                      <span className="font-mono">+{advance.toFixed(2)} AED</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

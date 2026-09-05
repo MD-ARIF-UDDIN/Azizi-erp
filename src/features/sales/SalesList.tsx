@@ -1107,6 +1107,7 @@ export const SalesList: React.FC = () => {
                       const totalRefunded = Math.abs(allPayments.filter((p: any) => p.amount < 0 || p.is_refund).reduce((sum: number, p: any) => sum + p.amount, 0));
                       const netPaid = totalCollected - totalRefunded;
                       const due = Math.max(0, saleItem.grand_total - netPaid);
+                      const advance = Math.max(0, netPaid - saleItem.grand_total);
 
                       return (
                         <div 
@@ -1363,6 +1364,12 @@ export const SalesList: React.FC = () => {
                                     <span>Due Amount</span>
                                     <span className="font-mono">{due.toFixed(2)} AED</span>
                                   </div>
+                                  {advance > 0 && (
+                                    <div className="flex justify-between bg-sky-50 text-sky-900 font-extrabold px-3 py-1.5 text-xs">
+                                      <span>Advance Money</span>
+                                      <span className="font-mono">+{advance.toFixed(2)} AED</span>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -1390,20 +1397,31 @@ export const SalesList: React.FC = () => {
                         </button>
                       )}
 
-                      {/* Due collection button */}
+                      {/* Due collection button or Advance badge */}
                       {(() => {
                         const totalPaid = mainSale.payments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0;
                         const due = mainSale.grand_total - totalPaid;
-                        return due > 0 && hasPermission('Payments.Create') ? (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenPayModal(mainSale.id)}
-                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-colors cursor-pointer"
-                          >
-                            <CreditCard size={14} />
-                            <span>Collect Due ({due.toFixed(2)} AED)</span>
-                          </button>
-                        ) : null;
+                        const advance = totalPaid - mainSale.grand_total;
+                        if (due > 0 && hasPermission('Payments.Create')) {
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenPayModal(mainSale.id)}
+                              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20 transition-colors cursor-pointer"
+                            >
+                              <CreditCard size={14} />
+                              <span>Collect Due Payment ({due.toFixed(2)} AED)</span>
+                            </button>
+                          );
+                        }
+                        if (advance > 0) {
+                          return (
+                            <div className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-sky-50 text-sky-800 border border-sky-200 font-bold text-xs">
+                              <span>Advance Paid: +{advance.toFixed(2)} AED</span>
+                            </div>
+                          );
+                        }
+                        return null;
                       })()}
 
                       {/* Return / Refund button */}
@@ -1419,50 +1437,14 @@ export const SalesList: React.FC = () => {
                       )}
                     </div>
 
-                    {/* Payment & Refund History timeline */}
-                    <div className="space-y-3 pt-3 border-t border-border/60">
-                      <div className="flex items-center justify-between">
+                    {/* Summary cards & timeline inside invoice details panel */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Financial summary */}
+                      <div className="space-y-3">
                         <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                          <CreditCard size={14} className="text-emerald-600" />
-                          Payment &amp; Refund Activity Log (Invoice #{mainSale.invoice_no})
+                          <Wallet size={14} className="text-primary" />
+                          Payment &amp; Refund Ledger
                         </h4>
-                        {hasPermission('Payments.Create') && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenRefundModal(mainSale.id)}
-                            className="text-[11px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 cursor-pointer"
-                          >
-                            <Undo2 size={12} /> Return Money / Refund
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                        <div className="p-2 rounded-xl bg-muted/40 border border-border">
-                          <div className="text-[10px] text-muted-foreground uppercase font-bold">Total Invoiced</div>
-                          <div className="font-extrabold text-foreground">{mainSale.grand_total.toFixed(2)} AED</div>
-                        </div>
-                        <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                          <div className="text-[10px] text-emerald-600 uppercase font-bold">Collected</div>
-                          <div className="font-extrabold text-emerald-600">
-                            {(mainSale.payments || []).filter((p: any) => p.amount > 0).reduce((s: number, p: any) => s + p.amount, 0).toFixed(2)} AED
-                          </div>
-                        </div>
-                        <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/20">
-                          <div className="text-[10px] text-rose-600 uppercase font-bold">Refunded</div>
-                          <div className="font-extrabold text-rose-600">
-                            {Math.abs((mainSale.payments || []).filter((p: any) => p.amount < 0 || p.is_refund).reduce((s: number, p: any) => s + p.amount, 0)).toFixed(2)} AED
-                          </div>
-                        </div>
-                        <div className="p-2 rounded-xl bg-primary/10 border border-primary/20">
-                          <div className="text-[10px] text-primary uppercase font-bold">Net Balance Due</div>
-                          <div className="font-extrabold text-primary">
-                            {Math.max(0, mainSale.grand_total - (mainSale.payments || []).reduce((s: number, p: any) => s + p.amount, 0)).toFixed(2)} AED
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="relative pl-4 border-l border-border/80 space-y-2.5">
                         {(mainSale.payments || []).length === 0 ? (
                           <div className="text-xs text-muted-foreground italic py-1">No payment transactions recorded yet.</div>
                         ) : (
