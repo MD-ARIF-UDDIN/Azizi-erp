@@ -76,6 +76,7 @@ export const CreateSale: React.FC = () => {
     memberName: string;
     grandTotal: number;
     amount: number;
+    paymentMethod: 'Cash' | 'Card' | 'Bank Transfer' | 'Mobile Banking';
     accountId: string;
     notes: string;
   }[]>([]);
@@ -481,6 +482,7 @@ export const CreateSale: React.FC = () => {
         memberName: s.person_name || memberGroups[idx]?.displayName || 'General',
         grandTotal: Number(s.grand_total || 0),
         amount: 0,
+        paymentMethod: 'Cash' as const,
         accountId: defaultDrawer?.id || '',
         notes: ''
       }));
@@ -503,6 +505,7 @@ export const CreateSale: React.FC = () => {
           await db.payments.create({
             sale_id: entry.saleId,
             amount: entry.amount,
+            payment_method: entry.paymentMethod || 'Cash',
             account_id: entry.accountId || undefined,
             person_name: entry.memberName || undefined,
             notes: entry.notes ? entry.notes.trim() : undefined
@@ -1336,7 +1339,7 @@ export const CreateSale: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1">
                       
                       {/* Advance Amount */}
-                      <div className="sm:col-span-4 space-y-1">
+                      <div className="sm:col-span-3 space-y-1">
                         <div className="flex items-center justify-between">
                           <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                             Advance Paid (AED)
@@ -1384,8 +1387,29 @@ export const CreateSale: React.FC = () => {
                         />
                       </div>
 
+                      {/* Payment Mode */}
+                      <div className="sm:col-span-3 space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Payment Mode
+                        </label>
+                        <select
+                          value={entry.paymentMethod}
+                          onChange={(e) => {
+                            const updated = [...advanceEntries];
+                            updated[idx].paymentMethod = e.target.value as any;
+                            setAdvanceEntries(updated);
+                          }}
+                          className="w-full px-2.5 py-2 bg-background border border-border rounded-lg text-xs font-bold text-foreground cursor-pointer"
+                        >
+                          <option value="Cash">💵 Cash</option>
+                          <option value="Card">💳 Card</option>
+                          <option value="Bank Transfer">🏦 Bank Transfer</option>
+                          <option value="Mobile Banking">📱 Mobile Banking</option>
+                        </select>
+                      </div>
+
                       {/* Deposit To Account */}
-                      <div className="sm:col-span-4 space-y-1">
+                      <div className="sm:col-span-3 space-y-1">
                         <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                           Deposit To Account
                         </label>
@@ -1407,7 +1431,7 @@ export const CreateSale: React.FC = () => {
                       </div>
 
                       {/* Note / Remarks Column */}
-                      <div className="sm:col-span-4 space-y-1">
+                      <div className="sm:col-span-3 space-y-1">
                         <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                           <FileText size={11} />
                           <span>Payment Note / Ref</span>

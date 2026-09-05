@@ -3,7 +3,7 @@ import { db } from '../../lib/db';
 import type { Account } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, DollarSign, FileText, Receipt, Save, Wallet } from 'lucide-react';
+import { ChevronLeft, CreditCard, DollarSign, FileText, Receipt, Save, Wallet } from 'lucide-react';
 
 export const PaymentForm: React.FC = () => {
   const navigate = useNavigate();
@@ -18,6 +18,7 @@ export const PaymentForm: React.FC = () => {
   // Form States
   const [saleId, setSaleId] = useState(saleIdParam || '');
   const [amount, setAmount] = useState(0);
+  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'Bank Transfer' | 'Mobile Banking'>('Cash');
   const [accountId, setAccountId] = useState('');
   const [transactionNo, setTransactionNo] = useState('');
   const [notes, setNotes] = useState('');
@@ -101,6 +102,7 @@ export const PaymentForm: React.FC = () => {
       await db.payments.create({
         sale_id: saleId,
         amount,
+        payment_method: paymentMethod,
         account_id: accountId || undefined,
         transaction_no: transactionNo || undefined,
         notes: notes || undefined
@@ -225,19 +227,39 @@ export const PaymentForm: React.FC = () => {
               />
             </div>
 
+            {/* Payment Method & Deposit Account */}
+            <div className="space-y-1.5 text-xs">
+              <label htmlFor="method" className="text-muted-foreground font-semibold flex items-center gap-1">
+                <CreditCard size={13} /> Payment Method / Mode *
+              </label>
+              <select
+                id="method"
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value as any)}
+                className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-sm font-semibold text-foreground cursor-pointer"
+                required
+                disabled={loading || !selectedSale}
+              >
+                <option value="Cash">💵 Cash</option>
+                <option value="Card">💳 Card</option>
+                <option value="Bank Transfer">🏦 Bank Transfer</option>
+                <option value="Mobile Banking">📱 Mobile Banking</option>
+              </select>
+            </div>
+
             {/* Deposit To Account */}
             <div className="space-y-1.5 text-xs">
               <label htmlFor="account" className="text-muted-foreground font-semibold flex items-center gap-1">
-                <Wallet size={13} /> Deposit To Account *
+                <Wallet size={13} /> Deposit To Account (Optional)
               </label>
               <select
                 id="account"
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
                 className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-sm font-semibold text-foreground cursor-pointer"
-                required
                 disabled={loading || !selectedSale}
               >
+                <option value="">-- Auto-resolve / Default Drawer --</option>
                 {accounts.map(a => (
                   <option key={a.id} value={a.id}>
                     {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)

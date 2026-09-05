@@ -116,6 +116,7 @@ export const SalesList: React.FC = () => {
   const [payingSaleId, setPayingSaleId] = useState<string | null>(null);
   const [payingSaleDetails, setPayingSaleDetails] = useState<any | null>(null);
   const [payAmount, setPayAmount] = useState(0);
+  const [payMethod, setPayMethod] = useState<'Cash' | 'Card' | 'Bank Transfer' | 'Mobile Banking'>('Cash');
   const [payAccountId, setPayAccountId] = useState('');
   const [payTxnNo, setPayTxnNo] = useState('');
   const [payNotes, setPayNotes] = useState('');
@@ -394,6 +395,7 @@ export const SalesList: React.FC = () => {
       const due = Math.max(0, (detail?.grand_total || 0) - totalPaid);
       const defaultDrawer = accounts.find(a => a.type === 'cash_drawer') || accounts[0];
       setPayAmount(parseFloat(due.toFixed(2)));
+      setPayMethod('Cash');
       setPayAccountId(defaultDrawer?.id || '');
       setPayTxnNo('');
       setPayNotes('');
@@ -412,6 +414,7 @@ export const SalesList: React.FC = () => {
       const totalPaid = (detail?.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0);
       const defaultDrawer = accounts.find(a => a.type === 'cash_drawer') || accounts[0];
       setPayAmount(Math.max(0, parseFloat(totalPaid.toFixed(2))));
+      setPayMethod('Cash');
       setPayAccountId(defaultDrawer?.id || '');
       setPayTxnNo('');
       setPayNotes('');
@@ -430,6 +433,7 @@ export const SalesList: React.FC = () => {
       await db.payments.create({
         sale_id: payingSaleId,
         amount: payAmount,
+        payment_method: payMethod,
         account_id: payAccountId || undefined,
         transaction_no: payTxnNo || undefined,
         notes: payNotes || undefined,
@@ -467,6 +471,7 @@ export const SalesList: React.FC = () => {
       const refundRecord = await (db.payments as any).refund({
         sale_id: payingSaleId,
         amount: payAmount,
+        payment_method: payMethod,
         account_id: payAccountId || undefined,
         reason: refundReason.trim(),
         person_name: payPersonName.trim() || undefined
@@ -2269,9 +2274,9 @@ export const SalesList: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Amount (AED)</label>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Amount (AED) *</label>
                         <input
                           type="number"
                           min={0.01}
@@ -2284,7 +2289,20 @@ export const SalesList: React.FC = () => {
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Deposit To Account</label>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Payment Mode *</label>
+                        <select
+                          value={payMethod}
+                          onChange={(e) => setPayMethod(e.target.value as any)}
+                          className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                        >
+                          <option value="Cash">💵 Cash</option>
+                          <option value="Card">💳 Card</option>
+                          <option value="Bank Transfer">🏦 Bank Transfer</option>
+                          <option value="Mobile Banking">📱 Mobile Banking</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Deposit To Account *</label>
                         <select
                           value={payAccountId}
                           onChange={(e) => setPayAccountId(e.target.value)}
@@ -2365,7 +2383,7 @@ export const SalesList: React.FC = () => {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Refund Amount (AED) *</label>
                         <input
@@ -2379,6 +2397,19 @@ export const SalesList: React.FC = () => {
                           className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-rose-500"
                           required
                         />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Refund Mode *</label>
+                        <select
+                          value={payMethod}
+                          onChange={(e) => setPayMethod(e.target.value as any)}
+                          className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-rose-500 cursor-pointer"
+                        >
+                          <option value="Cash">💵 Cash</option>
+                          <option value="Card">💳 Card</option>
+                          <option value="Bank Transfer">🏦 Bank Transfer</option>
+                          <option value="Mobile Banking">📱 Mobile Banking</option>
+                        </select>
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Payout From Account *</label>
