@@ -449,7 +449,7 @@ export const SalesList: React.FC = () => {
       date: p.payment_date || p.created_at || new Date().toISOString(),
       amount: amountVal,
       paymentMethod: p.payment_method || 'Cash',
-      personName: p.person_name || sale?.person_name || sale?.customer?.name,
+      personName: p.person_name || sale?.person_name || undefined,
       reason: isRef ? (reasonText || 'Customer Refund / Return') : (cleanNotes || `Payment collected against invoice #${sale?.invoice_no || ''}`),
       account: targetAccount,
       sale: sale,
@@ -495,7 +495,7 @@ export const SalesList: React.FC = () => {
         date: new Date().toISOString(),
         amount: payAmount,
         paymentMethod: payMethod,
-        personName: payPersonName.trim() || detail?.person_name || detail?.customer?.name,
+        personName: payPersonName.trim() || detail?.person_name || undefined,
         reason: payNotes ? payNotes.trim() : `Payment collected against invoice #${detail?.invoice_no || ''}`,
         account: accounts.find(a => a.id === payAccountId),
         sale: detail,
@@ -550,7 +550,7 @@ export const SalesList: React.FC = () => {
         sale: detail,
         amount: payAmount,
         reason: refundReason.trim(),
-        personName: payPersonName.trim() || detail?.person_name || detail?.customer?.name,
+        personName: payPersonName.trim() || detail?.person_name || undefined,
         date: new Date().toISOString(),
         paymentMethod: payMethod,
         account: accounts.find(a => a.id === payAccountId)
@@ -2162,8 +2162,8 @@ export const SalesList: React.FC = () => {
           const maxRefundable = Math.max(0, netPaid);
 
           return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-              <div className="glass border border-border rounded-2xl p-6 w-full max-w-lg bg-white shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm print:hidden">
+              <div className="glass border border-border rounded-2xl p-6 sm:p-7 w-full max-w-3xl sm:max-w-4xl bg-white shadow-2xl relative max-h-[90vh] overflow-y-auto">
                 <button
                   onClick={() => { setPayModalOpen(false); setPayingSaleId(null); setPayingSaleDetails(null); setPrintableVoucherData(null); }}
                   className="absolute right-4 top-4 p-2 text-muted-foreground hover:text-foreground bg-muted/40 rounded-full transition-colors cursor-pointer"
@@ -2630,27 +2630,41 @@ export const SalesList: React.FC = () => {
                     </td>
                   </tr>
 
-                  <tr className="border-b border-gray-300">
-                    <td className="p-2 bg-gray-50 font-bold text-gray-700 border-r border-gray-300">
-                      {printableVoucherData.type === 'receipt' ? 'Received From:' : 'Paid / Returned To:'}
-                    </td>
-                    <td className="p-2 font-bold text-black border-r border-gray-300" colSpan={printableVoucherData.personName ? 1 : 3}>
-                      {printableVoucherData.sale?.customer?.name || 'Walk-in Customer'}
-                      {printableVoucherData.sale?.customer?.company?.name && (
-                        <span className="text-[11px] text-gray-600 block">({printableVoucherData.sale.customer.company.name})</span>
-                      )}
-                    </td>
-                    {printableVoucherData.personName && (
-                      <>
+                  {(() => {
+                    const custName = printableVoucherData.sale?.customer?.name || 'Walk-in Customer';
+                    const compName = printableVoucherData.sale?.customer?.company?.name;
+                    const rawPerson = printableVoucherData.personName?.trim();
+                    const isDistinctMember = Boolean(
+                      rawPerson &&
+                      rawPerson !== '' &&
+                      rawPerson.toLowerCase() !== custName.toLowerCase() &&
+                      (!compName || rawPerson.toLowerCase() !== compName.toLowerCase())
+                    );
+
+                    return (
+                      <tr className="border-b border-gray-300">
                         <td className="p-2 bg-gray-50 font-bold text-gray-700 border-r border-gray-300">
-                          For Member / Applicant:
+                          {printableVoucherData.type === 'receipt' ? 'Received From:' : 'Paid / Returned To:'}
                         </td>
-                        <td className="p-2 font-bold text-black">
-                          {printableVoucherData.personName}
+                        <td className="p-2 font-bold text-black border-r border-gray-300" colSpan={isDistinctMember ? 1 : 3}>
+                          {custName}
+                          {compName && (
+                            <span className="text-[11px] text-gray-600 block font-semibold">({compName})</span>
+                          )}
                         </td>
-                      </>
-                    )}
-                  </tr>
+                        {isDistinctMember && (
+                          <>
+                            <td className="p-2 bg-gray-50 font-bold text-gray-700 border-r border-gray-300">
+                              For Member / Applicant:
+                            </td>
+                            <td className="p-2 font-bold text-black">
+                              {rawPerson}
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })()}
 
                   <tr className="border-b border-gray-300">
                     <td className="p-2 bg-gray-50 font-bold text-gray-700 border-r border-gray-300">
