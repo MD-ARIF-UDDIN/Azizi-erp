@@ -78,18 +78,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // If no session exists yet, default to first active user
-      if (!sessionUser && users.length > 0) {
-        sessionUser = users[0];
-        setActiveUserSession(sessionUser);
-      }
-
       setUser(sessionUser);
 
       if (sessionUser) {
         setActiveBranchIdState(sessionUser.branch_id || 'all');
         const perms = await computePermissions(sessionUser);
         setRolePermissions(perms);
+      } else {
+        setActiveBranchIdState('all');
+        setRolePermissions([]);
+        setActiveUserSession(null as any);
       }
     } catch (err) {
       console.error(err);
@@ -133,7 +131,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
-    localStorage.removeItem('azizi_active_session');
+    setActiveUserSession(null as any);
     setUser(null);
     setRolePermissions([]);
     setActiveBranchIdState('all');

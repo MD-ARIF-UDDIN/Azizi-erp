@@ -534,8 +534,13 @@ export const getActiveUserSession = (): User => {
   return _users[0];
 };
 
-export const setActiveUserSession = (user: User) => {
-  localStorage.setItem('azizi_active_session', JSON.stringify(user));
+export const setActiveUserSession = (user: User | null) => {
+  if (typeof window === 'undefined') return;
+  if (user) {
+    localStorage.setItem('azizi_active_session', JSON.stringify(user));
+  } else {
+    localStorage.removeItem('azizi_active_session');
+  }
 };
 
 // ---------------------------------------------------------
