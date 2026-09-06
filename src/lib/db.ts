@@ -157,12 +157,6 @@ const SEED_USERS = (roles: Role[], branches: Branch[]): User[] => {
   ];
 };
 
-const SEED_CUSTOMERS = (): Customer[] => [
-  { id: 'c1111111-1111-1111-1111-111111111111', name: 'Al-Hasan Trading LLC', phone: '+971501234567', email: 'info@alhasan.ae', address: 'Deira, Dubai', customer_type: 'company', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'c2222222-2222-2222-2222-222222222222', name: 'Mohammed Rashid', phone: '+971559876543', email: 'rashid@gmail.com', address: 'Al Barsha, Dubai', customer_type: 'individual', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'c3333333-3333-3333-3333-333333333333', name: 'Gulf Horizon Contracting', phone: '+971524455667', email: 'admin@gulfhorizon.com', address: 'Business Bay, Dubai', customer_type: 'company', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-];
-
 const SEED_CATEGORIES = (): ServiceCategory[] => [
   { id: 'c1111111-1111-1111-1111-111111111111', name: 'Visa Services', description: 'Employment visa, family visa, visit visa renewals and applications.', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
   { id: 'c2222222-2222-2222-2222-222222222222', name: 'Emirates ID', description: 'New Emirates ID registration and renewals.', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
@@ -206,174 +200,6 @@ const SEED_EXPENSE_CATEGORIES = (): ExpenseCategory[] => [
   { id: 'e5555555-5555-5555-5555-555555555555', name: 'Staff Salaries', description: 'Wages for typists and stamp designers.', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
 ];
 
-// Helper to seed some past transactions for dashboard demo graphs
-const SEED_SALES_AND_FINANCIALS = (
-  branches: Branch[],
-  users: User[],
-  custs: Customer[],
-  srvs: Service[],
-  statuses: OrderStatus[],
-  expenseCats: ExpenseCategory[]
-) => {
-  const sales: Sale[] = [];
-  const saleItems: SaleItem[] = [];
-  const payments: Payment[] = [];
-  const expenses: Expense[] = [];
-  const history: OrderStatusHistory[] = [];
-  const logs: AuditLog[] = [];
-
-  if (!branches?.length || !users?.length || !custs?.length || !srvs?.length || !statuses?.length) {
-    return { sales, saleItems, payments, expenses, history, logs };
-  }
-
-  const now = new Date();
-  for (let i = 0; i < 25; i++) {
-    const saleDate = new Date();
-    saleDate.setDate(now.getDate() - (i % 15));
-    saleDate.setHours(10 + (i % 8), 15 + (i * 3) % 45, 0);
-
-    const b = branches[i % branches.length];
-    const u = (b ? users.find(x => x.branch_id === b.id) : undefined) || users[0];
-    const c = custs[i % custs.length];
-    const s1 = srvs[i % srvs.length];
-    const s2 = srvs[(i + 2) % srvs.length];
-
-    if (!b || !u || !c || !s1 || !s2) continue;
-
-    const quantity1 = (i % 3) + 1;
-    const quantity2 = (i % 2) + 1;
-    const subtotal = (s1.price * quantity1) + (s2.price * quantity2);
-    const discount = i % 5 === 0 ? 20.00 : 0.00;
-    const grand_total = Math.max(0, subtotal - discount);
-
-    const serialStr = (i + 1).toString().padStart(4, '0');
-    const invoice_no = `INV-${serialStr}`;
-
-    let order_status = statuses.find(s => s.name === 'Completed') || statuses[0];
-    let pay_status: 'Paid' | 'Partially Paid' | 'Unpaid' = 'Paid';
-    if (i === 1) {
-      order_status = statuses.find(s => s.name === 'Pending') || order_status;
-      pay_status = 'Unpaid';
-    } else if (i === 3) {
-      order_status = statuses.find(s => s.name === 'Ready') || order_status;
-      pay_status = 'Partially Paid';
-    } else if (i === 5) {
-      order_status = statuses.find(s => s.name === 'Typing') || order_status;
-      pay_status = 'Unpaid';
-    }
-
-    const sale_id = `sale-uuid-${i}`;
-    
-    sales.push({
-      id: sale_id,
-      invoice_no,
-      customer_id: c.id,
-      branch_id: b.id,
-      employee_id: u.id,
-      discount,
-      subtotal,
-      grand_total,
-      payment_status: pay_status,
-      order_status_id: order_status.id,
-      notes: i % 4 === 0 ? 'Urgent delivery required.' : undefined,
-      is_deleted: false,
-      created_at: saleDate.toISOString(),
-      updated_at: saleDate.toISOString(),
-    });
-
-    const item1_id = `item-uuid-${i}-1`;
-    saleItems.push({
-      id: item1_id,
-      sale_id,
-      service_id: s1.id,
-      staff_id: u.id,
-      quantity: quantity1,
-      unit_price: s1.price,
-      subtotal: s1.price * quantity1,
-      created_at: saleDate.toISOString(),
-      updated_at: saleDate.toISOString(),
-    });
-
-    const item2_id = `item-uuid-${i}-2`;
-    saleItems.push({
-      id: item2_id,
-      sale_id,
-      service_id: s2.id,
-      staff_id: u.id,
-      quantity: quantity2,
-      unit_price: s2.price,
-      subtotal: s2.price * quantity2,
-      created_at: saleDate.toISOString(),
-      updated_at: saleDate.toISOString(),
-    });
-
-    if (pay_status === 'Paid') {
-      payments.push({
-        id: `pay-uuid-${i}`,
-        sale_id,
-        amount: grand_total,
-        payment_method: i % 3 === 0 ? 'Mobile Banking' : 'Cash',
-        transaction_no: i % 3 === 0 ? `TXN${Date.now() - i * 1000}` : undefined,
-        payment_date: saleDate.toISOString(),
-        received_by: u.id,
-        is_deleted: false,
-        created_at: saleDate.toISOString(),
-        updated_at: saleDate.toISOString(),
-      });
-    } else if (pay_status === 'Partially Paid') {
-      payments.push({
-        id: `pay-uuid-${i}-part`,
-        sale_id,
-        amount: Math.round(grand_total / 2),
-        payment_method: 'Cash',
-        payment_date: saleDate.toISOString(),
-        received_by: u.id,
-        is_deleted: false,
-        created_at: saleDate.toISOString(),
-        updated_at: saleDate.toISOString(),
-      });
-    }
-
-    history.push({
-      id: `hist-uuid-${i}`,
-      sale_id,
-      previous_status_id: undefined,
-      new_status_id: order_status.id,
-      changed_by: u.id,
-      remarks: 'Invoice initialized.',
-      created_at: saleDate.toISOString(),
-    });
-  }
-
-  if (expenseCats?.length && branches?.length) {
-    for (let i = 0; i < 8; i++) {
-      const expenseDate = new Date();
-      expenseDate.setDate(now.getDate() - (i * 3));
-      const b = branches[i % branches.length];
-      const cat = expenseCats[i % expenseCats.length];
-      const amount = (i + 1) * 350;
-
-      if (!b || !cat) continue;
-
-      expenses.push({
-        id: `exp-uuid-${i}`,
-        category_id: cat.id,
-        branch_id: b.id,
-        amount,
-        expense_date: expenseDate.toISOString().split('T')[0],
-        description: `Payment for ${cat.name}`,
-        paid_to: i % 2 === 0 ? 'Dhaka Paper House' : 'Staff wages',
-        payment_method: i % 4 === 0 ? 'Mobile Banking' : 'Cash',
-        is_deleted: false,
-        created_at: expenseDate.toISOString(),
-        updated_at: expenseDate.toISOString(),
-      });
-    }
-  }
-
-  return { sales, saleItems, payments, expenses, history, logs };
-};
-
 // ---------------------------------------------------------
 // DATABASE INIT OR RESTORE (LOCAL STORAGE ENGINE)
 // ---------------------------------------------------------
@@ -382,63 +208,18 @@ let _roles = getOrSeed(KEYS.ROLES, SEED_ROLES);
 let _permissions = getOrSeed(KEYS.PERMISSIONS, SEED_PERMISSIONS);
 let _rolePermissions = getOrSeed(KEYS.ROLE_PERMISSIONS, () => SEED_ROLE_PERMISSIONS(_roles, _permissions));
 let _users = getOrSeed(KEYS.USERS, () => SEED_USERS(_roles, _branches));
-let _customers = getOrSeed(KEYS.CUSTOMERS, SEED_CUSTOMERS);
+let _customers: Customer[] = getOrSeed(KEYS.CUSTOMERS, () => []);
 let _categories = getOrSeed(KEYS.SERVICE_CATEGORIES, SEED_CATEGORIES);
 let _services = getOrSeed(KEYS.SERVICES, SEED_SERVICES);
 let _statuses = getOrSeed(KEYS.ORDER_STATUSES, SEED_ORDER_STATUSES);
 let _expenseCats = getOrSeed(KEYS.EXPENSE_CATEGORIES, SEED_EXPENSE_CATEGORIES);
-
-const finData = getOrSeed(KEYS.SALES, () => {
-  const seededFin = SEED_SALES_AND_FINANCIALS(_branches, _users, _customers, _services, _statuses, _expenseCats);
-  saveToLocalStorage(KEYS.SALE_ITEMS, seededFin.saleItems);
-  saveToLocalStorage(KEYS.PAYMENTS, seededFin.payments);
-  saveToLocalStorage(KEYS.EXPENSES, seededFin.expenses);
-  saveToLocalStorage(KEYS.ORDER_STATUS_HISTORY, seededFin.history);
-  saveToLocalStorage(KEYS.AUDIT_LOGS, seededFin.logs);
-  return seededFin.sales;
-});
-
-let _sales: Sale[] = finData;
-let _saleItems: SaleItem[] = JSON.parse(localStorage.getItem(KEYS.SALE_ITEMS) || '[]');
-let _payments: Payment[] = JSON.parse(localStorage.getItem(KEYS.PAYMENTS) || '[]');
-let _expenses: Expense[] = JSON.parse(localStorage.getItem(KEYS.EXPENSES) || '[]');
-let _history: OrderStatusHistory[] = JSON.parse(localStorage.getItem(KEYS.ORDER_STATUS_HISTORY) || '[]');
-let _logs: AuditLog[] = JSON.parse(localStorage.getItem(KEYS.AUDIT_LOGS) || '[]');
-
-const SEED_CLIENT_DOCUMENTS = (customers: Customer[]) => {
-  const now = new Date();
-  const d1 = new Date(now);
-  d1.setDate(now.getDate() + 15);
-  const d2 = new Date(now);
-  d2.setDate(now.getDate() + 45);
-
-  return [
-    {
-      id: 'doc-uuid-1',
-      customer_id: customers[0]?.id || 'c1-cust',
-      document_type: 'Visa' as const,
-      document_number: 'V123456789',
-      expiry_date: d2.toISOString().split('T')[0],
-      notified: false,
-      notes: 'Visa renewal due soon.',
-      status: 'Active' as const,
-      created_at: now.toISOString(),
-      updated_at: now.toISOString(),
-    },
-    {
-      id: 'doc-uuid-2',
-      customer_id: customers[1]?.id || 'c2-cust',
-      document_type: 'Emirates ID' as const,
-      document_number: '784-1995-1234567-1',
-      expiry_date: d1.toISOString().split('T')[0],
-      notified: false,
-      notes: 'Need to notify client about Emirates ID biometric scheduling.',
-      status: 'Active' as const,
-      created_at: now.toISOString(),
-      updated_at: now.toISOString(),
-    },
-  ];
-};
+let _sales: Sale[] = getOrSeed(KEYS.SALES, () => []);
+let _saleItems: SaleItem[] = getOrSeed(KEYS.SALE_ITEMS, () => []);
+let _payments: Payment[] = getOrSeed(KEYS.PAYMENTS, () => []);
+let _expenses: Expense[] = getOrSeed(KEYS.EXPENSES, () => []);
+let _history: OrderStatusHistory[] = getOrSeed(KEYS.ORDER_STATUS_HISTORY, () => []);
+let _logs: AuditLog[] = getOrSeed(KEYS.AUDIT_LOGS, () => []);
+let _clientDocuments: ClientDocument[] = getOrSeed(KEYS.CLIENT_DOCUMENTS, () => []);
 
 const SEED_TERMS_CONDITIONS = (): TermsConditions[] => {
   const now = new Date();
@@ -488,7 +269,6 @@ const SEED_DOCUMENT_TYPES = (): DocumentType[] => [
   { id: 'dt000000-0000-0000-0000-000000000000', name: 'Other', description: 'Other General Document Types', is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
 ];
 
-let _clientDocuments: ClientDocument[] = getOrSeed(KEYS.CLIENT_DOCUMENTS, () => SEED_CLIENT_DOCUMENTS(_customers));
 let _documentTypes: DocumentType[] = getOrSeed(KEYS.DOCUMENT_TYPES, SEED_DOCUMENT_TYPES);
 let _quotations: Quotation[] = getOrSeed(KEYS.QUOTATIONS, () => []);
 let _quotationItems: QuotationItem[] = getOrSeed(KEYS.QUOTATION_ITEMS, () => []);
