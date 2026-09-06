@@ -141,14 +141,27 @@ const SEED_ROLE_PERMISSIONS = (roles: Role[], permissions: Permission[]): RolePe
   return mappings;
 };
 
-const SEED_USERS = (roles: Role[], branches: Branch[]): User[] => [
-  { id: '00000000-0000-0000-0000-00000000000a', name: 'Owner admin', email: 'admin@gmail.com', phone: '+8801700000000', role_id: '00000000-0000-0000-0000-000000000000', branch_id: branches[0].id, status: 'Active', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), permissions: ['Customer.View', 'Customer.Create', 'Customer.Update', 'Customer.Delete', 'Sales.View', 'Sales.Create', 'Sales.Update', 'Sales.Delete', 'Payments.View', 'Payments.Create', 'Payments.Delete', 'Expenses.View', 'Expenses.Create', 'Expenses.Update', 'Expenses.Delete', 'Branches.View', 'Branches.Create', 'Branches.Update', 'Branches.Delete', 'Users.View', 'Users.Create', 'Users.Update', 'Users.Delete', 'Roles.View', 'Roles.Update', 'Reports.View', 'Settings.Update'] },
-  { id: '11111111-1111-1111-1111-11111111111a', name: 'Al-Amin Arif', email: 'admin@azizi.com', phone: '+8801700000001', role_id: roles[1].id, branch_id: branches[0].id, status: 'Active', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), permissions: ['Customer.View', 'Customer.Create', 'Customer.Update', 'Customer.Delete', 'Sales.View', 'Sales.Create', 'Sales.Update', 'Sales.Delete', 'Payments.View', 'Payments.Create', 'Payments.Delete', 'Expenses.View', 'Expenses.Create', 'Expenses.Update', 'Expenses.Delete', 'Branches.View', 'Branches.Create', 'Branches.Update', 'Branches.Delete', 'Users.View', 'Users.Create', 'Users.Update', 'Users.Delete', 'Roles.View', 'Roles.Update', 'Reports.View', 'Settings.Update'] },
-  { id: '22222222-2222-2222-2222-22222222222a', name: 'Rahat Khan', email: 'manager@azizi.com', phone: '+8801700000002', role_id: roles[2].id, branch_id: branches[1].id, status: 'Active', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), permissions: ['Customer.View', 'Customer.Create', 'Customer.Update', 'Sales.View', 'Sales.Create', 'Sales.Update', 'Payments.View', 'Payments.Create', 'Expenses.View', 'Expenses.Create', 'Expenses.Update', 'Branches.View', 'Users.View', 'Users.Create', 'Users.Update', 'Reports.View'] },
-  { id: '33333333-3333-3333-3333-33333333333a', name: 'Mitu Akter', email: 'cashier@azizi.com', phone: '+8801700000003', role_id: roles[3].id, branch_id: branches[0].id, status: 'Active', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), permissions: ['Customer.View', 'Customer.Create', 'Customer.Update', 'Sales.View', 'Sales.Create', 'Payments.View', 'Payments.Create', 'Reports.View'] },
-];
+const SEED_USERS = (roles: Role[], branches: Branch[]): User[] => {
+  const branch0 = branches[0]?.id || 'b1111111-1111-1111-1111-111111111111';
+  const branch1 = branches[1]?.id || branch0;
+  const role0 = roles[0]?.id || '00000000-0000-0000-0000-000000000000';
+  const role1 = roles[1]?.id || role0;
+  const role2 = roles[2]?.id || role0;
+  const role3 = roles[3]?.id || role0;
 
-const SEED_CUSTOMERS = (): Customer[] => [];
+  return [
+    { id: '00000000-0000-0000-0000-00000000000a', name: 'Owner admin', email: 'admin@gmail.com', phone: '+8801700000000', role_id: role0, branch_id: branch0, status: 'Active', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), permissions: ['Customer.View', 'Customer.Create', 'Customer.Update', 'Customer.Delete', 'Sales.View', 'Sales.Create', 'Sales.Update', 'Sales.Delete', 'Payments.View', 'Payments.Create', 'Payments.Delete', 'Expenses.View', 'Expenses.Create', 'Expenses.Update', 'Expenses.Delete', 'Branches.View', 'Branches.Create', 'Branches.Update', 'Branches.Delete', 'Users.View', 'Users.Create', 'Users.Update', 'Users.Delete', 'Roles.View', 'Roles.Update', 'Reports.View', 'Settings.Update'] },
+    { id: '11111111-1111-1111-1111-11111111111a', name: 'Al-Amin Arif', email: 'admin@azizi.com', phone: '+8801700000001', role_id: role1, branch_id: branch0, status: 'Active', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), permissions: ['Customer.View', 'Customer.Create', 'Customer.Update', 'Customer.Delete', 'Sales.View', 'Sales.Create', 'Sales.Update', 'Sales.Delete', 'Payments.View', 'Payments.Create', 'Payments.Delete', 'Expenses.View', 'Expenses.Create', 'Expenses.Update', 'Expenses.Delete', 'Branches.View', 'Branches.Create', 'Branches.Update', 'Branches.Delete', 'Users.View', 'Users.Create', 'Users.Update', 'Users.Delete', 'Roles.View', 'Roles.Update', 'Reports.View', 'Settings.Update'] },
+    { id: '22222222-2222-2222-2222-22222222222a', name: 'Rahat Khan', email: 'manager@azizi.com', phone: '+8801700000002', role_id: role2, branch_id: branch1, status: 'Active', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), permissions: ['Customer.View', 'Customer.Create', 'Customer.Update', 'Sales.View', 'Sales.Create', 'Sales.Update', 'Payments.View', 'Payments.Create', 'Expenses.View', 'Expenses.Create', 'Expenses.Update', 'Branches.View', 'Users.View', 'Users.Create', 'Users.Update', 'Reports.View'] },
+    { id: '33333333-3333-3333-3333-33333333333a', name: 'Mitu Akter', email: 'cashier@azizi.com', phone: '+8801700000003', role_id: role3, branch_id: branch0, status: 'Active', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), permissions: ['Customer.View', 'Customer.Create', 'Customer.Update', 'Sales.View', 'Sales.Create', 'Payments.View', 'Payments.Create', 'Reports.View'] },
+  ];
+};
+
+const SEED_CUSTOMERS = (): Customer[] => [
+  { id: 'c1111111-1111-1111-1111-111111111111', name: 'Al-Hasan Trading LLC', phone: '+971501234567', email: 'info@alhasan.ae', address: 'Deira, Dubai', customer_type: 'company', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'c2222222-2222-2222-2222-222222222222', name: 'Mohammed Rashid', phone: '+971559876543', email: 'rashid@gmail.com', address: 'Al Barsha, Dubai', customer_type: 'individual', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'c3333333-3333-3333-3333-333333333333', name: 'Gulf Horizon Contracting', phone: '+971524455667', email: 'admin@gulfhorizon.com', address: 'Business Bay, Dubai', customer_type: 'company', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+];
 
 const SEED_CATEGORIES = (): ServiceCategory[] => [
   { id: 'c1111111-1111-1111-1111-111111111111', name: 'Visa Services', description: 'Employment visa, family visa, visit visa renewals and applications.', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
@@ -209,6 +222,10 @@ const SEED_SALES_AND_FINANCIALS = (
   const history: OrderStatusHistory[] = [];
   const logs: AuditLog[] = [];
 
+  if (!branches?.length || !users?.length || !custs?.length || !srvs?.length || !statuses?.length) {
+    return { sales, saleItems, payments, expenses, history, logs };
+  }
+
   const now = new Date();
   for (let i = 0; i < 25; i++) {
     const saleDate = new Date();
@@ -216,10 +233,12 @@ const SEED_SALES_AND_FINANCIALS = (
     saleDate.setHours(10 + (i % 8), 15 + (i * 3) % 45, 0);
 
     const b = branches[i % branches.length];
-    const u = users.find(x => x.branch_id === b.id) || users[0];
+    const u = (b ? users.find(x => x.branch_id === b.id) : undefined) || users[0];
     const c = custs[i % custs.length];
     const s1 = srvs[i % srvs.length];
     const s2 = srvs[(i + 2) % srvs.length];
+
+    if (!b || !u || !c || !s1 || !s2) continue;
 
     const quantity1 = (i % 3) + 1;
     const quantity2 = (i % 2) + 1;
@@ -230,16 +249,16 @@ const SEED_SALES_AND_FINANCIALS = (
     const serialStr = (i + 1).toString().padStart(4, '0');
     const invoice_no = `INV-${serialStr}`;
 
-    let order_status = statuses.find(s => s.name === 'Completed')!;
+    let order_status = statuses.find(s => s.name === 'Completed') || statuses[0];
     let pay_status: 'Paid' | 'Partially Paid' | 'Unpaid' = 'Paid';
     if (i === 1) {
-      order_status = statuses.find(s => s.name === 'Pending')!;
+      order_status = statuses.find(s => s.name === 'Pending') || order_status;
       pay_status = 'Unpaid';
     } else if (i === 3) {
-      order_status = statuses.find(s => s.name === 'Ready')!;
+      order_status = statuses.find(s => s.name === 'Ready') || order_status;
       pay_status = 'Partially Paid';
     } else if (i === 5) {
-      order_status = statuses.find(s => s.name === 'Typing')!;
+      order_status = statuses.find(s => s.name === 'Typing') || order_status;
       pay_status = 'Unpaid';
     }
 
@@ -326,26 +345,30 @@ const SEED_SALES_AND_FINANCIALS = (
     });
   }
 
-  for (let i = 0; i < 8; i++) {
-    const expenseDate = new Date();
-    expenseDate.setDate(now.getDate() - (i * 3));
-    const b = branches[i % branches.length];
-    const cat = expenseCats[i % expenseCats.length];
-    const amount = (i + 1) * 350;
+  if (expenseCats?.length && branches?.length) {
+    for (let i = 0; i < 8; i++) {
+      const expenseDate = new Date();
+      expenseDate.setDate(now.getDate() - (i * 3));
+      const b = branches[i % branches.length];
+      const cat = expenseCats[i % expenseCats.length];
+      const amount = (i + 1) * 350;
 
-    expenses.push({
-      id: `exp-uuid-${i}`,
-      category_id: cat.id,
-      branch_id: b.id,
-      amount,
-      expense_date: expenseDate.toISOString().split('T')[0],
-      description: `Payment for ${cat.name}`,
-      paid_to: i % 2 === 0 ? 'Dhaka Paper House' : 'Staff wages',
-      payment_method: i % 4 === 0 ? 'Mobile Banking' : 'Cash',
-      is_deleted: false,
-      created_at: expenseDate.toISOString(),
-      updated_at: expenseDate.toISOString(),
-    });
+      if (!b || !cat) continue;
+
+      expenses.push({
+        id: `exp-uuid-${i}`,
+        category_id: cat.id,
+        branch_id: b.id,
+        amount,
+        expense_date: expenseDate.toISOString().split('T')[0],
+        description: `Payment for ${cat.name}`,
+        paid_to: i % 2 === 0 ? 'Dhaka Paper House' : 'Staff wages',
+        payment_method: i % 4 === 0 ? 'Mobile Banking' : 'Cash',
+        is_deleted: false,
+        created_at: expenseDate.toISOString(),
+        updated_at: expenseDate.toISOString(),
+      });
+    }
   }
 
   return { sales, saleItems, payments, expenses, history, logs };
