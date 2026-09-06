@@ -1690,7 +1690,6 @@ export const SalesList: React.FC = () => {
                                     <th className="px-3 py-1.5 text-center border-r border-gray-300 w-28 print:hidden">Staff</th>
                                     <th className="px-3 py-1.5 text-center border-r border-gray-300 w-20">QTY</th>
                                     <th className="px-3 py-1.5 text-right border-r border-gray-300 w-24">Price</th>
-                                    <th className="px-3 py-1.5 text-right border-r border-gray-300 w-20">Discount</th>
                                     <th className="px-3 py-1.5 text-right w-24">Total</th>
                                   </tr>
                                 </thead>
@@ -1717,7 +1716,6 @@ export const SalesList: React.FC = () => {
                                           </td>
                                           <td className="px-3 py-1 text-center border-r border-gray-300 font-bold">{item.quantity}</td>
                                           <td className="px-3 py-1 text-right border-r border-gray-300 font-mono">{item.unit_price.toFixed(2)}</td>
-                                          <td className="px-3 py-1 text-right border-r border-gray-300 font-mono">0.00</td>
                                           <td className="px-3 py-1 text-right font-mono font-bold">{item.subtotal.toFixed(2)}</td>
                                         </tr>
                                       );
@@ -1734,7 +1732,6 @@ export const SalesList: React.FC = () => {
                                           <td className="px-3 py-1 border-r border-gray-300 print:hidden"></td>
                                           <td className="px-3 py-1 border-r border-gray-300"></td>
                                           <td className="px-3 py-1 border-r border-gray-300"></td>
-                                          <td className="px-3 py-1 border-r border-gray-300"></td>
                                           <td className="px-3 py-1 text-right"></td>
                                         </tr>
                                       );
@@ -1745,10 +1742,10 @@ export const SalesList: React.FC = () => {
                                 </tbody>
                                 <tfoot>
                                   <tr className="bg-[#f28f00] text-white font-extrabold border-t border-gray-300 text-xs">
-                                    <td className="hidden print:table-cell px-3 py-1.5 text-center border-r border-gray-300 uppercase tracking-wider" colSpan={6}>
+                                    <td className="hidden print:table-cell px-3 py-1.5 text-center border-r border-gray-300 uppercase tracking-wider" colSpan={5}>
                                       Sub Total
                                     </td>
-                                    <td className="table-cell print:hidden px-3 py-1.5 text-center border-r border-gray-300 uppercase tracking-wider" colSpan={7}>
+                                    <td className="table-cell print:hidden px-3 py-1.5 text-center border-r border-gray-300 uppercase tracking-wider" colSpan={6}>
                                       Sub Total
                                     </td>
                                     <td className="px-3 py-1.5 text-right font-mono font-black">
