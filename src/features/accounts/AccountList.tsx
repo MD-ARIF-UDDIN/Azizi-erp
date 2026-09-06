@@ -15,7 +15,6 @@ import {
   Trash2,
   Edit2,
   X,
-  CheckCircle2,
   AlertCircle,
   BookOpen
 } from 'lucide-react';

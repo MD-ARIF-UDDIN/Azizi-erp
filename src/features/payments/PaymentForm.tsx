@@ -371,7 +371,8 @@ export const PaymentForm: React.FC = () => {
             {
               label: 'Payment Method',
               value: paymentMethod,
-              badge: paymentMethod
+              badge: true,
+              badgeColor: 'emerald'
             },
             {
               label: 'Current Remaining Due',

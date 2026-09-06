@@ -318,14 +318,6 @@ export const SalesList: React.FC = () => {
     }
   };
 
-  const handleOpenServiceExpenseModal = (serviceItemId: string) => {
-    setSelectedServiceItemId(serviceItemId);
-    const defaultCard = accounts.find(a => a.type === 'card') || accounts[0];
-    setSvcExpenseAccountId(defaultCard?.id || '');
-    setSvcExpenseAmount(0);
-    setSvcExpenseDesc('');
-    setServiceExpenseModalOpen(true);
-  };
 
   const handleAddServiceExpense = async () => {
     if (!editingSaleId || !selectedServiceItemId || svcExpenseAmount <= 0) return;

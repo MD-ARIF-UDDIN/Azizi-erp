@@ -4,7 +4,7 @@ import type { Service, Customer, Account } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { TransactionConfirmModal, type ConfirmDetailItem } from '../../components/TransactionConfirmModal';
+import { TransactionConfirmModal } from '../../components/TransactionConfirmModal';
 import {
   ReceiptText,
   Search,
@@ -1550,10 +1550,11 @@ export const CreateSale: React.FC = () => {
               label: 'Total Invoices Paid',
               value: `${advanceEntries.filter(e => e.amount > 0).length} invoice(s)`
             },
-            ...advanceEntries.filter(e => e.amount > 0).map((entry, idx) => ({
+            ...advanceEntries.filter(e => e.amount > 0).map(entry => ({
               label: `Invoice #${entry.invoiceNo} (${entry.memberName || 'General'})`,
               value: `${Number(entry.amount).toFixed(2)} AED via ${entry.paymentMethod} ➔ ${accounts.find(a => a.id === entry.accountId)?.name || 'Account'}`,
-              badge: entry.paymentMethod
+              badge: true,
+              badgeColor: 'emerald' as const
             }))
           ]}
         />

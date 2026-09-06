@@ -3486,7 +3486,7 @@ export const db = {
           transaction_type: 'deposit',
           amount: numAmount,
           balance_after: targetAcc.balance,
-          related_account_id: null,
+          related_account_id: undefined,
           description: notes ? `Direct deposit: ${notes}` : `Direct deposit to ${targetAcc.name}`,
           created_at: now,
           created_by: activeUser?.id
@@ -3499,7 +3499,7 @@ export const db = {
           entry_type: 'cash_in',
           from_account: 'Direct Cash Deposit',
           to_account: targetAcc.name,
-          from_account_id: null,
+          from_account_id: undefined,
           to_account_id: targetAcc.id,
           amount: numAmount,
           description: notes || `Top-up deposit for ${targetAcc.name}`,
