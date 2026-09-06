@@ -31,6 +31,7 @@ export const PaymentList: React.FC = () => {
   // Filters
   const [search, setSearch] = useState('');
   const [methodFilter, setMethodFilter] = useState('');
+  const [accountFilter, setAccountFilter] = useState('');
 
   const fetchPayments = async () => {
     setLoading(true);
@@ -97,16 +98,20 @@ export const PaymentList: React.FC = () => {
   // Filter logic
   const filteredPayments = payments.filter(p => {
     const matchesBranch = activeBranchId === 'all' ? true : p.sale_branch_id === activeBranchId;
+    const targetAcc = accounts.find(a => a.id === p.account_id);
     const matchesSearch =
       p.sale_invoice.toLowerCase().includes(search.toLowerCase()) ||
       p.sale_customer_name.toLowerCase().includes(search.toLowerCase()) ||
       (p.person_name && p.person_name.toLowerCase().includes(search.toLowerCase())) ||
       (p.transaction_no && p.transaction_no.includes(search)) ||
-      (p.id && p.id.toLowerCase().includes(search.toLowerCase()));
+      (p.id && p.id.toLowerCase().includes(search.toLowerCase())) ||
+      (targetAcc && targetAcc.name.toLowerCase().includes(search.toLowerCase())) ||
+      (p.payment_method && p.payment_method.toLowerCase().includes(search.toLowerCase()));
       
     const matchesMethod = methodFilter ? p.payment_method === methodFilter : true;
+    const matchesAccount = accountFilter ? p.account_id === accountFilter : true;
 
-    return matchesBranch && matchesSearch && matchesMethod;
+    return matchesBranch && matchesSearch && matchesMethod && matchesAccount;
   });
 
   // Aggregates
@@ -170,28 +175,41 @@ export const PaymentList: React.FC = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
             <input
               type="text"
-              placeholder="Search by invoice number, transaction reference, customer, member name..."
+              placeholder="Search by invoice number, customer, member, account, ref..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-lg text-xs"
             />
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
             <select
               value={methodFilter}
               onChange={(e) => setMethodFilter(e.target.value)}
               className="px-3 py-2 bg-background border border-border rounded-lg text-xs flex-1 sm:flex-none font-semibold text-foreground cursor-pointer"
             >
-              <option value="">All Payment Methods</option>
-              <option value="Cash">Cash</option>
-              <option value="Card">Card</option>
-              <option value="Mobile Banking">Mobile Banking</option>
-              <option value="Bank Transfer">Bank Transfer</option>
+              <option value="">All Methods</option>
+              <option value="Cash">💵 Cash</option>
+              <option value="Card">💳 Card</option>
+              <option value="Mobile Banking">📱 Mobile Banking</option>
+              <option value="Bank Transfer">🏦 Bank Transfer</option>
+            </select>
+
+            <select
+              value={accountFilter}
+              onChange={(e) => setAccountFilter(e.target.value)}
+              className="px-3 py-2 bg-background border border-border rounded-lg text-xs flex-1 sm:flex-none font-semibold text-foreground cursor-pointer"
+            >
+              <option value="">All Accounts (Deposit To)</option>
+              {accounts.map(a => (
+                <option key={a.id} value={a.id}>
+                  {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name}
+                </option>
+              ))}
             </select>
 
             <button
-              onClick={() => exportPayments(filteredPayments)}
+              onClick={() => exportPayments(filteredPayments, accounts)}
               className="flex items-center gap-1.5 border border-border text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 px-4 py-2 rounded-lg text-xs font-semibold shadow-md transition-all cursor-pointer whitespace-nowrap"
             >
               <Download size={14} />
@@ -219,7 +237,8 @@ export const PaymentList: React.FC = () => {
                     <th>Receipt No / Date</th>
                     <th>Invoice Reference</th>
                     <th>Customer &amp; Member</th>
-                    <th>Method &amp; Account</th>
+                    <th>Payment Method</th>
+                    <th>Deposit To Account</th>
                     <th>Note / Remarks</th>
                     <th>Received By</th>
                     <th className="text-right">Amount Collected</th>
@@ -229,7 +248,7 @@ export const PaymentList: React.FC = () => {
                 <tbody>
                   {filteredPayments.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-slate-500">
+                      <td colSpan={10} className="py-12 text-center text-slate-500">
                         <div className="max-w-xs mx-auto space-y-1">
                           <div className="font-bold text-black text-sm font-heading">No payment records found</div>
                           <div className="text-xs text-slate-500">No financial receipts matching search parameters were found.</div>
@@ -240,6 +259,7 @@ export const PaymentList: React.FC = () => {
                     filteredPayments.map((p, idx) => {
                       const isRef = p.is_refund || p.amount < 0 || p.notes?.includes('[Refund]');
                       const payCode = p.id ? p.id.slice(0, 8).toUpperCase() : (p.created_at ? new Date(p.created_at).getTime().toString().slice(-6) : `PAY-${idx + 1}`);
+                      const acc = accounts.find(a => a.id === p.account_id) || (p.payment_method === 'Cash' ? accounts.find(a => a.type === 'cash_drawer') : accounts[0]);
                       return (
                         <tr key={p.id || idx} className={isRef ? 'bg-rose-50/30' : ''}>
                           <td className="text-center font-semibold text-xs text-slate-500">
@@ -275,21 +295,25 @@ export const PaymentList: React.FC = () => {
                           <td>
                             <div className="flex items-center gap-1 text-black font-semibold text-xs">
                               <Wallet size={12} className="text-primary" />
-                              {isRef ? '↩ Refund' : p.payment_method}
+                              {isRef ? '↩ Refund' : p.payment_method || 'Cash'}
                             </div>
-                            {(() => {
-                              const acc = accounts.find(a => a.id === p.account_id);
-                              if (!acc) return null;
-                              return (
-                                <div className="text-[10px] font-bold text-primary flex items-center gap-1 mt-0.5">
-                                  <span>{acc.type === 'cash_drawer' ? '💵' : acc.type === 'bank' ? '🏦' : '💳'} {acc.name}</span>
-                                </div>
-                              );
-                            })()}
                             {p.transaction_no && (
                               <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
                                 Ref: {p.transaction_no}
                               </div>
+                            )}
+                          </td>
+                          <td>
+                            {acc ? (
+                              <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-50/80 border border-emerald-200/80 text-emerald-900 shadow-2xs">
+                                <span className="text-xs">{acc.type === 'cash_drawer' ? '💵' : acc.type === 'bank' ? '🏦' : '💳'}</span>
+                                <div className="leading-tight">
+                                  <div className="text-xs font-bold font-heading">{acc.name}</div>
+                                  <div className="text-[9px] text-emerald-700 font-medium capitalize">{acc.type === 'cash_drawer' ? 'Cash Drawer' : acc.type === 'bank' ? 'Bank' : 'Card POS'}</div>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 text-xs italic">—</span>
                             )}
                           </td>
                           <td>

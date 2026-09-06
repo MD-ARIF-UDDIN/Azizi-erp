@@ -4,6 +4,7 @@ import type { Service, Customer, Account } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { TransactionConfirmModal, type ConfirmDetailItem } from '../../components/TransactionConfirmModal';
 import {
   ReceiptText,
   Search,
@@ -195,20 +196,6 @@ export const CreateSale: React.FC = () => {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
-  const handleQuickSelectWalkIn = () => {
-    const walkin = customers.find(c => c.name.toLowerCase().includes('walk-in') || c.name.toLowerCase().includes('walkin') || c.name.toLowerCase().includes('walk in'));
-    if (walkin) {
-      setCustomerId(walkin.id);
-      setCustomerType('existing');
-    } else {
-      setCustomerType('new');
-      setNewCustomerType('individual');
-      setNewCustomerName('Walk-In Customer');
-    }
-    setErrorMsg('');
-  };
-  const handleSelectWalkin = handleQuickSelectWalkIn;
-
   const filteredCatalogServices = services.filter(s => {
     const matchesCategory = selectedCategory === 'all' || s.category_id === selectedCategory;
     const categoryName = (s as any).category?.name || '';
@@ -386,7 +373,11 @@ export const CreateSale: React.FC = () => {
     return Array.from(map.values());
   }, [cart, customerType, selectedCustomerRecord]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Confirmation Modals State
+  const [showSaleConfirmModal, setShowSaleConfirmModal] = useState(false);
+  const [showAdvanceConfirmModal, setShowAdvanceConfirmModal] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!branchId) {
       setErrorMsg('Please select a branch.');
@@ -397,17 +388,25 @@ export const CreateSale: React.FC = () => {
       return;
     }
 
+    if (customerType === 'new') {
+      if (!newCustomerName.trim()) {
+        setErrorMsg(newCustomerType === 'company' ? 'Company name is required.' : 'Customer name is required.');
+        return;
+      }
+    }
+
+    setErrorMsg('');
+    setShowSaleConfirmModal(true);
+  };
+
+  const executeCreateSale = async () => {
+    setShowSaleConfirmModal(false);
     setSaving(true);
     setErrorMsg('');
 
     try {
       let finalCustomerId = customerId;
       if (customerType === 'new') {
-        if (!newCustomerName.trim()) {
-          setErrorMsg(newCustomerType === 'company' ? 'Company name is required.' : 'Customer name is required.');
-          setSaving(false);
-          return;
-        }
         const custPayload: any = {
           name: newCustomerName.trim(),
           phone: newCustomerPhone.trim() || undefined,
@@ -497,16 +496,30 @@ export const CreateSale: React.FC = () => {
     }
   };
 
-  const handleSaveAdvance = async () => {
+  const handleSaveAdvance = () => {
+    const activeEntries = advanceEntries.filter(e => e.amount > 0);
+    if (activeEntries.length === 0) {
+      handleSkipAdvance();
+      return;
+    }
+
+    for (const entry of activeEntries) {
+      if (!entry.accountId) {
+        setErrorMsg(`Deposit To Account is mandatory. Please select an account for invoice #${entry.invoiceNo}`);
+        return;
+      }
+    }
+
+    setErrorMsg('');
+    setShowAdvanceConfirmModal(true);
+  };
+
+  const executeSaveAdvance = async () => {
+    setShowAdvanceConfirmModal(false);
     setSavingAdvance(true);
     try {
       for (const entry of advanceEntries) {
         if (entry.amount > 0) {
-          if (!entry.accountId) {
-            setErrorMsg(`Deposit To Account is mandatory. Please select an account for invoice #${entry.invoiceNo}`);
-            setSavingAdvance(false);
-            return;
-          }
           await db.payments.create({
             sale_id: entry.saleId,
             amount: entry.amount,
@@ -906,15 +919,8 @@ export const CreateSale: React.FC = () => {
           <div className="lg:col-span-1 space-y-4">
             <div className="glass border border-border rounded-2xl p-5 space-y-4 shadow-xl">
               
-              <div className="flex items-center justify-between border-b border-border/80 pb-3">
+              <div className="border-b border-border/80 pb-3">
                 <h3 className="font-bold text-foreground text-sm m-0">Customer & Billing</h3>
-                <button
-                  type="button"
-                  onClick={handleSelectWalkin}
-                  className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  Walk-in Customer (1-Click)
-                </button>
               </div>
 
               {/* Customer Type Selector */}
@@ -1489,6 +1495,69 @@ export const CreateSale: React.FC = () => {
           </div>
         )}
 
+        {/* CONFIRMATION MODAL: SALES INVOICE GENERATION */}
+        <TransactionConfirmModal
+          isOpen={showSaleConfirmModal}
+          onClose={() => setShowSaleConfirmModal(false)}
+          onConfirm={executeCreateSale}
+          loading={saving}
+          type="sale"
+          title="Confirm Invoice Generation"
+          subtitle="Please review the invoice summary before issuing invoices."
+          amount={memberGroups.reduce((acc, g) => acc + g.grandTotal, 0)}
+          currency="AED"
+          confirmText="Confirm & Issue Invoice"
+          details={[
+            {
+              label: 'Customer',
+              value: customerType === 'new' ? `${newCustomerName} (New ${newCustomerType})` : (selectedCustomer?.name || 'Selected Customer'),
+              highlight: true
+            },
+            {
+              label: 'Branch',
+              value: availableBranches?.find(b => b.id === branchId)?.name || 'Selected Branch'
+            },
+            {
+              label: 'Invoices Count',
+              value: `${memberGroups.length} ${memberGroups.length === 1 ? 'Invoice' : 'Invoices'}`
+            },
+            {
+              label: 'Total Service Items',
+              value: `${cart.length} ${cart.length === 1 ? 'Item' : 'Items'}`
+            },
+            {
+              label: 'Services Booked',
+              value: cart.map(i => i.service.name).slice(0, 3).join(', ') + (cart.length > 3 ? ` +${cart.length - 3} more` : '')
+            },
+            ...(notes ? [{ label: 'Invoice Note', value: notes }] : [])
+          ]}
+        />
+
+        {/* CONFIRMATION MODAL: ADVANCE PAYMENT RECEIPT */}
+        <TransactionConfirmModal
+          isOpen={showAdvanceConfirmModal}
+          onClose={() => setShowAdvanceConfirmModal(false)}
+          onConfirm={executeSaveAdvance}
+          loading={savingAdvance}
+          type="payment"
+          title="Confirm Advance Payment"
+          subtitle="Please review the payment details before depositing to accounts."
+          amount={advanceEntries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)}
+          currency="AED"
+          confirmText="Confirm & Save Payment"
+          details={[
+            {
+              label: 'Total Invoices Paid',
+              value: `${advanceEntries.filter(e => e.amount > 0).length} invoice(s)`
+            },
+            ...advanceEntries.filter(e => e.amount > 0).map((entry, idx) => ({
+              label: `Invoice #${entry.invoiceNo} (${entry.memberName || 'General'})`,
+              value: `${Number(entry.amount).toFixed(2)} AED via ${entry.paymentMethod} ➔ ${accounts.find(a => a.id === entry.accountId)?.name || 'Account'}`,
+              badge: entry.paymentMethod
+            }))
+          ]}
+        />
+
         {/* FLOATING TOAST NOTIFICATION (BOTTOM THEMED WITH RED CIRCLE) */}
         {toast && (
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-200 pointer-events-auto">
@@ -1499,16 +1568,6 @@ export const CreateSale: React.FC = () => {
               <span className="text-xs font-bold text-foreground">
                 {toast.message}
               </span>
-              <button
-                type="button"
-                onClick={() => {
-                  handleQuickSelectWalkIn();
-                  setToast(null);
-                }}
-                className="px-3 py-1.5 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold text-xs shadow-md shadow-primary/25 transition-all cursor-pointer shrink-0 ml-1"
-              >
-                Select Walk-In
-              </button>
               <button
                 type="button"
                 onClick={() => setToast(null)}

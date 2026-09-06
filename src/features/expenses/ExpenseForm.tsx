@@ -4,6 +4,7 @@ import type { ExpenseCategory } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
 import { useNavigate, useParams } from 'react-router-dom';
+import { TransactionConfirmModal, type ConfirmDetailItem } from '../../components/TransactionConfirmModal';
 import { ChevronLeft, Tag, DollarSign, Calendar, FileText, User, CreditCard, Save } from 'lucide-react';
 
 export const ExpenseForm: React.FC = () => {
@@ -68,7 +69,9 @@ export const ExpenseForm: React.FC = () => {
     }
   }, [id, isEdit]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.category_id) {
       setErrorMsg('Please select an expense category.');
@@ -87,6 +90,11 @@ export const ExpenseForm: React.FC = () => {
       return;
     }
 
+    setErrorMsg('');
+    setShowConfirmModal(true);
+  };
+
+  const handleExecuteSave = async () => {
     setLoading(true);
     setErrorMsg('');
 
@@ -96,8 +104,10 @@ export const ExpenseForm: React.FC = () => {
       } else {
         await db.expenses.create(form);
       }
+      setShowConfirmModal(false);
       navigate('/expenses');
     } catch (err: any) {
+      setShowConfirmModal(false);
       setErrorMsg(err.message || 'Operation failed.');
     } finally {
       setLoading(false);
@@ -280,7 +290,7 @@ export const ExpenseForm: React.FC = () => {
             <button
               type="button"
               onClick={() => navigate('/expenses')}
-              className="px-4 py-2 border border-border rounded-lg text-xs font-semibold text-muted-foreground hover:bg-secondary/40 transition-colors"
+              className="px-4 py-2 border border-border rounded-lg text-xs font-semibold text-muted-foreground hover:bg-secondary/40 transition-colors cursor-pointer"
               disabled={loading}
             >
               Cancel
@@ -288,13 +298,74 @@ export const ExpenseForm: React.FC = () => {
             <button
               type="submit"
               disabled={loading}
-              className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-lg text-xs font-semibold shadow-md transition-colors"
+              className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-lg text-xs font-semibold shadow-md transition-colors cursor-pointer"
             >
               <Save size={14} />
-              {loading ? 'Saving...' : 'Save Expense'}
+              <span>{isEdit ? 'Update Expense' : 'Save Expense'}</span>
             </button>
           </div>
         </form>
+
+        {/* CONFIRMATION MODAL */}
+        {(() => {
+          const selectedCategory = categories.find(c => c.id === form.category_id);
+          const selectedBranch = availableBranches.find(b => b.id === form.branch_id);
+
+          const details: ConfirmDetailItem[] = [
+            {
+              label: 'Expense Category',
+              value: selectedCategory?.name || 'Uncategorized',
+              badge: true,
+              badgeColor: 'amber'
+            },
+            {
+              label: 'Branch Location',
+              value: selectedBranch?.name || 'Main Branch'
+            },
+            {
+              label: 'Payment Method',
+              value: form.payment_method,
+              badge: true,
+              badgeColor: 'emerald'
+            },
+            {
+              label: 'Expense Date',
+              value: form.expense_date
+            }
+          ];
+
+          if (form.paid_to.trim()) {
+            details.push({
+              label: 'Paid To',
+              value: form.paid_to.trim()
+            });
+          }
+
+          if (form.description.trim()) {
+            details.push({
+              label: 'Description / Notes',
+              value: form.description.trim()
+            });
+          }
+
+          return (
+            <TransactionConfirmModal
+              isOpen={showConfirmModal}
+              onClose={() => setShowConfirmModal(false)}
+              onConfirm={handleExecuteSave}
+              type="expense"
+              title={isEdit ? 'Confirm Expense Update' : 'Confirm Expense Entry'}
+              subtitle="Please verify the expense details before saving."
+              amount={Number(form.amount)}
+              currency="AED"
+              confirmText={isEdit ? 'Confirm & Update Expense' : 'Confirm & Save Expense'}
+              cancelText="Back to Edit"
+              loading={loading}
+              details={details}
+            />
+          );
+        })()}
+
       </div>
     </PermissionGuard>
   );

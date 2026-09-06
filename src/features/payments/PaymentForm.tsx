@@ -4,6 +4,7 @@ import type { Account } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, CreditCard, DollarSign, FileText, Receipt, Save, Wallet } from 'lucide-react';
+import { TransactionConfirmModal } from '../../components/TransactionConfirmModal';
 
 export const PaymentForm: React.FC = () => {
   const navigate = useNavigate();
@@ -26,6 +27,7 @@ export const PaymentForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -80,7 +82,7 @@ export const PaymentForm: React.FC = () => {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!saleId) {
       setErrorMsg('Please select a sales invoice reference.');
@@ -99,6 +101,12 @@ export const PaymentForm: React.FC = () => {
       return;
     }
 
+    setErrorMsg('');
+    setShowConfirmModal(true);
+  };
+
+  const executeSavePayment = async () => {
+    setShowConfirmModal(false);
     setLoading(true);
     setErrorMsg('');
 
@@ -328,6 +336,55 @@ export const PaymentForm: React.FC = () => {
             </button>
           </div>
         </form>
+
+        {/* CONFIRMATION MODAL: DIRECT PAYMENT */}
+        <TransactionConfirmModal
+          isOpen={showConfirmModal}
+          onClose={() => setShowConfirmModal(false)}
+          onConfirm={executeSavePayment}
+          loading={loading}
+          type="payment"
+          title="Confirm Payment Collection"
+          subtitle="Please verify the payment details before depositing to account."
+          amount={amount}
+          currency="AED"
+          confirmText="Confirm & Collect Payment"
+          details={[
+            {
+              label: 'Sales Invoice',
+              value: selectedSale?.invoice_no ? `#${selectedSale.invoice_no}` : '-',
+              highlight: true
+            },
+            {
+              label: 'Customer / Client',
+              value: selectedSale?.customer
+                ? selectedSale?.person_name
+                  ? `${selectedSale.person_name} (${selectedSale.customer.name})`
+                  : selectedSale.customer.name
+                : 'Customer'
+            },
+            {
+              label: 'Deposit To Account',
+              value: accounts.find(a => a.id === accountId)?.name || 'Account',
+              highlight: true
+            },
+            {
+              label: 'Payment Method',
+              value: paymentMethod,
+              badge: paymentMethod
+            },
+            {
+              label: 'Current Remaining Due',
+              value: `${(selectedSale?.remaining ?? 0).toFixed(2)} AED`
+            },
+            {
+              label: 'New Remaining Balance',
+              value: `${Math.max(0, (selectedSale?.remaining ?? 0) - amount).toFixed(2)} AED`
+            },
+            ...(transactionNo ? [{ label: 'Tx / Ref #', value: transactionNo }] : []),
+            ...(notes ? [{ label: 'Internal Note', value: notes }] : [])
+          ]}
+        />
       </div>
     </PermissionGuard>
   );

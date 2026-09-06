@@ -193,6 +193,10 @@ export interface Expense {
   sale_item_id?: string;
   account_id?: string;
   is_deleted: boolean;
+  category?: ExpenseCategory;
+  branch?: Branch;
+  sale?: { id: string; invoice_no: string; person_name?: string } | Sale;
+  account?: Account;
   created_at: string;
   updated_at: string;
 }

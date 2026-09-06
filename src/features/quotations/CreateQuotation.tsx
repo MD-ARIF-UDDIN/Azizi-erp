@@ -165,20 +165,6 @@ export const CreateQuotation: React.FC = () => {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
-  const handleQuickSelectWalkIn = () => {
-    const walkin = customers.find(c => c.name.toLowerCase().includes('walk-in') || c.name.toLowerCase().includes('walkin') || c.name.toLowerCase().includes('walk in'));
-    if (walkin) {
-      setCustomerId(walkin.id);
-      setCustomerType('existing');
-    } else {
-      setCustomerType('new');
-      setNewCustomerType('individual');
-      setNewCustomerName('Walk-In Customer');
-    }
-    setErrorMsg('');
-  };
-  const handleSelectWalkin = handleQuickSelectWalkIn;
-
   const filteredCatalogServices = services.filter(s => {
     const matchesCategory = selectedCategory === 'all' || s.category_id === selectedCategory;
     const categoryName = (s as any).category?.name || '';
@@ -821,15 +807,8 @@ export const CreateQuotation: React.FC = () => {
           <div className="lg:col-span-1 space-y-4">
             <div className="glass border border-border rounded-2xl p-5 space-y-4 shadow-xl">
 
-              <div className="flex items-center justify-between border-b border-border/80 pb-3">
+              <div className="border-b border-border/80 pb-3">
                 <h3 className="font-bold text-foreground text-sm m-0">Customer & Details</h3>
-                <button
-                  type="button"
-                  onClick={handleSelectWalkin}
-                  className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  Walk-in Customer (1-Click)
-                </button>
               </div>
 
               {/* Customer Type Selector */}
@@ -1289,16 +1268,6 @@ export const CreateQuotation: React.FC = () => {
               <span className="text-xs font-bold text-foreground">
                 {toast.message}
               </span>
-              <button
-                type="button"
-                onClick={() => {
-                  handleQuickSelectWalkIn();
-                  setToast(null);
-                }}
-                className="px-3 py-1.5 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold text-xs shadow-md shadow-primary/25 transition-all cursor-pointer shrink-0 ml-1"
-              >
-                Select Walk-In
-              </button>
               <button
                 type="button"
                 onClick={() => setToast(null)}

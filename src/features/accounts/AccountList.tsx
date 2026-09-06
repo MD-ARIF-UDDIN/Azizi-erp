@@ -4,6 +4,7 @@ import { db } from '../../lib/db';
 import type { Account } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
+import { TransactionConfirmModal, type ConfirmDetailItem } from '../../components/TransactionConfirmModal';
 import {
   CreditCard,
   Wallet,
@@ -52,8 +53,7 @@ export const AccountList: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const branchFilter = activeBranchId === 'all' ? undefined : activeBranchId;
-      const accs = await db.accounts.getAll(branchFilter);
+      const accs = await db.accounts.getAll();
       setAccounts(accs);
     } catch (err) {
       console.error('Failed to load accounts:', err);
@@ -89,15 +89,45 @@ export const AccountList: React.FC = () => {
 
   // Open Top-Up Modal
   const openTopUpModal = (preselectedToId?: string) => {
+    let toId = preselectedToId;
+    let fromId = '';
+
     const drawer = accounts.find(a => a.type === 'cash_drawer');
-    const firstCard = accounts.find(a => a.type === 'card' && a.id !== drawer?.id);
-    
-    setTransferFromId(drawer?.id || accounts[0]?.id || '');
-    setTransferToId(preselectedToId || firstCard?.id || accounts[1]?.id || '');
+    const firstNonDrawer = accounts.find(a => a.id !== drawer?.id);
+
+    if (toId) {
+      // If destination is preselected, default fromId to cash drawer or another account that isn't toId
+      fromId = (toId === drawer?.id ? firstNonDrawer?.id : drawer?.id) || '';
+    } else {
+      // If nothing preselected, default fromId to drawer and toId to first non-drawer card
+      fromId = drawer?.id || accounts[0]?.id || '';
+      toId = firstNonDrawer?.id || accounts.find(a => a.id !== fromId)?.id || '';
+    }
+
+    setTransferFromId(fromId);
+    setTransferToId(toId || '');
     setTransferAmount(0);
     setTransferNotes('');
     setModalError('');
     setShowTopUpModal(true);
+  };
+
+  const handleTransferFromChange = (newFromId: string) => {
+    setTransferFromId(newFromId);
+    if (newFromId && newFromId === transferToId) {
+      // Automatically shift destination to another account
+      const otherAcc = accounts.find(a => a.id !== newFromId);
+      setTransferToId(otherAcc?.id || '');
+    }
+  };
+
+  const handleTransferToChange = (newToId: string) => {
+    setTransferToId(newToId);
+    if (newToId && newToId === transferFromId) {
+      // Automatically shift source to another account
+      const otherFrom = accounts.find(a => a.id !== newToId);
+      setTransferFromId(otherFrom?.id || '');
+    }
   };
 
   // Handle Save Account
@@ -137,15 +167,17 @@ export const AccountList: React.FC = () => {
     }
   };
 
-  // Handle Top-Up / Transfer
-  const handleTransfer = async (e: React.FormEvent) => {
+  const [showConfirmTransferModal, setShowConfirmTransferModal] = useState(false);
+
+  // Handle Top-Up / Transfer Step 1: Validation & Open Confirmation Modal
+  const handleTransfer = (e: React.FormEvent) => {
     e.preventDefault();
     if (!transferToId) {
       setModalError('Please select a destination account/card.');
       return;
     }
-    if (transferFromId === transferToId) {
-      setModalError('Source and destination accounts must be different.');
+    if (transferFromId && transferFromId === transferToId) {
+      setModalError('Source and destination accounts cannot be the same. Please choose different accounts.');
       return;
     }
     if (Number(transferAmount) <= 0) {
@@ -153,6 +185,12 @@ export const AccountList: React.FC = () => {
       return;
     }
 
+    setModalError('');
+    setShowConfirmTransferModal(true);
+  };
+
+  // Handle Top-Up / Transfer Step 2: Confirmed Execution
+  const handleExecuteTransfer = async () => {
     setTransferSaving(true);
     try {
       await db.accounts.topUp({
@@ -161,9 +199,11 @@ export const AccountList: React.FC = () => {
         source_account_id: transferFromId || undefined,
         notes: transferNotes.trim() || undefined
       });
+      setShowConfirmTransferModal(false);
       setShowTopUpModal(false);
       await fetchData();
     } catch (err: any) {
+      setShowConfirmTransferModal(false);
       setModalError(err.message || 'Failed to complete transfer.');
     } finally {
       setTransferSaving(false);
@@ -502,7 +542,7 @@ export const AccountList: React.FC = () => {
                   <input
                     type="text"
                     required
-                    placeholder={formType === 'card' ? 'E.g. ICP E-Dirham Card or Amer Card' : formType === 'cash_drawer' ? 'Main Cash Drawer' : 'Company ENBD Checking'}
+                    placeholder={formType === 'card' ? 'E.g. ICP E-Dirham Card or Amer Card' : formType === 'cash_drawer' ? 'E.g. Cash Drawer' : 'Company ENBD Checking'}
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
                     className="w-full px-3 py-2 bg-background border border-border rounded-xl text-xs font-medium text-foreground outline-none focus:border-primary"
@@ -606,13 +646,17 @@ export const AccountList: React.FC = () => {
                   <label className="text-xs font-bold text-foreground">From Account (Source)</label>
                   <select
                     value={transferFromId}
-                    onChange={(e) => setTransferFromId(e.target.value)}
+                    onChange={(e) => handleTransferFromChange(e.target.value)}
                     className="w-full px-3 py-2 bg-background border border-border rounded-xl text-xs font-medium text-foreground outline-none focus:border-primary cursor-pointer"
                   >
                     <option value="">-- Direct External Deposit (No source deduction) --</option>
                     {accounts.map(a => (
-                      <option key={a.id} value={a.id}>
-                        {a.name} (Bal: {Number(a.balance).toFixed(2)} AED)
+                      <option 
+                        key={a.id} 
+                        value={a.id}
+                        disabled={a.id === transferToId}
+                      >
+                        {a.name} (Bal: {Number(a.balance).toFixed(2)} AED){a.id === transferToId ? ' — [Destination]' : ''}
                       </option>
                     ))}
                   </select>
@@ -627,13 +671,17 @@ export const AccountList: React.FC = () => {
                   <select
                     required
                     value={transferToId}
-                    onChange={(e) => setTransferToId(e.target.value)}
+                    onChange={(e) => handleTransferToChange(e.target.value)}
                     className="w-full px-3 py-2 bg-background border border-border rounded-xl text-xs font-bold text-foreground outline-none focus:border-primary cursor-pointer"
                   >
                     <option value="">-- Select Destination Card/Account --</option>
                     {accounts.map(a => (
-                      <option key={a.id} value={a.id}>
-                        💳 {a.name} (Current Bal: {Number(a.balance).toFixed(2)} AED)
+                      <option 
+                        key={a.id} 
+                        value={a.id}
+                        disabled={a.id === transferFromId}
+                      >
+                        💳 {a.name} (Current Bal: {Number(a.balance).toFixed(2)} AED){a.id === transferFromId ? ' — [Source Account]' : ''}
                       </option>
                     ))}
                   </select>
@@ -682,17 +730,58 @@ export const AccountList: React.FC = () => {
                   </button>
                   <button
                     type="submit"
-                    disabled={transferSaving}
-                    className="px-5 py-2 rounded-xl bg-primary hover:bg-primary-hover disabled:opacity-50 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    className="px-5 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
                   >
-                    <CheckCircle2 size={14} />
-                    <span>{transferSaving ? 'Processing...' : 'Complete Transfer'}</span>
+                    <ArrowRightLeft size={14} />
+                    <span>Proceed with Transfer</span>
                   </button>
                 </div>
               </form>
             </div>
           </div>
         )}
+
+        {/* CONFIRMATION MODAL FOR ACCOUNT TOP-UP / TRANSFER */}
+        {(() => {
+          const fromAcc = accounts.find(a => a.id === transferFromId);
+          const targetAcc = accounts.find(a => a.id === transferToId);
+          const amt = Number(transferAmount) || 0;
+
+          if (!targetAcc) return null;
+
+          const details: ConfirmDetailItem[] = [];
+          if (transferNotes.trim()) {
+            details.push({
+              label: 'Note / Ref',
+              value: transferNotes.trim()
+            });
+          }
+
+          return (
+            <TransactionConfirmModal
+              isOpen={showConfirmTransferModal}
+              onClose={() => setShowConfirmTransferModal(false)}
+              onConfirm={handleExecuteTransfer}
+              type="transfer"
+              title="Confirm Transfer"
+              subtitle="Please check the accounts and balances below."
+              amount={amt}
+              currency="AED"
+              confirmText="Confirm Transfer"
+              cancelText="Back to Edit"
+              loading={transferSaving}
+              transferFlow={{
+                fromAccountName: fromAcc?.name,
+                fromCurrentBalance: fromAcc ? Number(fromAcc.balance) : undefined,
+                fromNewBalance: fromAcc ? Number(fromAcc.balance) - amt : undefined,
+                toAccountName: targetAcc.name,
+                toCurrentBalance: Number(targetAcc.balance),
+                toNewBalance: Number(targetAcc.balance) + amt
+              }}
+              details={details}
+            />
+          );
+        })()}
 
       </div>
     </PermissionGuard>

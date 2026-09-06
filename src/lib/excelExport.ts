@@ -183,6 +183,8 @@ export const exportExpenses = (expenses: any[]) => {
   const headers = [
     'SL',
     'Expense Date',
+    'Invoice No',
+    'Applicant / Member',
     'Category',
     'Branch',
     'Paid To',
@@ -191,16 +193,24 @@ export const exportExpenses = (expenses: any[]) => {
     'Amount (AED)'
   ];
 
-  const rows = expenses.map((e, idx) => [
-    idx + 1,
-    e.expense_date || '',
-    e.category?.name || 'Uncategorized',
-    e.branch?.name || '',
-    e.paid_to || 'N/A',
-    e.payment_method || 'Cash',
-    e.description || '',
-    Number(e.amount.toFixed(2))
-  ]);
+  const rows = expenses.map((e, idx) => {
+    const rawInv = e.sale?.invoice_no || e.description?.match(/#(INV-[A-Za-z0-9-]+)/)?.[0]?.replace('#', '') || '';
+    const cleanInv = rawInv ? (rawInv.startsWith('#') ? rawInv : `#${rawInv}`) : '—';
+    const member = e.sale?.person_name || '—';
+
+    return [
+      idx + 1,
+      e.expense_date || '',
+      cleanInv,
+      member,
+      e.category?.name || 'Uncategorized',
+      e.branch?.name || '',
+      e.paid_to || 'N/A',
+      e.payment_method || 'Cash',
+      e.description || '',
+      Number(e.amount.toFixed(2))
+    ];
+  });
 
   exportToExcel(headers, rows, 'Expenses_Log', 'Expenses');
 };
@@ -223,7 +233,8 @@ export const exportExpenseCategories = (categories: any[]) => {
 };
 
 // 5. Payments Export
-export const exportPayments = (payments: any[]) => {
+export const exportPayments = (payments: any[], accounts: any[] = []) => {
+  const accountMap = new Map((accounts || []).map(a => [a.id, a.name]));
   const headers = [
     'SL',
     'Payment Date',
@@ -233,24 +244,30 @@ export const exportPayments = (payments: any[]) => {
     'For Member',
     'Received By',
     'Payment Method',
+    'Deposit To Account',
     'Transaction No',
     'Amount (AED)',
     'Notes'
   ];
 
-  const rows = payments.map((p, idx) => [
-    idx + 1,
-    formatDate(p.payment_date),
-    `#${p.sale_invoice}`,
-    p.sale_branch_name || '',
-    p.sale_customer_name || 'Walk-in Customer',
-    p.person_name || 'All Members / General',
-    p.received_by_name || 'Cashier',
-    p.payment_method || 'Cash',
-    p.transaction_no || 'N/A',
-    Number(p.amount.toFixed(2)),
-    p.notes || ''
-  ]);
+  const rows = payments.map((p, idx) => {
+    const acc = accounts.find(a => a.id === p.account_id);
+    const accName = acc?.name || accountMap.get(p.account_id) || (p.payment_method === 'Cash' ? 'Cash Drawer' : 'Main Account');
+    return [
+      idx + 1,
+      formatDate(p.payment_date),
+      `#${p.sale_invoice}`,
+      p.sale_branch_name || '',
+      p.sale_customer_name || 'Walk-in Customer',
+      p.person_name || 'All Members / General',
+      p.received_by_name || 'Cashier',
+      p.payment_method || 'Cash',
+      accName,
+      p.transaction_no || 'N/A',
+      Number(p.amount.toFixed(2)),
+      p.notes || ''
+    ];
+  });
 
   exportToExcel(headers, rows, 'Payments_Log', 'Payments');
 };

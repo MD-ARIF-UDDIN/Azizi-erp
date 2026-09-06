@@ -3035,6 +3035,7 @@ export const CustomerList: React.FC = () => {
                     <th className="px-3 py-1.5 text-center border-r border-gray-300 w-10">SR#</th>
                     <th className="px-3 py-1.5 text-center border-r border-gray-300 w-24">Date</th>
                     <th className="px-3 py-1.5 border-r border-gray-300">Description of Service</th>
+                    <th className="px-3 py-1.5 text-center border-r border-gray-300 w-28 print:hidden">Staff</th>
                     <th className="px-3 py-1.5 text-center border-r border-gray-300 w-20">QTY</th>
                     <th className="px-3 py-1.5 text-right border-r border-gray-300 w-24">Price</th>
                     <th className="px-3 py-1.5 text-right border-r border-gray-300 w-20">Discount</th>
@@ -3057,6 +3058,11 @@ export const CustomerList: React.FC = () => {
                             <span>{item.service?.name || 'Service'}</span>
                             {item.notes && <span className="text-[10px] text-gray-500 italic block">{item.notes}</span>}
                           </td>
+                          <td className="px-3 py-1 text-center border-r border-gray-300 whitespace-nowrap print:hidden">
+                            <span className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 text-[10px] font-bold">
+                              {item.staff?.name || printSaleData.employee?.name || '—'}
+                            </span>
+                          </td>
                           <td className="px-3 py-1 text-center border-r border-gray-300 font-bold">{item.quantity}</td>
                           <td className="px-3 py-1 text-right border-r border-gray-300 font-mono">{item.unit_price.toFixed(2)}</td>
                           <td className="px-3 py-1 text-right border-r border-gray-300 font-mono">0.00</td>
@@ -3072,6 +3078,7 @@ export const CustomerList: React.FC = () => {
                           <td className="px-3 py-1 text-center border-r border-gray-300 font-bold text-gray-400">{items.length + i + 1}</td>
                           <td className="px-3 py-1 border-r border-gray-300"></td>
                           <td className="px-3 py-1 border-r border-gray-300"></td>
+                          <td className="px-3 py-1 border-r border-gray-300 print:hidden"></td>
                           <td className="px-3 py-1 border-r border-gray-300"></td>
                           <td className="px-3 py-1 border-r border-gray-300"></td>
                           <td className="px-3 py-1 border-r border-gray-300"></td>
@@ -3085,7 +3092,10 @@ export const CustomerList: React.FC = () => {
                 </tbody>
                 <tfoot>
                   <tr className="bg-[#f28f00] text-white font-extrabold border-t border-gray-300 text-xs">
-                    <td className="px-3 py-1.5 text-center border-r border-gray-300 uppercase tracking-wider" colSpan={6}>
+                    <td className="hidden print:table-cell px-3 py-1.5 text-center border-r border-gray-300 uppercase tracking-wider" colSpan={6}>
+                      Sub Total
+                    </td>
+                    <td className="table-cell print:hidden px-3 py-1.5 text-center border-r border-gray-300 uppercase tracking-wider" colSpan={7}>
                       Sub Total
                     </td>
                     <td className="px-3 py-1.5 text-right font-mono font-black">

@@ -94,13 +94,33 @@ export const DailySheet: React.FC = () => {
   let cardAmount = 0;
   let bankAmount = 0;
 
+  const getSaleGovCost = (s: any) => {
+    return (s.items || []).reduce((sum: number, it: any) => {
+      const directItemExp = Number(it.expense || 0);
+      const srvExp = (Number(it.service?.expense) || 0) * (Number(it.quantity) || 1);
+      return sum + (directItemExp > 0 ? directItemExp : srvExp);
+    }, 0);
+  };
+
+  const getSaleProfit = (s: any) => {
+    return (s.items || []).reduce((sum: number, it: any) => {
+      const sellPrice = Number(it.unit_price) || Number(it.service?.price) || 0;
+      const costPrice = Number(it.service?.expense) || 0;
+      const qty = Number(it.quantity) || 1;
+      return sum + ((sellPrice - costPrice) * qty);
+    }, 0);
+  };
+
   filteredSales.forEach(s => {
     const sGrandTotal = Number(s.grand_total || 0);
     totalGrossSales += sGrandTotal;
     totalDiscount += Number(s.discount || 0);
 
-    const saleCost = s.items?.reduce((sum: number, it: any) => sum + (Number(it.quantity || 1) * Number(it.service?.expense || 0)), 0) || 0;
+    const saleCost = getSaleGovCost(s);
     totalSalesExpense += saleCost;
+
+    const profit = getSaleProfit(s);
+    totalProfit += profit;
     
     // Resolve payments & refunds
     const sPayments = s.payments || [];
@@ -113,10 +133,6 @@ export const DailySheet: React.FC = () => {
     
     const sDue = Math.max(0, sGrandTotal - sNetPaid);
     totalDue += sDue;
-
-    // Profit calculation: Grand Total - Expense
-    const invoiceProfit = sGrandTotal - saleCost;
-    totalProfit += invoiceProfit;
 
     // Payment methods breakdown
     sPayments.forEach((p: any) => {
@@ -157,7 +173,7 @@ export const DailySheet: React.FC = () => {
       'Service',
       'Staff',
       'Grand Total (AED)',
-      'Expense / Cost (AED)',
+      'Govt Service Charge (AED)',
       'Paid (AED)',
       'Returned (AED)',
       'Due (AED)',
@@ -186,8 +202,8 @@ export const DailySheet: React.FC = () => {
       const timeStr = s.created_at ? new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
       const sGrandTotal = Number(s.grand_total || 0);
-      const saleCost = s.items?.reduce((sum: number, it: any) => sum + (Number(it.quantity || 1) * Number(it.service?.expense || 0)), 0) || 0;
-      const invoiceProfit = sGrandTotal - saleCost;
+      const saleCost = getSaleGovCost(s);
+      const profit = getSaleProfit(s);
 
       return [
         (idx + 1).toString(),
@@ -203,7 +219,7 @@ export const DailySheet: React.FC = () => {
         sCollected.toFixed(2),
         sRefunded.toFixed(2),
         sDue.toFixed(2),
-        invoiceProfit.toFixed(2),
+        profit.toFixed(2),
         methods
       ];
     });
@@ -211,7 +227,7 @@ export const DailySheet: React.FC = () => {
     const csvContent = [
       `"AZIZI TYPING & STAMP MAKING - DAILY CLOSING STATEMENT"`,
       `"Date: ${selectedDate}","Staff: ${selectedStaffName}","Branch: ${activeBranchName}"`,
-      `"Total Sales: ${totalGrossSales.toFixed(2)} AED","Total Invoice Expense: ${totalSalesExpense.toFixed(2)} AED","Total Profit: ${totalProfit.toFixed(2)} AED","Total Collected: ${totalCollected.toFixed(2)} AED","Total Returned: ${totalRefunded.toFixed(2)} AED","Total Expenses: ${totalExpenseAmount.toFixed(2)} AED","Net Cash: ${netCashInHand.toFixed(2)} AED"`,
+      `"Total Sales: ${totalGrossSales.toFixed(2)} AED","Total Govt Service Charges: ${totalSalesExpense.toFixed(2)} AED","Total Profit: ${totalProfit.toFixed(2)} AED","Total Collected: ${totalCollected.toFixed(2)} AED","Total Returned: ${totalRefunded.toFixed(2)} AED","Total Daily Expenses: ${totalExpenseAmount.toFixed(2)} AED","Net Cash: ${netCashInHand.toFixed(2)} AED"`,
       '',
       headers.join(','),
       ...rows.map(r => r.map(val => `"${val.replace(/"/g, '""')}"`).join(','))
@@ -423,7 +439,7 @@ export const DailySheet: React.FC = () => {
             <div className="text-[9.5pt] font-black text-slate-900 font-mono mt-0.5">{totalGrossSales.toFixed(2)} <span className="text-[6.5pt] font-normal">AED</span></div>
           </div>
           <div className="border border-slate-300 bg-rose-50/60 p-1.5 rounded text-center">
-            <div className="text-[6.5pt] uppercase font-bold text-rose-800">Invoice Expenses</div>
+            <div className="text-[6.5pt] uppercase font-bold text-rose-800">Govt Service Charges</div>
             <div className="text-[9.5pt] font-black text-rose-700 font-mono mt-0.5">{totalSalesExpense.toFixed(2)} <span className="text-[6.5pt] font-normal">AED</span></div>
           </div>
           <div className="border border-slate-300 bg-emerald-50/60 p-1.5 rounded text-center">
@@ -467,20 +483,20 @@ export const DailySheet: React.FC = () => {
             </div>
           </div>
 
-          {/* Invoice Expense / Cost */}
+          {/* Govt Service Charges */}
           <div className="bg-card border border-border/80 px-3.5 py-2.5 rounded-xl shadow-2xs">
             <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold uppercase tracking-wider block">
-              Inv. Expenses
+              Govt Service Charge
             </span>
             <div className="text-base font-bold text-rose-600 dark:text-rose-400 mt-0.5">
               {totalSalesExpense.toFixed(2)} <span className="text-[10px] text-muted-foreground font-normal">AED</span>
             </div>
           </div>
 
-          {/* Gross Profit */}
+          {/* Profit */}
           <div className="bg-card border border-border/80 px-3.5 py-2.5 rounded-xl shadow-2xs">
             <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider block">
-              Gross Profit
+              Profit
             </span>
             <div className="text-base font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
               +{totalProfit.toFixed(2)} <span className="text-[10px] text-muted-foreground font-normal">AED</span>
@@ -573,16 +589,16 @@ export const DailySheet: React.FC = () => {
                   <th style={{ width: '3%' }} className="px-2 py-2 text-center border-r border-border/60">#</th>
                   <th style={{ width: '5%' }} className="px-2 py-2 border-r border-border/60">Time</th>
                   <th style={{ width: '7%' }} className="px-2 py-2 border-r border-border/60">Invoice #</th>
-                  <th style={{ width: '15%' }} className="px-2 py-2 border-r border-border/60">Company / Client</th>
-                  <th style={{ width: '12%' }} className="px-2 py-2 border-r border-border/60">Member Name</th>
-                  <th style={{ width: '16%' }} className="px-2 py-2 border-r border-border/60">Services Rendered</th>
-                  <th style={{ width: '6%' }} className="px-2 py-2 border-r border-border/60">Staff</th>
-                  <th style={{ width: '6%' }} className="px-2 py-2 text-right border-r border-border/60">Total</th>
-                  <th style={{ width: '6%' }} className="px-2 py-2 text-right border-r border-border/60">Expense</th>
-                  <th style={{ width: '6%' }} className="px-2 py-2 text-right border-r border-border/60">Paid</th>
-                  <th style={{ width: '6%' }} className="px-2 py-2 text-right border-r border-border/60">Returned</th>
-                  <th style={{ width: '6%' }} className="px-2 py-2 text-right border-r border-border/60">Due</th>
-                  <th style={{ width: '6%' }} className="px-2 py-2 text-right">Profit</th>
+                  <th style={{ width: '13%' }} className="px-2 py-2 border-r border-border/60">Company / Client</th>
+                  <th style={{ width: '11%' }} className="px-2 py-2 border-r border-border/60">Member Name</th>
+                  <th style={{ width: '14%' }} className="px-2 py-2 border-r border-border/60">Services Rendered</th>
+                  <th style={{ width: '5%' }} className="px-2 py-2 border-r border-border/60">Staff</th>
+                  <th style={{ width: '7%' }} className="px-2 py-2 text-right border-r border-border/60">Total</th>
+                  <th style={{ width: '8%' }} className="px-2 py-2 text-right border-r border-border/60">Govt Charge</th>
+                  <th style={{ width: '7%' }} className="px-2 py-2 text-right border-r border-border/60">Paid</th>
+                  <th style={{ width: '5%' }} className="px-2 py-2 text-right border-r border-border/60">Returned</th>
+                  <th style={{ width: '5%' }} className="px-2 py-2 text-right border-r border-border/60">Due</th>
+                  <th style={{ width: '8%' }} className="px-2 py-2 text-right">Profit</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60 text-foreground print:divide-slate-300 print:text-slate-900">
@@ -623,8 +639,8 @@ export const DailySheet: React.FC = () => {
                       || (s.customer?.customer_type !== 'company' ? s.customer?.name : '—');
 
                     const sGrandTotal = Number(s.grand_total || 0);
-                    const saleCost = s.items?.reduce((sum: number, it: any) => sum + (Number(it.quantity || 1) * Number(it.service?.expense || 0)), 0) || 0;
-                    const invoiceProfit = sGrandTotal - saleCost;
+                    const saleCost = getSaleGovCost(s);
+                    const profit = getSaleProfit(s);
 
                     return (
                       <tr key={s.id} className="divide-x divide-border/60 hover:bg-muted/40 transition-colors print:hover:bg-transparent print-avoid-break">
@@ -666,7 +682,7 @@ export const DailySheet: React.FC = () => {
                                 <span className="font-semibold text-foreground print:text-slate-900">• {it.service?.name || 'Service'}</span>
                                 <span className="text-muted-foreground print:text-slate-600 font-mono shrink-0">(x{it.quantity})</span>
                                 {it.person_name && (
-                                  <span className="text-primary print:text-slate-600 text-[9px] font-medium shrink-0">[{it.person_name}]</span>
+                                   <span className="text-primary print:text-slate-600 text-[9px] font-medium shrink-0">[{it.person_name}]</span>
                                 )}
                               </div>
                             ))}
@@ -685,7 +701,7 @@ export const DailySheet: React.FC = () => {
                           {sGrandTotal.toFixed(2)}
                         </td>
 
-                        {/* Expense Column */}
+                        {/* Govt Service Charge Column */}
                         <td className="px-2 py-1.5 text-right font-semibold text-rose-600 print:text-slate-800 whitespace-nowrap font-mono border-r border-border/60">
                           {saleCost.toFixed(2)}
                         </td>
@@ -714,11 +730,9 @@ export const DailySheet: React.FC = () => {
                           )}
                         </td>
 
-                        {/* Profit Column */}
-                        <td className="px-2 py-1.5 text-right font-black whitespace-nowrap font-mono">
-                          <span className={invoiceProfit >= 0 ? "text-emerald-600 print:text-slate-900" : "text-rose-600 print:text-slate-900"}>
-                            {invoiceProfit >= 0 ? `+${invoiceProfit.toFixed(2)}` : invoiceProfit.toFixed(2)}
-                          </span>
+                        {/* Profit Column (End) */}
+                        <td className="px-2 py-1.5 text-right font-semibold text-emerald-600 dark:text-emerald-400 print:text-slate-800 whitespace-nowrap font-mono">
+                          +{profit.toFixed(2)}
                         </td>
                       </tr>
                     );
@@ -748,7 +762,7 @@ export const DailySheet: React.FC = () => {
                     <td className="px-2 py-2 text-right text-[8.5pt] font-black text-amber-600 print:text-slate-900 font-mono border-r border-border/60">
                       {totalDue.toFixed(2)}
                     </td>
-                    <td className="px-2 py-2 text-right text-[8.5pt] font-black text-emerald-600 print:text-slate-900 font-mono">
+                    <td className="px-2 py-2 text-right text-[8.5pt] font-black text-emerald-600 dark:text-emerald-400 print:text-slate-900 font-mono">
                       +{totalProfit.toFixed(2)}
                     </td>
                   </tr>

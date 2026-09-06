@@ -50,8 +50,10 @@ export const ReceiptVoucherPrint: React.FC<{ data: PrintableVoucherData | null }
               <div className="text-xs font-black text-[#f28f00] tracking-wider uppercase">
                 AZIZI TYPING &amp; STAMP MAKING BR. 1
               </div>
-              <div className="text-[10px] text-gray-600 font-semibold mt-0.5">
-                Musaffah M37, Abu Dhabi, UAE • Tel: 0542797933 • azizitypingbr@gmail.com
+              <div className="text-[10px] text-gray-700 font-semibold mt-1 space-y-0.5 leading-snug">
+                <div>Address: Musaffah M37, Abu Dhabi, UAE</div>
+                <div>Mobile No: 0542797933</div>
+                <div>Email: azizitypingbr@gmail.com</div>
               </div>
             </div>
           </div>
@@ -99,9 +101,18 @@ export const ReceiptVoucherPrint: React.FC<{ data: PrintableVoucherData | null }
                 {isReceipt ? 'Received From:' : 'Paid / Returned To:'}
               </td>
               <td className="p-2 font-bold text-black border-r border-gray-300" colSpan={isDistinctMember ? 1 : 3}>
-                {custName}
+                <div>{custName}</div>
                 {compName && compName.toLowerCase() !== custName.toLowerCase() && (
                   <span className="text-[11px] text-gray-600 block font-semibold">({compName})</span>
+                )}
+                {data.sale?.customer?.phone && (
+                  <div className="text-[10px] text-gray-700 font-medium mt-0.5">Mobile No: {data.sale.customer.phone}</div>
+                )}
+                {data.sale?.customer?.email && (
+                  <div className="text-[10px] text-gray-700 font-medium">Email: {data.sale.customer.email}</div>
+                )}
+                {data.sale?.customer?.address && (
+                  <div className="text-[10px] text-gray-700 font-medium">Address: {data.sale.customer.address}</div>
                 )}
               </td>
               {isDistinctMember && (
