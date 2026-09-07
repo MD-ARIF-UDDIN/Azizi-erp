@@ -26,6 +26,7 @@ interface CartItem {
   service: Service;
   quantity: number;
   unit_price: number;
+  expense?: number;
   person_name?: string;
   service_date?: string;
   staff_id?: string;
@@ -248,6 +249,7 @@ export const CreateSale: React.FC = () => {
     }
 
     const assignedPerson = selectedPersonName.trim() || undefined;
+    const srvExpense = service.expense !== undefined && service.expense !== null ? Number(service.expense) : 0;
     const existingIndex = cart.findIndex(item => item.service.id === service.id && item.person_name === assignedPerson);
     if (existingIndex !== -1) {
       const updated = [...cart];
@@ -258,6 +260,7 @@ export const CreateSale: React.FC = () => {
         service, 
         quantity: 1, 
         unit_price: service.price, 
+        expense: srvExpense,
         person_name: assignedPerson,
         service_date: new Date().toISOString().split('T')[0],
         staff_id: user?.id
@@ -310,10 +313,12 @@ export const CreateSale: React.FC = () => {
       
       const newCart = quoteItems.map((qi: any) => {
         const srv = loadedServices.find(s => s.id === qi.service_id);
+        const srvExpense = (srv?.expense !== undefined && srv?.expense !== null) ? Number(srv.expense) : 0;
         return {
           service: srv || { id: qi.service_id, name: 'Service', price: qi.unit_price } as any,
           quantity: qi.quantity,
           unit_price: qi.unit_price,
+          expense: srvExpense,
           person_name: selectedPersonName || undefined,
           service_date: qi.service_date || new Date().toISOString().split('T')[0],
           staff_id: user?.id
@@ -342,6 +347,13 @@ export const CreateSale: React.FC = () => {
     if (newPrice < 0) return;
     const updated = [...cart];
     updated[index].unit_price = newPrice;
+    setCart(updated);
+  };
+
+  const updateGovtCost = (index: number, newCost: number) => {
+    if (newCost < 0) return;
+    const updated = [...cart];
+    updated[index].expense = newCost;
     setCart(updated);
   };
 
@@ -462,6 +474,7 @@ export const CreateSale: React.FC = () => {
             service_id: item.service.id,
             quantity: item.quantity,
             unit_price: item.unit_price,
+            expense: item.expense !== undefined ? Number(item.expense) : (Number(item.service.expense) || 0),
             person_name: group.memberKey || undefined,
             service_date: item.service_date || new Date().toISOString().split('T')[0],
             staff_id: item.staff_id || user?.id,
@@ -568,10 +581,10 @@ export const CreateSale: React.FC = () => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 xl:grid-cols-12 gap-5">
           
-          {/* LEFT SECTION: SERVICES SEARCH & INVOICE ITEMS (2 cols) */}
-          <div className="lg:col-span-2 space-y-4">
+          {/* LEFT SECTION: SERVICES SEARCH & INVOICE ITEMS (9 cols) */}
+          <div className="xl:col-span-9 space-y-4">
             <div className="glass border border-border rounded-2xl p-5 space-y-4 shadow-xl">
               
               {/* HEADER WITH STATS */}
@@ -761,25 +774,26 @@ export const CreateSale: React.FC = () => {
               </div>
 
               {/* INVOICE LINE ITEMS TABLE */}
-              <div className="border border-border/80 rounded-xl overflow-hidden mt-4 shadow-2xs">
-                <table className="w-full text-left">
+              <div className="border border-border/80 rounded-xl overflow-x-auto mt-4 shadow-2xs bg-card">
+                <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr>
-                      <th className="w-10 text-center">#</th>
-                      <th>Service Details</th>
-                      <th className="w-32 text-center">Service Date</th>
-                      <th className="w-40">Member / Person</th>
-                      <th className="w-44">Note / Remarks</th>
-                      <th className="text-center w-28">Quantity</th>
-                      <th className="w-24 text-center">Unit Price</th>
-                      <th className="text-right w-24">Subtotal</th>
-                      <th className="text-center w-10"></th>
+                    <tr className="border-b border-border/80 bg-muted/50 text-[10.5px] font-bold text-muted-foreground uppercase tracking-wider">
+                      <th className="w-8 text-center px-2 py-2.5">#</th>
+                      <th className="min-w-[180px] px-3 py-2.5">Service Details</th>
+                      <th className="min-w-[130px] text-center px-2 py-2.5">Service Date</th>
+                      <th className="min-w-[130px] px-2 py-2.5">Member / Person</th>
+                      <th className="min-w-[120px] px-2 py-2.5">Note / Remarks</th>
+                      <th className="min-w-[80px] text-center px-2 py-2.5">Quantity</th>
+                      <th className="min-w-[95px] text-center px-2 py-2.5 text-amber-700 dark:text-amber-400">Govt Cost</th>
+                      <th className="min-w-[95px] text-center px-2 py-2.5">Unit Price</th>
+                      <th className="min-w-[100px] text-right px-3 py-2.5 whitespace-nowrap">Subtotal</th>
+                      <th className="w-9 text-center px-1 py-2.5"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/50">
                     {cart.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="py-12 text-center text-muted-foreground italic">
+                        <td colSpan={10} className="py-12 text-center text-muted-foreground italic">
                           <div className="max-w-xs mx-auto space-y-2">
                             <div className="p-3 rounded-full bg-muted/60 w-fit mx-auto text-muted-foreground">
                               <Search size={22} />
@@ -792,21 +806,26 @@ export const CreateSale: React.FC = () => {
                     ) : (
                       cart.map((item, index) => (
                         <tr key={index} className="hover:bg-primary/5 transition-colors">
-                          <td className="text-center font-bold text-xs text-muted-foreground">
+                          <td className="text-center font-bold text-xs text-muted-foreground px-2 py-2.5">
                             {index + 1}
                           </td>
-                          <td>
+                          <td className="px-3 py-2.5">
                             <div className="font-bold text-foreground text-xs">{item.service.name}</div>
-                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                               <span className="text-[10px] text-muted-foreground">
-                                Standard: {item.service.price.toFixed(2)} AED
+                                Rate: {item.service.price.toFixed(2)} AED
                               </span>
+                              {(item.service.expense !== undefined && item.service.expense > 0) && (
+                                <span className="text-[10px] text-amber-700 dark:text-amber-300 font-semibold">
+                                  Default Gov: {item.service.expense.toFixed(2)} AED
+                                </span>
+                              )}
                               <span className="text-[10px] px-1.5 py-0.2 rounded bg-muted text-muted-foreground font-semibold border border-border">
                                 Staff: {user?.name || 'Current Staff'}
                               </span>
                             </div>
                           </td>
-                          <td className="text-center">
+                          <td className="text-center px-2 py-2.5">
                             <input
                               type="date"
                               value={item.service_date || new Date().toISOString().split('T')[0]}
@@ -815,10 +834,10 @@ export const CreateSale: React.FC = () => {
                                 updated[index].service_date = e.target.value;
                                 setCart(updated);
                               }}
-                              className="px-2 py-1 bg-muted/50 border border-border rounded text-xs font-semibold text-foreground cursor-pointer"
+                              className="w-full px-2 py-1.5 bg-muted/50 border border-border rounded-lg text-xs font-semibold text-foreground cursor-pointer text-center"
                             />
                           </td>
-                          <td>
+                          <td className="px-2 py-2.5">
                             {isCompanySelected && companyEmployees.length > 0 ? (
                               <select
                                 value={item.person_name || ''}
@@ -827,7 +846,7 @@ export const CreateSale: React.FC = () => {
                                   updated[index].person_name = e.target.value || undefined;
                                   setCart(updated);
                                 }}
-                                className="w-full px-2 py-1 bg-muted/50 border border-border rounded text-xs font-semibold text-foreground cursor-pointer"
+                                className="w-full px-2 py-1.5 bg-muted/50 border border-border rounded-lg text-xs font-semibold text-foreground cursor-pointer"
                               >
                                 <option value="">🏢 General / Company</option>
                                 {companyEmployees.map((emp: any, idx: number) => (
@@ -839,18 +858,18 @@ export const CreateSale: React.FC = () => {
                             ) : (
                               <input
                                 type="text"
-                                placeholder="Person / Member Name"
+                                placeholder="Person / Member"
                                 value={item.person_name || ''}
                                 onChange={(e) => {
                                   const updated = [...cart];
                                   updated[index].person_name = e.target.value || undefined;
                                   setCart(updated);
                                 }}
-                                className="w-full px-2 py-1 bg-muted/50 border border-border rounded text-xs font-medium text-foreground"
+                                className="w-full px-2.5 py-1.5 bg-muted/50 border border-border rounded-lg text-xs font-medium text-foreground"
                               />
                             )}
                           </td>
-                          <td>
+                          <td className="px-2 py-2.5">
                             <input
                               type="text"
                               placeholder="Note / Ref..."
@@ -860,45 +879,57 @@ export const CreateSale: React.FC = () => {
                                 updated[index].notes = e.target.value;
                                 setCart(updated);
                               }}
-                              className="w-full px-2 py-1 bg-muted/50 border border-border rounded text-xs font-medium text-foreground placeholder:text-muted-foreground outline-none"
+                              className="w-full px-2.5 py-1.5 bg-muted/50 border border-border rounded-lg text-xs font-medium text-foreground placeholder:text-muted-foreground outline-none"
                             />
                           </td>
-                          <td className="text-center">
-                            <div className="flex items-center justify-center gap-1.5">
+                          <td className="text-center px-2 py-2.5">
+                            <div className="flex items-center justify-center gap-1">
                               <button
                                 type="button"
                                 onClick={() => updateQuantity(index, -1)}
-                                className="h-6 w-6 rounded border border-border bg-muted/50 flex items-center justify-center hover:bg-secondary transition-colors cursor-pointer"
+                                className="h-5.5 w-5.5 rounded border border-border bg-muted/50 flex items-center justify-center hover:bg-secondary transition-colors cursor-pointer shrink-0"
                               >
-                                <Minus size={11} />
+                                <Minus size={10} />
                               </button>
-                              <span className="font-bold text-xs w-6 text-center text-foreground">{item.quantity}</span>
+                              <span className="font-bold text-xs w-4 text-center text-foreground">{item.quantity}</span>
                               <button
                                 type="button"
                                 onClick={() => updateQuantity(index, 1)}
-                                className="h-6 w-6 rounded border border-border bg-muted/50 flex items-center justify-center hover:bg-secondary transition-colors cursor-pointer"
+                                className="h-5.5 w-5.5 rounded border border-border bg-muted/50 flex items-center justify-center hover:bg-secondary transition-colors cursor-pointer shrink-0"
                               >
-                                <Plus size={11} />
+                                <Plus size={10} />
                               </button>
                             </div>
                           </td>
-                          <td className="text-center">
+                          <td className="text-center px-2 py-2.5">
                             <input
                               type="number"
                               min={0}
-                              value={item.unit_price}
-                              onChange={(e) => updatePriceOverride(index, parseFloat(e.target.value) || 0)}
-                              className="w-20 px-2 py-1 bg-muted/50 border border-border rounded text-center text-xs font-bold text-foreground"
+                              step="any"
+                              value={item.expense !== undefined ? item.expense : (item.service.expense || 0)}
+                              onChange={(e) => updateGovtCost(index, parseFloat(e.target.value) || 0)}
+                              className="w-20 px-2 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-center text-xs font-bold text-amber-900 dark:text-amber-300 focus:ring-1 focus:ring-amber-500 outline-none"
+                              title="Government Cost / Direct Fee (Editable)"
                             />
                           </td>
-                          <td className="text-right font-black text-foreground text-xs">
+                          <td className="text-center px-2 py-2.5">
+                            <input
+                              type="number"
+                              min={0}
+                              step="any"
+                              value={item.unit_price}
+                              onChange={(e) => updatePriceOverride(index, parseFloat(e.target.value) || 0)}
+                              className="w-20 px-2 py-1.5 bg-muted/50 border border-border rounded-lg text-center text-xs font-bold text-foreground"
+                            />
+                          </td>
+                          <td className="text-right font-black text-foreground text-xs whitespace-nowrap px-3 py-2.5">
                             {(item.unit_price * item.quantity).toFixed(2)} <span className="text-[10px] font-normal text-muted-foreground">AED</span>
                           </td>
-                          <td className="text-center">
+                          <td className="text-center px-1 py-2.5">
                             <button
                               type="button"
                               onClick={() => updateQuantity(index, -item.quantity)}
-                              className="text-muted-foreground hover:text-destructive p-1 rounded transition-colors cursor-pointer"
+                              className="text-muted-foreground hover:text-destructive p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950 transition-colors cursor-pointer"
                               title="Remove line item"
                             >
                               <Trash2 size={13} />
@@ -915,9 +946,9 @@ export const CreateSale: React.FC = () => {
 
           </div>
 
-          {/* RIGHT SECTION: CUSTOMER, TOTALS & CHECKOUT (1 col) */}
-          <div className="lg:col-span-1 space-y-4">
-            <div className="glass border border-border rounded-2xl p-5 space-y-4 shadow-xl">
+          {/* RIGHT SECTION: CUSTOMER, TOTALS & CHECKOUT (3 cols) */}
+          <div className="xl:col-span-3 space-y-4">
+            <div className="glass border border-border rounded-2xl p-4 space-y-4 shadow-xl">
               
               <div className="border-b border-border/80 pb-3">
                 <h3 className="font-bold text-foreground text-sm m-0">Customer & Billing</h3>
@@ -1267,17 +1298,34 @@ export const CreateSale: React.FC = () => {
               </div>
 
               {/* Totals Summary Panel */}
-              <div className="bg-muted/30 p-3.5 rounded-xl border border-border space-y-2.5 text-xs">
-                <div className="flex justify-between items-center text-muted-foreground">
-                  <span>Subtotal</span>
-                  <span className="font-bold text-foreground">{subtotal.toFixed(2)} AED</span>
-                </div>
+              {(() => {
+                const totalGovtCost = cart.reduce((sum, item) => sum + ((item.expense !== undefined ? item.expense : (item.service.expense || 0)) * item.quantity), 0);
+                const netProfit = subtotal - totalGovtCost;
 
-                <div className="border-t border-border pt-2 flex justify-between items-center">
-                  <span className="font-bold text-foreground text-sm">Grand Total</span>
-                  <span className="font-black text-primary text-base">{grandTotal.toFixed(2)} AED</span>
-                </div>
-              </div>
+                return (
+                  <div className="bg-muted/30 p-3.5 rounded-xl border border-border space-y-2 text-xs">
+                    <div className="flex justify-between items-center text-muted-foreground">
+                      <span>Total Billed (Subtotal)</span>
+                      <span className="font-bold text-foreground">{subtotal.toFixed(2)} AED</span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-amber-700 dark:text-amber-300">
+                      <span>Govt Costs / Fees</span>
+                      <span className="font-bold">-{totalGovtCost.toFixed(2)} AED</span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-emerald-700 dark:text-emerald-400 font-semibold">
+                      <span>Est. Typing Profit</span>
+                      <span className="font-bold">+{netProfit.toFixed(2)} AED</span>
+                    </div>
+
+                    <div className="border-t border-border pt-2 flex justify-between items-center">
+                      <span className="font-bold text-foreground text-sm">Grand Total</span>
+                      <span className="font-black text-primary text-base">{grandTotal.toFixed(2)} AED</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Submit Checkout Button */}
               {(() => {

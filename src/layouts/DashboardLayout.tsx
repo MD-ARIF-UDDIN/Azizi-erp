@@ -540,6 +540,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                   permission="Reports.View"
                   links={[
                     { to: '/daily-sheet', label: 'Daily Sheet', permission: 'Reports.View' },
+                    { to: '/daily-balance', label: 'Daily Balance & Profit', permission: 'Reports.View' },
                     { to: '/reports', label: 'Reports Center', permission: 'Reports.View' }
                   ]}
                 />

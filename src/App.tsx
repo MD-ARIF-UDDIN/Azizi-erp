@@ -20,6 +20,7 @@ import { PaymentForm } from './features/payments/PaymentForm';
 import { RbacList } from './features/rbac/RbacList';
 import { ReportsCenter } from './features/reports/ReportsCenter';
 import { DailySheet } from './features/reports/DailySheet';
+import { DailyBalanceStatement } from './features/reports/DailyBalanceStatement';
 import { SettingsPanel } from './features/settings/SettingsPanel';
 import { ExpiryTracker } from './features/documents/ExpiryTracker';
 import { DocumentTypes } from './features/documents/DocumentTypes';
@@ -283,6 +284,22 @@ function App() {
               element={
                 <AuthenticatedRoute>
                   <DailySheet />
+                </AuthenticatedRoute>
+              }
+            />
+            <Route
+              path="/daily-balance"
+              element={
+                <AuthenticatedRoute>
+                  <DailyBalanceStatement />
+                </AuthenticatedRoute>
+              }
+            />
+            <Route
+              path="/reports/daily-balance"
+              element={
+                <AuthenticatedRoute>
+                  <DailyBalanceStatement />
                 </AuthenticatedRoute>
               }
             />

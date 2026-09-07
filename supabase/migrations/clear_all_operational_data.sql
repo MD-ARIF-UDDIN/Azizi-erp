@@ -24,10 +24,7 @@ BEGIN;
 TRUNCATE TABLE public.quotation_items CASCADE;
 TRUNCATE TABLE public.quotations CASCADE;
 
--- 2. Truncate Service & Sale Item Expenses
-TRUNCATE TABLE public.sale_item_expenses CASCADE;
-
--- 3. Truncate Payments & Ledger
+-- 2. Truncate Payments & Ledger
 TRUNCATE TABLE public.payments CASCADE;
 TRUNCATE TABLE public.journal_entries CASCADE;
 

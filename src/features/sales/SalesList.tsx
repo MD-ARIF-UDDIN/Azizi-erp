@@ -108,6 +108,7 @@ export const SalesList: React.FC = () => {
   const [addServiceId, setAddServiceId] = useState('');
   const [addQty, setAddQty] = useState(1);
   const [addPrice, setAddPrice] = useState(0);
+  const [addGovtCost, setAddGovtCost] = useState(0);
   const [addServiceDate, setAddServiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [editSaving, setEditSaving] = useState(false);
 
@@ -374,6 +375,7 @@ export const SalesList: React.FC = () => {
         service_id: addServiceId,
         quantity: addQty,
         unit_price: addPrice,
+        expense: addGovtCost,
         person_name: memberName,
         service_date: addServiceDate || new Date().toISOString().split('T')[0],
         staff_id: user?.id
@@ -385,6 +387,7 @@ export const SalesList: React.FC = () => {
       setAddServiceId('');
       setAddQty(1);
       setAddPrice(0);
+      setAddGovtCost(0);
 
       if (!selectedServiceItemId && items.length > 0) {
         setSelectedServiceItemId(items[items.length - 1].id);
@@ -436,7 +439,8 @@ export const SalesList: React.FC = () => {
 
       const firstItem = existing.items?.[0];
       setPayGovItemId(firstItem?.id || 'all');
-      setPayGovAmount(Number(firstItem?.service?.expense) || 0);
+      const firstItemGovCost = Number(firstItem?.expense) > 0 ? Number(firstItem.expense) : (Number(firstItem?.service?.expense) || 0);
+      setPayGovAmount(firstItemGovCost);
       setPayGovAccountId(defaultCard?.id || '');
       setPayGovDate(new Date().toISOString().split('T')[0]);
       setPayGovDesc(firstItem ? `${firstItem.service?.name || 'Service'} Gov Fee${firstItem.person_name ? ` (${firstItem.person_name})` : ''}` : '');
@@ -471,7 +475,8 @@ export const SalesList: React.FC = () => {
 
       const firstItem = existing.items?.[0];
       setPayGovItemId(firstItem?.id || 'all');
-      setPayGovAmount(Number(firstItem?.service?.expense) || 0);
+      const firstItemGovCost = Number(firstItem?.expense) > 0 ? Number(firstItem.expense) : (Number(firstItem?.service?.expense) || 0);
+      setPayGovAmount(firstItemGovCost);
       setPayGovAccountId(defaultCard?.id || '');
       setPayGovDate(new Date().toISOString().split('T')[0]);
       setPayGovDesc('');
@@ -1688,6 +1693,7 @@ export const SalesList: React.FC = () => {
                                     <th className="px-3 py-1.5 text-center border-r border-gray-300 w-24">Date</th>
                                     <th className="px-3 py-1.5 border-r border-gray-300">Description of Service</th>
                                     <th className="px-3 py-1.5 text-center border-r border-gray-300 w-28 print:hidden">Staff</th>
+                                    <th className="px-3 py-1.5 text-center border-r border-gray-300 w-24 print:hidden">Govt Cost</th>
                                     <th className="px-3 py-1.5 text-center border-r border-gray-300 w-20">QTY</th>
                                     <th className="px-3 py-1.5 text-right border-r border-gray-300 w-24">Price</th>
                                     <th className="px-3 py-1.5 text-right w-24">Total</th>
@@ -1699,6 +1705,11 @@ export const SalesList: React.FC = () => {
                                     const rows: React.ReactNode[] = [];
 
                                     items.forEach((item: any, iIdx: number) => {
+                                      const itemExps = item.expenses || [];
+                                      const itemExpTotal = itemExps.length > 0
+                                        ? itemExps.reduce((eSum: number, e: any) => eSum + (Number(e.amount) || 0), 0)
+                                        : (Number(item.expense) || Number(item.service?.expense) || 0);
+
                                       rows.push(
                                         <tr key={item.id || iIdx} className="border-b border-gray-300 h-7 text-black">
                                           <td className="px-3 py-1 text-center border-r border-gray-300 font-bold">{iIdx + 1}</td>
@@ -1713,6 +1724,9 @@ export const SalesList: React.FC = () => {
                                             <span className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 text-[10px] font-bold">
                                               {item.staff?.name || saleItem.employee?.name || '—'}
                                             </span>
+                                          </td>
+                                          <td className="px-3 py-1 text-center border-r border-gray-300 whitespace-nowrap font-mono text-amber-700 font-bold print:hidden">
+                                            {itemExpTotal > 0 ? `${itemExpTotal.toFixed(2)}` : '0.00'}
                                           </td>
                                           <td className="px-3 py-1 text-center border-r border-gray-300 font-bold">{item.quantity}</td>
                                           <td className="px-3 py-1 text-right border-r border-gray-300 font-mono">{item.unit_price.toFixed(2)}</td>
@@ -1730,6 +1744,7 @@ export const SalesList: React.FC = () => {
                                           <td className="px-3 py-1 border-r border-gray-300"></td>
                                           <td className="px-3 py-1 border-r border-gray-300"></td>
                                           <td className="px-3 py-1 border-r border-gray-300 print:hidden"></td>
+                                          <td className="px-3 py-1 border-r border-gray-300 print:hidden"></td>
                                           <td className="px-3 py-1 border-r border-gray-300"></td>
                                           <td className="px-3 py-1 border-r border-gray-300"></td>
                                           <td className="px-3 py-1 text-right"></td>
@@ -1745,7 +1760,7 @@ export const SalesList: React.FC = () => {
                                     <td className="hidden print:table-cell px-3 py-1.5 text-center border-r border-gray-300 uppercase tracking-wider" colSpan={5}>
                                       Sub Total
                                     </td>
-                                    <td className="table-cell print:hidden px-3 py-1.5 text-center border-r border-gray-300 uppercase tracking-wider" colSpan={6}>
+                                    <td className="table-cell print:hidden px-3 py-1.5 text-center border-r border-gray-300 uppercase tracking-wider" colSpan={7}>
                                       Sub Total
                                     </td>
                                     <td className="px-3 py-1.5 text-right font-mono font-black">
@@ -2210,16 +2225,17 @@ export const SalesList: React.FC = () => {
                           <th className="text-center py-3 px-3 w-28">Service Date</th>
                           <th className="text-center py-3 px-3 w-32">Staff</th>
                           <th className="text-center py-3 px-3 w-16">Qty</th>
-                          <th className="text-right py-3 px-4 w-28">Rate</th>
-                          <th className="text-right py-3 px-4 w-32">Total Billed</th>
-                          <th className="text-right py-3 px-4 w-32">Net Profit</th>
-                          <th className="text-center py-3 px-3 w-14"></th>
+                          <th className="text-right py-3 px-3 w-24">Govt Cost</th>
+                          <th className="text-right py-3 px-3 w-24">Rate</th>
+                          <th className="text-right py-3 px-3 w-28">Total Billed</th>
+                          <th className="text-right py-3 px-3 w-28">Net Profit</th>
+                          <th className="text-center py-3 px-3 w-12"></th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {editingSaleItems.length === 0 ? (
                           <tr>
-                            <td colSpan={9} className="py-12 text-center text-slate-500">
+                            <td colSpan={10} className="py-12 text-center text-slate-500">
                               <div className="max-w-md mx-auto space-y-1">
                                 <ReceiptText size={24} className="mx-auto text-slate-400 opacity-60" />
                                 <div className="font-bold font-heading text-slate-700 text-sm">
@@ -2268,13 +2284,16 @@ export const SalesList: React.FC = () => {
                                     {item.quantity}
                                   </span>
                                 </td>
-                                <td className="text-right font-heading font-semibold text-slate-700 py-3.5 px-4 whitespace-nowrap">
+                                <td className="text-right font-heading font-semibold text-rose-600 py-3.5 px-3 whitespace-nowrap">
+                                  {itemExpTotal.toFixed(2)} <span className="text-[10px] text-rose-400">AED</span>
+                                </td>
+                                <td className="text-right font-heading font-semibold text-slate-700 py-3.5 px-3 whitespace-nowrap">
                                   {Number(item.unit_price).toFixed(2)}
                                 </td>
-                                <td className="text-right font-heading font-bold text-slate-900 py-3.5 px-4 whitespace-nowrap">
+                                <td className="text-right font-heading font-bold text-slate-900 py-3.5 px-3 whitespace-nowrap">
                                   {itemPrice.toFixed(2)} <span className="text-[10px] text-slate-400">AED</span>
                                 </td>
-                                <td className="text-right font-heading font-black text-emerald-600 py-3.5 px-4 whitespace-nowrap">
+                                <td className="text-right font-heading font-black text-emerald-600 py-3.5 px-3 whitespace-nowrap">
                                   +{itemProfit.toFixed(2)} <span className="text-[10px] text-emerald-700">AED</span>
                                 </td>
                                 <td className="text-center py-3.5 px-3">
@@ -2310,9 +2329,9 @@ export const SalesList: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
                       {/* Service Selector */}
-                      <div className="sm:col-span-4">
+                      <div className="sm:col-span-3">
                         <label className="text-[10px] font-bold font-heading uppercase tracking-wider text-slate-600 block mb-1">
                           Select Service
                         </label>
@@ -2321,7 +2340,10 @@ export const SalesList: React.FC = () => {
                           onChange={(e) => {
                             const svc = allServices.find(s => s.id === e.target.value);
                             setAddServiceId(e.target.value);
-                            if (svc) setAddPrice(svc.price);
+                            if (svc) {
+                              setAddPrice(svc.price);
+                              setAddGovtCost(svc.expense || 0);
+                            }
                           }}
                           className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold font-sans text-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none cursor-pointer"
                         >
@@ -2348,7 +2370,7 @@ export const SalesList: React.FC = () => {
                       </div>
 
                       {/* Qty */}
-                      <div className="sm:col-span-2">
+                      <div className="sm:col-span-1">
                         <label className="text-[10px] font-bold font-heading uppercase tracking-wider text-slate-600 block mb-1 text-center">
                           Qty
                         </label>
@@ -2357,7 +2379,22 @@ export const SalesList: React.FC = () => {
                           min={1}
                           value={addQty}
                           onChange={(e) => setAddQty(parseInt(e.target.value) || 1)}
-                          className="w-full px-2 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold font-heading text-slate-800 text-center focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                          className="w-full px-1.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold font-heading text-slate-800 text-center focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                        />
+                      </div>
+
+                      {/* Govt Cost */}
+                      <div className="sm:col-span-2">
+                        <label className="text-[10px] font-bold font-heading uppercase tracking-wider text-amber-700 block mb-1">
+                          Govt Cost (AED)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={addGovtCost}
+                          onChange={(e) => setAddGovtCost(parseFloat(e.target.value) || 0)}
+                          className="w-full px-2.5 py-2 bg-amber-50/60 border border-amber-300 rounded-xl text-xs font-bold font-heading text-amber-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none"
                         />
                       </div>
 
@@ -2372,7 +2409,7 @@ export const SalesList: React.FC = () => {
                           step={0.01}
                           value={addPrice}
                           onChange={(e) => setAddPrice(parseFloat(e.target.value) || 0)}
-                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold font-heading text-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                          className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold font-heading text-slate-800 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
                         />
                       </div>
 
@@ -3111,18 +3148,22 @@ export const SalesList: React.FC = () => {
                               setPayGovItemId(val);
                               const it = items.find((x: any) => x.id === val);
                               if (it) {
-                                setPayGovAmount(Number(it.service?.expense) || 0);
+                                const defaultCost = Number(it.expense) > 0 ? Number(it.expense) : (Number(it.service?.expense) || 0);
+                                setPayGovAmount(defaultCost);
                                 setPayGovDesc(`${it.service?.name || 'Service'} Gov Fee${it.person_name ? ` (${it.person_name})` : ''}`);
                               }
                             }}
                             className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-indigo-500 cursor-pointer"
                           >
                             <option value="all">-- Entire Invoice / General Fee --</option>
-                            {items.map((it: any) => (
-                              <option key={it.id} value={it.id}>
-                                {it.service?.name || 'Service'} {it.person_name ? `(${it.person_name})` : ''} - Def: {(it.service?.expense || 0)} AED
-                              </option>
-                            ))}
+                            {items.map((it: any) => {
+                              const defaultCost = Number(it.expense) > 0 ? Number(it.expense) : (Number(it.service?.expense) || 0);
+                              return (
+                                <option key={it.id} value={it.id}>
+                                  {it.service?.name || 'Service'} {it.person_name ? `(${it.person_name})` : ''} - Def: {defaultCost} AED
+                                </option>
+                              );
+                            })}
                           </select>
                         </div>
 

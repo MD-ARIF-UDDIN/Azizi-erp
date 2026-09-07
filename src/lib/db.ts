@@ -1392,7 +1392,7 @@ export const db = {
       branch_id: string;
       discount: number;
       notes?: string;
-      items: Array<{ service_id: string; quantity: number; unit_price: number; person_name?: string; service_date?: string; staff_id?: string; notes?: string }>;
+      items: Array<{ service_id: string; quantity: number; unit_price: number; expense?: number; person_name?: string; service_date?: string; staff_id?: string; notes?: string }>;
       initialPayment?: { amount: number; payment_method: Payment['payment_method'] };
       person_name?: string;
       person_phone?: string;
@@ -1486,7 +1486,7 @@ export const db = {
 
           const itemsPayload = data.items.map(item => {
             const srv = serviceMap.get(item.service_id);
-            const srvExpense = Number(srv?.expense) || 0;
+            const srvExpense = item.expense !== undefined ? Number(item.expense) : (Number(srv?.expense) || 0);
             const itemTotalExpense = srvExpense * (Number(item.quantity) || 1);
             return {
               id: generateUUID(),
@@ -1589,20 +1589,26 @@ export const db = {
       const pendingStatus = _statuses.find(os => os.name === 'Pending') || _statuses[0];
       const saleId = generateUUID();
 
-      const createdItems: SaleItem[] = data.items.map(item => ({
-        id: generateUUID(),
-        sale_id: saleId,
-        service_id: item.service_id,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        subtotal: item.unit_price * item.quantity,
-        person_name: item.person_name || undefined,
-        service_date: item.service_date || now.toISOString().split('T')[0],
-        staff_id: item.staff_id || activeUser.id,
-        notes: item.notes || undefined,
-        created_at: item.service_date ? new Date(item.service_date).toISOString() : now.toISOString(),
-        updated_at: now.toISOString()
-      }));
+      const createdItems: SaleItem[] = data.items.map(item => {
+        const srv = _services.find(s => s.id === item.service_id);
+        const srvExpense = item.expense !== undefined ? Number(item.expense) : (Number(srv?.expense) || 0);
+        const itemTotalExpense = srvExpense * (Number(item.quantity) || 1);
+        return {
+          id: generateUUID(),
+          sale_id: saleId,
+          service_id: item.service_id,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          subtotal: item.unit_price * item.quantity,
+          expense: itemTotalExpense > 0 ? itemTotalExpense : undefined,
+          person_name: item.person_name || undefined,
+          service_date: item.service_date || now.toISOString().split('T')[0],
+          staff_id: item.staff_id || activeUser.id,
+          notes: item.notes || undefined,
+          created_at: item.service_date ? new Date(item.service_date).toISOString() : now.toISOString(),
+          updated_at: now.toISOString()
+        };
+      });
 
       const paidAmount = data.initialPayment ? data.initialPayment.amount : 0;
       let payment_status: Sale['payment_status'] = 'Unpaid';
@@ -1800,15 +1806,16 @@ export const db = {
       const serviceDate = item.service_date || now.toISOString().split('T')[0];
 
       let createdExpenseId: string | undefined = undefined;
-      const numExpense = Number(item.expense) || 0;
-      if (numExpense > 0 && item.account_id) {
+      const unitExpense = Number(item.expense) || 0;
+      const totalItemExpense = unitExpense * (Number(item.quantity) || 1);
+      if (totalItemExpense > 0 && item.account_id) {
         const srv = _services.find(s => s.id === item.service_id);
         const cats = await db.expenseCategories.getAll();
         const govCat = cats.find(c => c.name.toLowerCase().includes('gov') || c.name.toLowerCase().includes('visa') || c.name.toLowerCase().includes('cost')) || cats[0];
         const exp = await db.expenses.create({
           category_id: govCat?.id || '',
           branch_id: _sales.find(s => s.id === saleId)?.branch_id || '',
-          amount: numExpense,
+          amount: totalItemExpense,
           expense_date: serviceDate,
           description: `${srv?.name || 'Service'} Gov Fee${item.person_name ? ` (${item.person_name})` : ''}`,
           payment_method: 'Card',
@@ -1825,6 +1832,7 @@ export const db = {
           quantity: item.quantity,
           unit_price: item.unit_price,
           subtotal,
+          expense: totalItemExpense > 0 ? totalItemExpense : undefined,
           person_name: item.person_name || null,
           service_date: serviceDate,
           staff_id: targetStaffId
@@ -1854,7 +1862,7 @@ export const db = {
         quantity: item.quantity,
         unit_price: item.unit_price,
         subtotal,
-        expense: numExpense > 0 ? numExpense : undefined,
+        expense: totalItemExpense > 0 ? totalItemExpense : undefined,
         account_id: item.account_id || undefined,
         expense_id: createdExpenseId,
         person_name: item.person_name || undefined,

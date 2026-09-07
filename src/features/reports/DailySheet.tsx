@@ -103,12 +103,9 @@ export const DailySheet: React.FC = () => {
   };
 
   const getSaleProfit = (s: any) => {
-    return (s.items || []).reduce((sum: number, it: any) => {
-      const sellPrice = Number(it.unit_price) || Number(it.service?.price) || 0;
-      const costPrice = Number(it.service?.expense) || 0;
-      const qty = Number(it.quantity) || 1;
-      return sum + ((sellPrice - costPrice) * qty);
-    }, 0);
+    const saleCost = getSaleGovCost(s);
+    const saleGrandTotal = Number(s.grand_total ?? ((s.items || []).reduce((sum: number, it: any) => sum + (Number(it.subtotal) || ((Number(it.unit_price) || 0) * (Number(it.quantity) || 1))), 0) - (Number(s.discount) || 0)));
+    return saleGrandTotal - saleCost;
   };
 
   filteredSales.forEach(s => {
