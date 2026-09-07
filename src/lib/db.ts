@@ -4,6 +4,7 @@ import type {
   ServiceCategory, Service, OrderStatus, Sale, SaleItem, Payment,
   ExpenseCategory, Expense, OrderStatusHistory, AuditLog, ClientDocument, DocumentType,
   Quotation, QuotationItem, QuotationStatusHistory, TermsConditions,
+  QuotationTemplate,
   Account, AccountTransaction, JournalEntry
 } from '../types/database';
 
@@ -44,6 +45,7 @@ const KEYS = {
   QUOTATIONS: 'azizi_erp_quotations',
   QUOTATION_ITEMS: 'azizi_erp_quotation_items',
   QUOTATION_STATUS_HISTORY: 'azizi_erp_quotation_status_history',
+  QUOTATION_TEMPLATES: 'azizi_erp_quotation_templates',
   TERMS_CONDITIONS: 'azizi_erp_terms_conditions',
   ACCOUNTS: 'azizi_erp_accounts',
   ACCOUNT_TRANSACTIONS: 'azizi_erp_account_transactions',
@@ -256,6 +258,75 @@ const SEED_TERMS_CONDITIONS = (): TermsConditions[] => {
 
 const SEED_ACCOUNTS = (): Account[] => [];
 
+const SEED_QUOTATION_TEMPLATES = (): QuotationTemplate[] => {
+  const now = new Date();
+  return [
+    {
+      id: 'qt-tpl-001',
+      name: 'Family Residence Visa Package (2+2)',
+      description: 'Complete package for sponsoring spouse and 2 children including Emirates ID and Medical.',
+      discount: 200,
+      notes: 'Includes entry permits, status change, medical fitness typing, Emirates ID typing, and residence stamping for 4 dependents.',
+      terms_conditions_ids: ['tc-uuid-1', 'tc-uuid-2'],
+      items: [
+        { service_id: 'd1111111-1111-1111-1111-111111111113', quantity: 3, unit_price: 2000.00, notes: 'Family Visa typing for Spouse & 2 Children' },
+        { service_id: 'd2222222-2222-2222-2222-222222222221', quantity: 3, unit_price: 250.00, notes: 'Emirates ID Biometrics & Typing' },
+        { service_id: 'd4444444-4444-4444-4444-444444444441', quantity: 2, unit_price: 150.00, notes: 'Attestation of Marriage & Birth Certificates' }
+      ],
+      created_at: now.toISOString(),
+      updated_at: now.toISOString(),
+      is_deleted: false
+    },
+    {
+      id: 'qt-tpl-002',
+      name: 'New Employment & Work Permit Package',
+      description: 'End-to-end typing for new company recruit: Offer Letter, Work Permit, Medical & Emirates ID.',
+      discount: 100,
+      notes: 'MOHRE job offer submission, quota approval, entry permit, Emirates ID, and residency stamping.',
+      terms_conditions_ids: ['tc-uuid-1', 'tc-uuid-3'],
+      items: [
+        { service_id: 'd1111111-1111-1111-1111-111111111111', quantity: 1, unit_price: 1500.00, notes: 'New Employment Visa Processing' },
+        { service_id: 'd3333333-3333-3333-3333-333333333331', quantity: 1, unit_price: 600.00, notes: 'MOHRE Work Permit & Labor Contract' },
+        { service_id: 'd2222222-2222-2222-2222-222222222221', quantity: 1, unit_price: 250.00, notes: 'New Emirates ID Registration' }
+      ],
+      created_at: now.toISOString(),
+      updated_at: now.toISOString(),
+      is_deleted: false
+    },
+    {
+      id: 'qt-tpl-003',
+      name: 'Trade License & Corporate LLC Setup',
+      description: 'Commercial license issuing, MOA drafting, establishment card & official company stamp.',
+      discount: 300,
+      notes: 'Includes DED trade license submission, initial approval, name reservation, and company stamp.',
+      terms_conditions_ids: ['tc-uuid-1', 'tc-uuid-2', 'tc-uuid-3'],
+      items: [
+        { service_id: 'd5555555-5555-5555-5555-555555555551', quantity: 1, unit_price: 3000.00, notes: 'DED Trade License Composing' },
+        { service_id: 'd6666666-6666-6666-6666-666666666661', quantity: 2, unit_price: 120.00, notes: 'Official Self-Ink Company Stamp & Seal' },
+        { service_id: 'd4444444-4444-4444-4444-444444444441', quantity: 1, unit_price: 150.00, notes: 'Corporate Document MOA Attestation' }
+      ],
+      created_at: now.toISOString(),
+      updated_at: now.toISOString(),
+      is_deleted: false
+    },
+    {
+      id: 'qt-tpl-004',
+      name: 'Residency Visa Renewal & ID Fast-Track',
+      description: 'Fast-track renewal for existing residents: Visa renewal form & Emirates ID renewal.',
+      discount: 50,
+      notes: 'Fast turnaround service within 24-48 business hours.',
+      terms_conditions_ids: ['tc-uuid-1'],
+      items: [
+        { service_id: 'd1111111-1111-1111-1111-111111111112', quantity: 1, unit_price: 1200.00, notes: 'Residence Visa Renewal' },
+        { service_id: 'd2222222-2222-2222-2222-222222222222', quantity: 1, unit_price: 250.00, notes: 'Emirates ID Renewal' }
+      ],
+      created_at: now.toISOString(),
+      updated_at: now.toISOString(),
+      is_deleted: false
+    }
+  ];
+};
+
 const SEED_DOCUMENT_TYPES = (): DocumentType[] => [
   { id: 'dt111111-1111-1111-1111-111111111111', name: 'Visa', description: 'UAE Residence / Employment / Partner Visa', is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
   { id: 'dt222222-2222-2222-2222-222222222222', name: 'Emirates ID', description: 'National Identity Card', is_active: true, is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
@@ -273,6 +344,7 @@ let _documentTypes: DocumentType[] = getOrSeed(KEYS.DOCUMENT_TYPES, SEED_DOCUMEN
 let _quotations: Quotation[] = getOrSeed(KEYS.QUOTATIONS, () => []);
 let _quotationItems: QuotationItem[] = getOrSeed(KEYS.QUOTATION_ITEMS, () => []);
 let _quotationHistory: QuotationStatusHistory[] = getOrSeed(KEYS.QUOTATION_STATUS_HISTORY, () => []);
+let _quotationTemplates: QuotationTemplate[] = getOrSeed(KEYS.QUOTATION_TEMPLATES, () => SEED_QUOTATION_TEMPLATES());
 let _termsConditions: TermsConditions[] = getOrSeed(KEYS.TERMS_CONDITIONS, () => SEED_TERMS_CONDITIONS());
 let _accounts: Account[] = getOrSeed(KEYS.ACCOUNTS, SEED_ACCOUNTS);
 let _accountTransactions: AccountTransaction[] = getOrSeed(KEYS.ACCOUNT_TRANSACTIONS, () => []);
@@ -300,6 +372,7 @@ const saveAll = () => {
   saveToLocalStorage(KEYS.QUOTATIONS, _quotations);
   saveToLocalStorage(KEYS.QUOTATION_ITEMS, _quotationItems);
   saveToLocalStorage(KEYS.QUOTATION_STATUS_HISTORY, _quotationHistory);
+  saveToLocalStorage(KEYS.QUOTATION_TEMPLATES, _quotationTemplates);
   saveToLocalStorage(KEYS.TERMS_CONDITIONS, _termsConditions);
   saveToLocalStorage(KEYS.ACCOUNTS, _accounts);
   saveToLocalStorage(KEYS.ACCOUNT_TRANSACTIONS, _accountTransactions);
@@ -4007,6 +4080,127 @@ export const db = {
       _termsConditions[idx] = updated;
       saveAll();
       logAudit(activeUser.id, 'DELETE_TERM', 'terms_conditions', id, old, updated);
+      return true;
+    }
+  },
+
+  quotationTemplates: {
+    getAll: async () => {
+      const cacheKey = 'quotation_templates:all';
+      const cached = getCached<QuotationTemplate[]>(cacheKey);
+      if (cached) return cached;
+
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data, error } = await supabase.from('quotation_templates').select('*').eq('is_deleted', false).order('created_at', { ascending: false });
+          if (!error && data) {
+            return setCached(cacheKey, data as QuotationTemplate[], 10000);
+          }
+        } catch (e) {
+          console.warn('Supabase quotation_templates table fetch failed, using fallback:', e);
+        }
+      }
+      const active = _quotationTemplates.filter(t => !t.is_deleted);
+      return setCached(cacheKey, active, 10000);
+    },
+    getById: async (id: string) => {
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data, error } = await supabase.from('quotation_templates').select('*').eq('id', id).eq('is_deleted', false).maybeSingle();
+          if (!error && data) return data as QuotationTemplate;
+        } catch (e) {
+          console.warn('Supabase get template failed, using fallback:', e);
+        }
+      }
+      const template = _quotationTemplates.find(t => t.id === id && !t.is_deleted);
+      return delay(template);
+    },
+    create: async (data: Omit<QuotationTemplate, 'id' | 'created_at' | 'updated_at'>) => {
+      invalidateCache('quotation_templates');
+      const activeUser = getActiveUserSession();
+      const now = new Date();
+      const id = generateUUID();
+      const newTemplate: QuotationTemplate = {
+        ...data,
+        id,
+        is_deleted: false,
+        created_at: now.toISOString(),
+        updated_at: now.toISOString(),
+        created_by: activeUser?.id
+      };
+
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data: created, error } = await supabase.from('quotation_templates').insert([newTemplate]).select().single();
+          if (!error && created) {
+            _quotationTemplates.unshift(created as QuotationTemplate);
+            saveAll();
+            return created as QuotationTemplate;
+          }
+        } catch (e) {
+          console.warn('Supabase insert template failed, persisting locally:', e);
+        }
+      }
+
+      _quotationTemplates.unshift(newTemplate);
+      saveAll();
+      logAudit(activeUser?.id, 'INSERT_QUOTATION_TEMPLATE', 'quotation_templates', id, null, newTemplate);
+      return newTemplate;
+    },
+    update: async (id: string, data: Partial<Omit<QuotationTemplate, 'id' | 'created_at' | 'updated_at'>>) => {
+      invalidateCache('quotation_templates');
+      const activeUser = getActiveUserSession();
+      const now = new Date();
+
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data: updated, error } = await supabase.from('quotation_templates').update({ ...data, updated_at: now.toISOString() }).eq('id', id).select().single();
+          if (!error && updated) {
+            const idx = _quotationTemplates.findIndex(t => t.id === id);
+            if (idx !== -1) _quotationTemplates[idx] = updated as QuotationTemplate;
+            saveAll();
+            return updated as QuotationTemplate;
+          }
+        } catch (e) {
+          console.warn('Supabase update template failed, persisting locally:', e);
+        }
+      }
+
+      const idx = _quotationTemplates.findIndex(t => t.id === id);
+      if (idx === -1) throw new Error('Quotation template not found');
+      const old = _quotationTemplates[idx];
+      const updated = { ...old, ...data, updated_at: now.toISOString() };
+      _quotationTemplates[idx] = updated;
+      saveAll();
+      logAudit(activeUser?.id, 'UPDATE_QUOTATION_TEMPLATE', 'quotation_templates', id, old, updated);
+      return updated;
+    },
+    delete: async (id: string) => {
+      invalidateCache('quotation_templates');
+      const activeUser = getActiveUserSession();
+      const now = new Date();
+
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { error } = await supabase.from('quotation_templates').update({ is_deleted: true, updated_at: now.toISOString() }).eq('id', id);
+          if (!error) {
+            const idx = _quotationTemplates.findIndex(t => t.id === id);
+            if (idx !== -1) _quotationTemplates[idx] = { ..._quotationTemplates[idx], is_deleted: true };
+            saveAll();
+            return true;
+          }
+        } catch (e) {
+          console.warn('Supabase delete template failed, persisting locally:', e);
+        }
+      }
+
+      const idx = _quotationTemplates.findIndex(t => t.id === id);
+      if (idx === -1) throw new Error('Quotation template not found');
+      const old = _quotationTemplates[idx];
+      const updated = { ...old, is_deleted: true, updated_at: now.toISOString() };
+      _quotationTemplates[idx] = updated;
+      saveAll();
+      logAudit(activeUser?.id, 'DELETE_QUOTATION_TEMPLATE', 'quotation_templates', id, old, updated);
       return true;
     }
   },

@@ -24,7 +24,9 @@ import {
   Plus,
   Clock,
   CreditCard,
-  BookOpen
+  BookOpen,
+  Building2,
+  Globe
 } from 'lucide-react';
 
 import { Logo } from '../components/Logo';
@@ -221,7 +223,11 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
   const {
     user,
     logout,
-    allUsersList
+    allUsersList,
+    activeBranchId,
+    setActiveBranchId,
+    availableBranches,
+    isAdmin
   } = useAuth();
 
   const [collapsed, setCollapsed] = useState(false);
@@ -454,7 +460,8 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                   permission="Sales.View"
                   links={[
                     { to: '/quotations', label: 'Quotations List', permission: 'Sales.View' },
-                    { to: '/quotations/create', label: 'Create Quotation', permission: 'Sales.Create' }
+                    { to: '/quotations/create', label: 'Create Quotation', permission: 'Sales.Create' },
+                    { to: '/quotations/templates', label: 'Quotation Templates', permission: 'Sales.View' }
                   ]}
                 />
 
@@ -617,8 +624,32 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
             </button>
           </div>
 
-          {/* Right section: Live Time & Quick Invoice button */}
-          <div className="flex items-center gap-2.5">
+          {/* Right section: Branch Switcher, Live Time & Quick Invoice button */}
+          <div className="flex items-center gap-2 sm:gap-2.5">
+            {/* Branch Selector Dropdown */}
+            {(isAdmin || availableBranches.length > 1) && (
+              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-xs">
+                {activeBranchId === 'all' ? (
+                  <Globe size={13} className="text-primary shrink-0" />
+                ) : (
+                  <Building2 size={13} className="text-primary shrink-0" />
+                )}
+                <select
+                  value={activeBranchId}
+                  onChange={(e) => setActiveBranchId(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-slate-800 outline-hidden cursor-pointer pr-1"
+                  title="Filter Branch Data"
+                >
+                  <option value="all">🌐 All Branches (Consolidated)</option>
+                  {availableBranches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      🏢 {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Live Clock */}
             <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-50 border border-slate-200 text-[11px] font-mono text-slate-600 font-semibold">
               <Clock size={12} className="text-primary" />

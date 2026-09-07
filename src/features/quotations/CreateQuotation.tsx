@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../lib/db';
-import type { Service, Customer, TermsConditions } from '../../types/database';
+import type { Service, Customer, TermsConditions, QuotationTemplate } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -18,7 +18,12 @@ import {
   ChevronLeft,
   Calendar,
   Percent,
-  AlertCircle
+  AlertCircle,
+  LayoutTemplate,
+  BookmarkPlus,
+  FolderOpen,
+  Check,
+  ArrowRight
 } from 'lucide-react';
 
 interface CartItem {
@@ -42,6 +47,16 @@ export const CreateQuotation: React.FC = () => {
   const [categories, setCategories] = useState<any[]>([]);
   const [termsList, setTermsList] = useState<TermsConditions[]>([]);
   const [selectedTermIds, setSelectedTermIds] = useState<string[]>([]);
+
+  // Quotation Templates
+  const [templates, setTemplates] = useState<QuotationTemplate[]>([]);
+  const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
+  const [isBrowseTemplatesModalOpen, setIsBrowseTemplatesModalOpen] = useState(false);
+  const [isSaveTemplateModalOpen, setIsSaveTemplateModalOpen] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [newTemplateDesc, setNewTemplateDesc] = useState('');
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState('');
 
   // Catalog Search & Category Filter
   const [serviceSearch, setServiceSearch] = useState('');
@@ -99,23 +114,24 @@ export const CreateQuotation: React.FC = () => {
   const [selectedPersonName, setSelectedPersonName] = useState<string>(searchParams.get('person_name') || '');
 
   useEffect(() => {
-    setCart([]);
     setSelectedPersonName(searchParams.get('person_name') || '');
   }, [customerId, customerType, newCustomerType]);
 
   useEffect(() => {
     const init = async () => {
       try {
-        const [c, s, cats, terms] = await Promise.all([
+        const [c, s, cats, terms, tpls] = await Promise.all([
           db.customers.getAll(),
           db.services.getAll(),
           db.serviceCategories.getAll(),
-          db.termsConditions.getAll()
+          db.termsConditions.getAll(),
+          db.quotationTemplates.getAll()
         ]);
         setCustomers(c);
         setServices(s.filter(srv => srv.status === 'Active'));
         setCategories(cats);
         setTermsList(terms);
+        setTemplates(tpls || []);
 
         const paramCustId = searchParams.get('customer_id');
         if (paramCustId) {
@@ -123,6 +139,44 @@ export const CreateQuotation: React.FC = () => {
           if (match) {
             setCustomerId(match.id);
             setCustomerType('existing');
+          }
+        }
+
+        const paramTplId = searchParams.get('template_id');
+        if (paramTplId && tpls) {
+          const matchTpl = tpls.find(t => t.id === paramTplId);
+          if (matchTpl) {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const newCartItems: CartItem[] = [];
+            (matchTpl.items || []).forEach(tplItem => {
+              let svc = s.find(srv => srv.id === tplItem.service_id);
+              if (!svc && (tplItem as any).service) svc = (tplItem as any).service;
+              if (!svc) {
+                svc = {
+                  id: tplItem.service_id,
+                  category_id: '',
+                  name: tplItem.notes || 'Service Item',
+                  price: tplItem.unit_price,
+                  status: 'Active',
+                  is_deleted: false,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                };
+              }
+              newCartItems.push({
+                service: svc,
+                quantity: tplItem.quantity || 1,
+                unit_price: tplItem.unit_price ?? svc.price,
+                service_date: todayStr,
+                staff_id: user?.id,
+                notes: tplItem.notes
+              });
+            });
+            setCart(newCartItems);
+            setActiveTemplateId(matchTpl.id);
+            if (matchTpl.discount !== undefined) setDiscount(matchTpl.discount);
+            if (matchTpl.notes) setNotes(matchTpl.notes);
+            if (matchTpl.terms_conditions_ids) setSelectedTermIds(matchTpl.terms_conditions_ids);
           }
         }
 
@@ -210,12 +264,6 @@ export const CreateQuotation: React.FC = () => {
   };
 
   const addServiceToCart = (service: Service) => {
-    const hasSelectedCustomer = (customerType === 'existing' && !!customerId) || (customerType === 'new' && !!newCustomerName.trim());
-    if (!hasSelectedCustomer) {
-      showToast('Please select a customer first.', 'warning');
-      return;
-    }
-
     const assignedPerson = selectedPersonName.trim() || undefined;
     const existingIndex = cart.findIndex(item => item.service.id === service.id && item.person_name === assignedPerson);
     if (existingIndex !== -1) {
@@ -231,6 +279,115 @@ export const CreateQuotation: React.FC = () => {
         service_date: new Date().toISOString().split('T')[0],
         staff_id: user?.id
       }]);
+    }
+  };
+
+  const handleApplyTemplate = (template: QuotationTemplate) => {
+    if (!template.items || template.items.length === 0) {
+      showToast('Selected template has no service items.', 'warning');
+      return;
+    }
+
+    const assignedPerson = selectedPersonName.trim() || undefined;
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const newCartItems: CartItem[] = [];
+    template.items.forEach(tplItem => {
+      let svc = services.find(s => s.id === tplItem.service_id);
+      if (!svc && (tplItem as any).service) {
+        svc = (tplItem as any).service;
+      }
+      if (!svc) {
+        svc = {
+          id: tplItem.service_id,
+          category_id: '',
+          name: tplItem.notes || 'Service Item',
+          price: tplItem.unit_price,
+          status: 'Active',
+          is_deleted: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+      }
+
+      newCartItems.push({
+        service: svc,
+        quantity: tplItem.quantity || 1,
+        unit_price: tplItem.unit_price ?? svc.price,
+        person_name: assignedPerson,
+        service_date: todayStr,
+        staff_id: user?.id,
+        notes: tplItem.notes
+      });
+    });
+
+    setCart(newCartItems);
+    setActiveTemplateId(template.id);
+    if (template.notes) {
+      setNotes(template.notes);
+    }
+    if (template.terms_conditions_ids && template.terms_conditions_ids.length > 0) {
+      setSelectedTermIds(template.terms_conditions_ids);
+    }
+
+    setIsBrowseTemplatesModalOpen(false);
+    showToast(`Template "${template.name}" applied (${newCartItems.length} services auto-populated)`, 'success');
+  };
+
+  const handleSaveCurrentAsTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTemplateName.trim()) {
+      showToast('Please enter a template name.', 'warning');
+      return;
+    }
+    if (cart.length === 0) {
+      showToast('Add at least one service item to save as a template.', 'warning');
+      return;
+    }
+
+    setSavingTemplate(true);
+    try {
+      const templateItems = cart.map(item => ({
+        service_id: item.service.id,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        notes: item.notes || item.service.name
+      }));
+
+      const created = await db.quotationTemplates.create({
+        name: newTemplateName.trim(),
+        description: newTemplateDesc.trim() || undefined,
+        notes: notes || undefined,
+        terms_conditions_ids: selectedTermIds,
+        items: templateItems
+      });
+
+      const allTpls = await db.quotationTemplates.getAll();
+      setTemplates(allTpls);
+      setActiveTemplateId(created.id);
+      setIsSaveTemplateModalOpen(false);
+      setNewTemplateName('');
+      setNewTemplateDesc('');
+      showToast(`Template "${created.name}" saved successfully!`, 'success');
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || 'Failed to save template', 'error');
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (id: string, name: string) => {
+    if (!window.confirm(`Delete quotation template "${name}"?`)) return;
+    try {
+      await db.quotationTemplates.delete(id);
+      const allTpls = await db.quotationTemplates.getAll();
+      setTemplates(allTpls);
+      if (activeTemplateId === id) setActiveTemplateId(null);
+      showToast(`Template "${name}" deleted.`, 'success');
+    } catch (err: any) {
+      console.error(err);
+      showToast('Failed to delete template', 'error');
     }
   };
 
@@ -455,6 +612,82 @@ export const CreateQuotation: React.FC = () => {
             {errorMsg}
           </div>
         )}
+
+        {/* QUOTATION TEMPLATES QUICK BAR */}
+        <div className="bg-card border border-border rounded-2xl p-4 shadow-sm space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2.5">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
+                <LayoutTemplate size={16} />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-foreground m-0">
+                  Quotation Templates
+                </h3>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsSaveTemplateModalOpen(true)}
+                disabled={cart.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                title={cart.length === 0 ? 'Add items to quote first to save as template' : 'Save current quote items as reusable template'}
+              >
+                <BookmarkPlus size={14} />
+                <span>Save as Template</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsBrowseTemplatesModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-muted/60 hover:bg-muted text-foreground border border-border transition-all cursor-pointer"
+              >
+                <FolderOpen size={14} />
+                <span>Browse All ({templates.length})</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Template Chips */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+            {templates.slice(0, 6).map((tpl) => {
+              const isCurrent = activeTemplateId === tpl.id;
+              const tplSubtotal = tpl.items.reduce((s, i) => s + (i.unit_price * i.quantity), 0);
+
+              return (
+                <button
+                  key={tpl.id}
+                  type="button"
+                  onClick={() => handleApplyTemplate(tpl)}
+                  className={`flex-shrink-0 flex items-center gap-2.5 px-3 py-2 rounded-xl text-left border transition-all cursor-pointer group ${
+                    isCurrent
+                      ? 'bg-primary/15 border-primary text-primary shadow-xs ring-1 ring-primary/30'
+                      : 'bg-muted/30 hover:bg-muted border-border hover:border-primary/40 text-foreground'
+                  }`}
+                >
+                  <div className={`p-1.5 rounded-lg ${isCurrent ? 'bg-primary text-white' : 'bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-colors'}`}>
+                    <FileText size={13} />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold truncate max-w-[200px] leading-tight">
+                      {tpl.name}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                      <span>{tpl.items.length} items</span>
+                      <span>•</span>
+                      <span className="font-bold text-foreground">{tplSubtotal.toFixed(0)} AED</span>
+                    </div>
+                  </div>
+                  <div className="text-primary opacity-0 group-hover:opacity-100 transition-opacity ml-1">
+                    <ArrowRight size={13} />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
@@ -1276,6 +1509,243 @@ export const CreateQuotation: React.FC = () => {
               >
                 <X size={15} />
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════ SAVE CURRENT QUOTE AS TEMPLATE MODAL ═══════ */}
+        {isSaveTemplateModalOpen && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+            <div className="bg-card border border-border rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
+              <div className="flex justify-between items-center border-b border-border pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
+                    <BookmarkPlus size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-foreground m-0">Save as Quotation Template</h3>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsSaveTemplateModalOpen(false)}
+                  className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveCurrentAsTemplate} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-foreground mb-1">
+                    Template Name <span className="text-destructive">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. VIP Golden Visa Package, LLC Renewal Setup"
+                    value={newTemplateName}
+                    onChange={(e) => setNewTemplateName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-background border border-border rounded-xl text-sm font-medium text-foreground focus:border-primary outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-foreground mb-1">
+                    Description / Scope <span className="text-muted-foreground font-normal">(Optional)</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Brief details of what this package includes..."
+                    value={newTemplateDesc}
+                    onChange={(e) => setNewTemplateDesc(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-background border border-border rounded-xl text-xs font-medium text-foreground focus:border-primary outline-hidden resize-none"
+                  />
+                </div>
+
+                {/* Items Summary Preview */}
+                <div className="bg-muted/40 p-3 rounded-xl border border-border/80 space-y-2 text-xs">
+                  <div className="font-bold text-foreground flex justify-between">
+                    <span>Items to be saved ({cart.length})</span>
+                    <span className="text-primary font-black">{subtotal.toFixed(2)} AED</span>
+                  </div>
+                  <div className="max-h-36 overflow-y-auto divide-y divide-border/60">
+                    {cart.map((it, i) => (
+                      <div key={i} className="py-1.5 flex justify-between text-muted-foreground">
+                        <span className="truncate pr-2">{it.quantity}x {it.service.name}</span>
+                        <span className="font-semibold text-foreground shrink-0">{(it.unit_price * it.quantity).toFixed(2)} AED</span>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedTermIds.length > 0 && (
+                    <div className="text-[11px] text-muted-foreground pt-0.5">
+                      ✓ {selectedTermIds.length} Terms & Conditions included
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsSaveTemplateModalOpen(false)}
+                    className="px-4 py-2 bg-secondary hover:bg-muted text-foreground rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingTemplate}
+                    className="px-5 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {savingTemplate ? 'Saving...' : 'Save Template'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════ BROWSE & MANAGE TEMPLATES MODAL ═══════ */}
+        {isBrowseTemplatesModalOpen && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+            <div className="bg-card border border-border rounded-2xl max-w-3xl w-full p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
+              <div className="flex justify-between items-center border-b border-border pb-3 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
+                    <LayoutTemplate size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-foreground m-0">Quotation Templates</h3>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsBrowseTemplatesModalOpen(false)}
+                  className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Search Bar */}
+              <div className="relative shrink-0">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search templates by package name or description..."
+                  value={templateSearch}
+                  onChange={(e) => setTemplateSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-background border border-border rounded-xl text-xs font-medium text-foreground focus:border-primary outline-hidden"
+                />
+              </div>
+
+              {/* Templates List */}
+              <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                {templates.filter(t => 
+                  !templateSearch.trim() || 
+                  t.name.toLowerCase().includes(templateSearch.toLowerCase()) || 
+                  (t.description && t.description.toLowerCase().includes(templateSearch.toLowerCase()))
+                ).length === 0 ? (
+                  <div className="py-12 text-center text-muted-foreground text-xs">
+                    No quotation templates found matching "{templateSearch}".
+                  </div>
+                ) : (
+                  templates
+                    .filter(t => 
+                      !templateSearch.trim() || 
+                      t.name.toLowerCase().includes(templateSearch.toLowerCase()) || 
+                      (t.description && t.description.toLowerCase().includes(templateSearch.toLowerCase()))
+                    )
+                    .map((tpl) => {
+                      const isCurrent = activeTemplateId === tpl.id;
+                      const tplSubtotal = tpl.items.reduce((s, i) => s + (i.unit_price * i.quantity), 0);
+
+                      return (
+                        <div
+                          key={tpl.id}
+                          className={`p-4 rounded-xl border transition-all ${
+                            isCurrent
+                              ? 'bg-primary/5 border-primary/40 ring-1 ring-primary/20'
+                              : 'bg-muted/20 hover:bg-muted/40 border-border'
+                          }`}
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="space-y-1 flex-1 min-w-[200px]">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-sm text-foreground">{tpl.name}</span>
+                                {isCurrent && (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary text-white">
+                                    Active in Quote
+                                  </span>
+                                )}
+                              </div>
+                              {tpl.description && (
+                                <p className="text-xs text-muted-foreground m-0">
+                                  {tpl.description}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <div className="text-right pr-2">
+                                <div className="text-sm font-black text-foreground">{tplSubtotal.toFixed(2)} AED</div>
+                                <div className="text-[10px] text-muted-foreground">{tpl.items.length} items</div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleApplyTemplate(tpl)}
+                                className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <Check size={13} />
+                                <span>Apply Template</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTemplate(tpl.id, tpl.name)}
+                                className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors cursor-pointer"
+                                title="Delete Template"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Items Breakdown list */}
+                          <div className="mt-3 pt-2.5 border-t border-border/60 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                            {tpl.items.map((item, idx) => {
+                              const s = services.find(srv => srv.id === item.service_id);
+                              return (
+                                <div key={idx} className="bg-background/80 px-2.5 py-1.5 rounded-lg border border-border/60 text-[11px] flex items-center justify-between">
+                                  <span className="font-medium text-foreground truncate pr-2">
+                                    {item.quantity}x {s?.name || item.notes || 'Service'}
+                                  </span>
+                                  <span className="font-bold text-muted-foreground shrink-0">
+                                    {(item.unit_price * item.quantity).toFixed(0)} AED
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })
+                )}
+              </div>
+
+              <div className="flex justify-between items-center pt-2 border-t border-border shrink-0">
+                <div className="text-xs text-muted-foreground">
+                  Total {templates.length} templates available
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsBrowseTemplatesModalOpen(false)}
+                  className="px-4 py-2 bg-secondary hover:bg-muted text-foreground rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         )}

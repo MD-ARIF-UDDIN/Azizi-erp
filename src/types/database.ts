@@ -301,6 +301,28 @@ export interface TermsConditions {
   updated_at: string;
 }
 
+export interface QuotationTemplateItem {
+  service_id: string;
+  quantity: number;
+  unit_price: number;
+  notes?: string;
+  service?: Service;
+}
+
+export interface QuotationTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  discount?: number;
+  notes?: string;
+  terms_conditions_ids?: string[];
+  items: QuotationTemplateItem[];
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+  is_deleted?: boolean;
+}
+
 export interface Account {
   id: string;
   name: string;

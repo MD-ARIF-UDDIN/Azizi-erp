@@ -10,6 +10,7 @@ interface AuthContextType {
   logout: () => void;
   hasPermission: (permissionName: string) => boolean;
   isAdmin: boolean;
+  isOwner: boolean;
   availableBranches: Branch[];
   allUsersList: User[];
   reloadSession: () => void;
@@ -50,6 +51,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return foundRoleName === 'super admin' || foundRoleName === 'owner';
   };
 
+  const isOwnerUser = (targetUser: User | null): boolean => {
+    if (!targetUser) return false;
+    const roleName = targetUser.role?.name?.toLowerCase() || '';
+    if (roleName === 'owner') return true;
+    const foundUser = allUsersList.find(u => u.id === targetUser.id);
+    const foundRoleName = foundUser?.role?.name?.toLowerCase() || '';
+    return foundRoleName === 'owner';
+  };
+
   const loadSession = async () => {
     setLoading(true);
     try {
@@ -81,7 +91,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(sessionUser);
 
       if (sessionUser) {
-        setActiveBranchIdState(sessionUser.branch_id || 'all');
+        // Owners & Super Admins default to All Branches (unrestricted)
+        const isSuperAdminOrOwner = isSuperOrOwner(sessionUser);
+        if (isSuperAdminOrOwner) {
+          setActiveBranchIdState('all');
+        } else {
+          setActiveBranchIdState(sessionUser.branch_id || 'all');
+        }
         const perms = await computePermissions(sessionUser);
         setRolePermissions(perms);
       } else {
@@ -115,7 +131,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setAvailableBranches(branches);
 
       const role = found.role_id ? await db.roles.getById(found.role_id) : null;
-      const roleName = role?.name?.toLowerCase() || '';
+      const roleName = (role?.name || found.role?.name || '').toLowerCase();
       if (roleName === 'super admin' || roleName === 'owner') {
         setActiveBranchIdState('all');
       } else {
@@ -139,6 +155,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const _isAdmin = (): boolean => {
     return isSuperOrOwner(user);
+  };
+
+  const _isOwner = (): boolean => {
+    return isOwnerUser(user);
   };
 
   const hasPermission = (permissionName: string): boolean => {
@@ -178,6 +198,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logout,
         hasPermission,
         isAdmin: _isAdmin(),
+        isOwner: _isOwner(),
         availableBranches,
         allUsersList,
         reloadSession: loadSession,

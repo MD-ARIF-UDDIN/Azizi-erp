@@ -25,6 +25,7 @@ import { ExpiryTracker } from './features/documents/ExpiryTracker';
 import { DocumentTypes } from './features/documents/DocumentTypes';
 import { QuotationsList } from './features/quotations/QuotationsList';
 import { CreateQuotation } from './features/quotations/CreateQuotation';
+import { QuotationTemplatesList } from './features/quotations/QuotationTemplatesList';
 import { AccountList } from './features/accounts/AccountList';
 import { JournalList } from './features/journal/JournalList';
 
@@ -114,6 +115,14 @@ function App() {
               element={
                 <AuthenticatedRoute>
                   <CreateQuotation />
+                </AuthenticatedRoute>
+              }
+            />
+            <Route
+              path="/quotations/templates"
+              element={
+                <AuthenticatedRoute>
+                  <QuotationTemplatesList />
                 </AuthenticatedRoute>
               }
             />
