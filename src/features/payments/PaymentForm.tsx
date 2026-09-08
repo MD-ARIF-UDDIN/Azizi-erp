@@ -685,6 +685,18 @@ export const PaymentForm: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Address */}
+                  <div className="space-y-1 text-xs">
+                    <label className="text-muted-foreground font-semibold">Address / Office Location</label>
+                    <input
+                      type="text"
+                      value={newCustomerAddress}
+                      onChange={(e) => setNewCustomerAddress(e.target.value)}
+                      placeholder="E.g. Musaffah M37, Abu Dhabi, UAE"
+                      className="w-full px-3 py-1.5 bg-background border border-border rounded-lg text-foreground text-xs font-medium"
+                    />
+                  </div>
+
                   {/* Member Name (Optional for New Company) */}
                   {newCustomerType === 'company' && (
                     <div className="space-y-1 text-xs pt-1 border-t border-border/50">

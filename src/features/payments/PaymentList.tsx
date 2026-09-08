@@ -13,7 +13,6 @@ import {
   Building,
   User,
   Receipt,
-  Plus,
   Coins,
   Download,
   Printer

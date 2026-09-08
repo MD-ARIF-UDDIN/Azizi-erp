@@ -840,7 +840,7 @@ export const CustomerList: React.FC = () => {
                   </div>
                   <div className="min-w-0">
                     <span className="text-[11px] text-muted-foreground font-semibold uppercase">Total Customers</span>
-                    <h3 className="text-base font-bold text-foreground mt-0.5">{customers.length}</h3>
+                    <h3 className="text-base font-bold text-foreground mt-0.5">{customers.length} ({totalBilled.toFixed(2)} AED)</h3>
                   </div>
                 </div>
                 <div className="glass border border-border p-3.5 rounded-xl flex items-center gap-3 shadow-xs bg-card">
