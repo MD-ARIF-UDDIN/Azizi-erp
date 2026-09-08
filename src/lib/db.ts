@@ -2076,8 +2076,6 @@ export const db = {
               if (customer) {
                 if (personName) {
                   saleCustomerName = `${personName} (${customer.name})`;
-                } else if (customer.company?.name) {
-                  saleCustomerName = `${customer.name} (${customer.company.name})`;
                 } else {
                   saleCustomerName = customer.name;
                 }
