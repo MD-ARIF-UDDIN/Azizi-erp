@@ -119,7 +119,7 @@ export const PaymentList: React.FC = () => {
 
   return (
     <PermissionGuard permission="Payments.View" fallback="ui">
-      <div className={`space-y-6 ${printableVoucherData ? 'print:hidden' : ''}`}>
+      <div className="space-y-6 print:hidden">
         
         {/* HEADER */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -367,11 +367,10 @@ export const PaymentList: React.FC = () => {
             </div>
           </div>
         )}
-
-        {/* PRINTABLE OFFICIAL RECEIPT & REFUND VOUCHER */}
-        <ReceiptVoucherPrint data={printableVoucherData} />
-
       </div>
+
+      {/* PRINTABLE OFFICIAL RECEIPT & REFUND VOUCHER */}
+      <ReceiptVoucherPrint data={printableVoucherData} />
     </PermissionGuard>
   );
 };

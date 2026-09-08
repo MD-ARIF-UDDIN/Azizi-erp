@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../lib/db';
-import type { Account, Customer, Service } from '../../types/database';
+import type { Account, Customer } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -38,7 +38,6 @@ export const PaymentForm: React.FC = () => {
   const [selectedSale, setSelectedSale] = useState<any | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
 
   // Existing Invoice Mode Form States
   const [saleId, setSaleId] = useState(saleIdParam || '');
@@ -80,11 +79,10 @@ export const PaymentForm: React.FC = () => {
     const loadData = async () => {
       setFetching(true);
       try {
-        const [allSales, allAccounts, allCustomers, allServices] = await Promise.all([
+        const [allSales, allAccounts, allCustomers] = await Promise.all([
           db.sales.getAll(),
           db.accounts.getAll(),
-          db.customers.getAll(),
-          db.services.getAll()
+          db.customers.getAll()
         ]);
 
         // Filter sales that are Unpaid or Partially Paid
@@ -92,7 +90,6 @@ export const PaymentForm: React.FC = () => {
         setUnpaidSales(unpaid);
         setAccounts(allAccounts);
         setCustomers(allCustomers);
-        setServices(allServices);
 
         // Default branch
         const defaultBranch = (activeBranchId && activeBranchId !== 'all')
@@ -258,50 +255,19 @@ export const PaymentForm: React.FC = () => {
           }
         }
 
-        // 2. Find or create an Advance Payment service
-        let advanceService = services.find(s => 
-          s.name.toLowerCase().includes('advance') || 
-          s.name.toLowerCase().includes('deposit')
-        );
-
-        if (!advanceService) {
-          if (services.length > 0) {
-            advanceService = services[0];
-          } else {
-            // Auto create an advance service category & service if none exist
-            const categories = await db.serviceCategories.getAll();
-            const catId = categories[0]?.id || 'c1111111-1111-1111-1111-111111111111';
-            advanceService = await db.services.create({
-              name: 'Advance Payment / Deposit',
-              category_id: catId,
-              price: 0,
-              expense: 0,
-              status: 'Active'
-            });
-          }
-        }
-
         const effectiveBranchId = branchId || (activeBranchId && activeBranchId !== 'all' ? activeBranchId : availableBranches[0]?.id || 'b1111111-1111-1111-1111-111111111111');
 
-        // 3. Create a new Sales Invoice for this Advance
+        // 2. Create a new Sales Invoice without any services (empty service list)
         const createdSale = await db.sales.create({
           customer_id: finalCustomerId || undefined,
           branch_id: effectiveBranchId,
           discount: 0,
           notes: notes ? `[Advance Payment] ${notes}` : 'Advance Payment Collection',
           person_name: finalPersonName || undefined,
-          items: [{
-            service_id: advanceService.id,
-            quantity: 1,
-            unit_price: amount,
-            expense: 0,
-            person_name: finalPersonName || undefined,
-            service_date: new Date().toISOString().split('T')[0],
-            notes: notes || 'Advance payment collection'
-          }]
+          items: []
         });
 
-        // 4. Record the Payment against the newly created sales invoice
+        // 3. Record the Payment against the newly created sales invoice
         await db.payments.create({
           sale_id: createdSale.id,
           amount,

@@ -1508,41 +1508,43 @@ export const db = {
             };
           });
 
-          const { error: itemsErr } = await supabase.from('sale_items').insert(itemsPayload);
-          if (itemsErr) {
-            // Fallback in case notes column is pending in db schema
-            const fallbackPayload = itemsPayload.map(({ notes, ...rest }) => rest);
-            const { error: fbErr } = await supabase.from('sale_items').insert(fallbackPayload);
-            if (fbErr) throw fbErr;
-          }
+          if (itemsPayload.length > 0) {
+            const { error: itemsErr } = await supabase.from('sale_items').insert(itemsPayload);
+            if (itemsErr) {
+              // Fallback in case notes column is pending in db schema
+              const fallbackPayload = itemsPayload.map(({ notes, ...rest }) => rest);
+              const { error: fbErr } = await supabase.from('sale_items').insert(fallbackPayload);
+              if (fbErr) throw fbErr;
+            }
 
-          // Automatically create Government Fee expense entries for any item that has expense > 0
-          for (const itemPayload of itemsPayload) {
-            if (itemPayload.expense > 0 && govCatId) {
-              const srv = serviceMap.get(itemPayload.service_id);
-              const pName = itemPayload.person_name || data.person_name;
-              const desc = `[Item: ${itemPayload.id}] ${srv?.name || 'Service'} Gov Fee (#${invoice_no}${pName ? ` - ${pName}` : ''})`;
-              
-              try {
-                const { data: expRow } = await supabase.from('expenses').insert([{
-                  category_id: govCatId,
-                  branch_id: data.branch_id,
-                  amount: itemPayload.expense,
-                  expense_date: itemPayload.service_date,
-                  description: desc,
-                  paid_to: 'Government Portal',
-                  payment_method: 'Card',
-                  sale_id: createdSale.id,
-                  sale_item_id: itemPayload.id,
-                  account_id: cardAccount?.id || null,
-                  is_deleted: false
-                }]).select().single();
+            // Automatically create Government Fee expense entries for any item that has expense > 0
+            for (const itemPayload of itemsPayload) {
+              if (itemPayload.expense > 0 && govCatId) {
+                const srv = serviceMap.get(itemPayload.service_id);
+                const pName = itemPayload.person_name || data.person_name;
+                const desc = `[Item: ${itemPayload.id}] ${srv?.name || 'Service'} Gov Fee (#${invoice_no}${pName ? ` - ${pName}` : ''})`;
+                
+                try {
+                  const { data: expRow } = await supabase.from('expenses').insert([{
+                    category_id: govCatId,
+                    branch_id: data.branch_id,
+                    amount: itemPayload.expense,
+                    expense_date: itemPayload.service_date,
+                    description: desc,
+                    paid_to: 'Government Portal',
+                    payment_method: 'Card',
+                    sale_id: createdSale.id,
+                    sale_item_id: itemPayload.id,
+                    account_id: cardAccount?.id || null,
+                    is_deleted: false
+                  }]).select().single();
 
-                if (expRow?.id) {
-                  await supabase.from('sale_items').update({ expense_id: expRow.id }).eq('id', itemPayload.id);
+                  if (expRow?.id) {
+                    await supabase.from('sale_items').update({ expense_id: expRow.id }).eq('id', itemPayload.id);
+                  }
+                } catch (eExp) {
+                  console.warn('Auto-create service expense warning:', eExp);
                 }
-              } catch (eExp) {
-                console.warn('Auto-create service expense warning:', eExp);
               }
             }
           }
