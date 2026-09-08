@@ -156,6 +156,7 @@ export interface Payment {
   id: string;
   sale_id?: string;
   customer_id?: string;
+  branch_id?: string;
   amount: number;
   payment_method: 'Cash' | 'Card' | 'Mobile Banking' | 'Bank Transfer' | 'Advance';
   account_id?: string;

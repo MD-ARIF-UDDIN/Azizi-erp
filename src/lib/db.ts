@@ -2071,15 +2071,18 @@ export const db = {
               const branch = targetBranchId ? branchesMap.get(targetBranchId) : undefined;
               const user = p.received_by ? usersMap.get(p.received_by) : undefined;
 
+              const personName = p.person_name || sale?.person_name;
               let saleCustomerName = 'Customer';
               if (customer) {
-                if (p.person_name || sale?.person_name) {
-                  saleCustomerName = `${p.person_name || sale?.person_name} (${customer.name})`;
+                if (personName) {
+                  saleCustomerName = `${personName} (${customer.name})`;
+                } else if (customer.company?.name) {
+                  saleCustomerName = `${customer.name} (${customer.company.name})`;
                 } else {
                   saleCustomerName = customer.name;
                 }
-              } else if (p.person_name || sale?.person_name) {
-                saleCustomerName = p.person_name || sale?.person_name;
+              } else if (personName) {
+                saleCustomerName = personName;
               }
 
               return {
@@ -2115,17 +2118,18 @@ export const db = {
         const branch = targetBranchId ? _branches.find(b => b.id === targetBranchId) : undefined;
         const user = p.received_by ? _users.find(u => u.id === p.received_by) : undefined;
 
+        const personName = p.person_name || sale?.person_name;
         let saleCustomerName = 'Customer';
         if (customer) {
-          if (p.person_name || sale?.person_name) {
-            saleCustomerName = `${p.person_name || sale?.person_name} (${customer.name})`;
+          if (personName) {
+            saleCustomerName = `${personName} (${customer.name})`;
           } else if (customer.company?.name) {
             saleCustomerName = `${customer.name} (${customer.company.name})`;
           } else {
             saleCustomerName = customer.name;
           }
-        } else if (p.person_name || sale?.person_name) {
-          saleCustomerName = p.person_name || sale?.person_name;
+        } else if (personName) {
+          saleCustomerName = personName;
         }
 
         return {
