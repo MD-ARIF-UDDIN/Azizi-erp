@@ -1191,7 +1191,7 @@ export const CustomerList: React.FC = () => {
         </div>        {/* CUSTOMER PROFILE DETAIL PANEL (Structured & Understandable Modal) */}
         {selectedCustomer && (
           <div className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/70 backdrop-blur-xs overflow-y-auto animate-fade-in ${printSaleData ? 'print:hidden' : ''}`}>
-            <div className="glass border border-border rounded-2xl shadow-2xl relative bg-card w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col my-4 animate-scale-in">
+            <div className="glass border border-border rounded-2xl shadow-2xl relative bg-card w-full max-w-6xl h-[92vh] max-h-[92vh] overflow-hidden flex flex-col my-2 animate-scale-in">
               
               {/* 1. MODAL HEADER BANNER */}
               <div className="p-5 border-b border-border bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
@@ -1290,11 +1290,21 @@ export const CustomerList: React.FC = () => {
               {/* 2. OVERVIEW KPI TILES */}
               {(() => {
                 const totalBilling = (selectedCustomer.sales || []).reduce((sum: number, s: any) => sum + (s.grand_total || 0), 0);
-                const outstandingDue = Number(selectedCustomer.due) || 0;
-                const totalPaid = Math.max(0, totalBilling - outstandingDue);
+                const totalPaid = selectedCustomer.total_paid !== undefined
+                  ? Number(selectedCustomer.total_paid)
+                  : (selectedCustomer.sales || []).reduce((sum: number, s: any) => {
+                      const pPaid = (s.payments || []).reduce((pSum: number, p: any) => pSum + (Number(p.amount) || 0), 0);
+                      return sum + pPaid;
+                    }, 0);
+                const advanceAmount = selectedCustomer.advance !== undefined
+                  ? Number(selectedCustomer.advance)
+                  : Math.max(0, totalPaid - totalBilling);
+                const outstandingDue = selectedCustomer.due !== undefined
+                  ? Number(selectedCustomer.due)
+                  : Math.max(0, totalBilling - totalPaid);
 
                 return (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-5 border-b border-border shrink-0 bg-background">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 p-5 border-b border-border shrink-0 bg-background">
                     {/* Tile 1: Total Invoices & Billing */}
                     <div className="p-3.5 rounded-xl border border-border bg-muted/20 flex flex-col justify-between">
                       <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
@@ -1361,16 +1371,43 @@ export const CustomerList: React.FC = () => {
                               setSelectedCustomer(null);
                               openQuickPayment(targetCust);
                             }}
-                            className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold rounded-lg shadow-xs transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                            className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold rounded-md shadow-xs transition-all cursor-pointer flex items-center gap-1 shrink-0"
                           >
-                            <CreditCard size={12} />
+                            <CreditCard size={11} />
                             <span>Pay</span>
                           </button>
                         )}
                       </div>
                     </div>
 
-                    {/* Tile 4: Tracked Visas & Docs */}
+                    {/* Tile 4: Advance / Customer Credit */}
+                    <div className={`p-3.5 rounded-xl border flex flex-col justify-between ${advanceAmount > 0 ? 'border-sky-500/30 bg-sky-500/10' : 'border-border bg-muted/20'}`}>
+                      <div className={`text-[11px] font-semibold uppercase tracking-wider ${advanceAmount > 0 ? 'text-sky-600 dark:text-sky-400 font-bold' : 'text-muted-foreground'}`}>
+                        Advance Credit
+                      </div>
+                      <div className="mt-1 flex items-center justify-between">
+                        {advanceAmount > 0 ? (
+                          <div>
+                            <div className="text-lg font-black text-sky-600 dark:text-sky-400">
+                              {advanceAmount.toFixed(2)} <span className="text-xs font-normal">AED</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400">
+                              🪙 Available Credit
+                            </span>
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="text-lg font-black text-muted-foreground">
+                              0.00 <span className="text-xs font-normal">AED</span>
+                            </div>
+                            <span className="text-[10px] text-muted-foreground font-semibold">No Surplus Credit</span>
+                          </div>
+                        )}
+                        <Coins size={18} className={advanceAmount > 0 ? 'text-sky-500 shrink-0' : 'text-muted-foreground opacity-60 shrink-0'} />
+                      </div>
+                    </div>
+
+                    {/* Tile 5: Tracked Visas & Docs */}
                     <div className="p-3.5 rounded-xl border border-border bg-muted/20 flex flex-col justify-between">
                       <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                         Tracked Documents
