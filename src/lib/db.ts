@@ -803,10 +803,12 @@ export const db = {
       const res = customersList.map(c => {
         const stat = salesMap.get(c.id) || { totalPurchased: 0, totalPaid: 0, count: 0 };
         const due = Math.max(0, stat.totalPurchased - stat.totalPaid);
+        const advance = Math.max(0, stat.totalPaid - stat.totalPurchased);
 
         return {
           ...c,
           due,
+          advance,
           total_paid: stat.totalPaid,
           total_purchased: stat.totalPurchased,
           sales_count: stat.count
@@ -862,6 +864,7 @@ export const db = {
         .filter((p: Payment) => saleIds.includes(p.sale_id))
         .reduce((sum: number, p: Payment) => sum + p.amount, 0);
       const due = Math.max(0, totalPurchased - totalPaid);
+      const advance = Math.max(0, totalPaid - totalPurchased);
 
       const historySales = salesList.map(s => {
         const salePayments = paymentsList.filter(p => p.sale_id === s.id);
@@ -881,6 +884,7 @@ export const db = {
       return {
         ...customerRecord,
         due,
+        advance,
         total_paid: totalPaid,
         total_purchased: totalPurchased,
         sales: historySales,

@@ -47,6 +47,7 @@ export const exportCustomers = (customers: any[]) => {
     'Grand Total (AED)',
     'Total Paid (AED)',
     'Outstanding Due (AED)',
+    'Advance / Payable (AED)',
     'Total Orders',
     'Registered Date'
   ];
@@ -63,6 +64,7 @@ export const exportCustomers = (customers: any[]) => {
     Number((c.total_purchased || 0).toFixed(2)),
     Number((c.total_paid || 0).toFixed(2)),
     Number((c.due || 0).toFixed(2)),
+    Number((c.advance || 0).toFixed(2)),
     c.sales_count || 0,
     formatDate(c.created_at)
   ]);

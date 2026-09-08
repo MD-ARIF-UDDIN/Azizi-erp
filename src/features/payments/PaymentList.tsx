@@ -14,6 +14,7 @@ import {
   User,
   Receipt,
   Plus,
+  Coins,
   Download,
   Printer
 } from 'lucide-react';
@@ -127,13 +128,22 @@ export const PaymentList: React.FC = () => {
             <div className="text-xs font-bold text-primary uppercase tracking-wider mb-0.5">Payments</div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground m-0">List</h1>
           </div>
-          <button
-            onClick={() => navigate('/payments/create')}
-            className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2.5 rounded-lg text-xs font-semibold shadow-md transition-all self-start sm:self-auto"
-          >
-            <Plus size={14} />
-            Record Payment
-          </button>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <button
+              onClick={() => navigate('/payments/create?mode=advance')}
+              className="flex items-center gap-1.5 bg-gradient-to-r from-sky-600 to-primary hover:opacity-90 text-white px-3.5 py-2.5 rounded-lg text-xs font-semibold shadow-md transition-all cursor-pointer"
+            >
+              <Coins size={14} />
+              Record Advance
+            </button>
+            <button
+              onClick={() => navigate('/payments/create')}
+              className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-4 py-2.5 rounded-lg text-xs font-semibold shadow-md transition-all cursor-pointer"
+            >
+              <Receipt size={14} />
+              Record Payment
+            </button>
+          </div>
         </div>
 
         {/* METRICS HEADER CARDS */}

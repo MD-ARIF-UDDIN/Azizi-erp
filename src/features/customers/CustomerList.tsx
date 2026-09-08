@@ -825,6 +825,55 @@ export const CustomerList: React.FC = () => {
             )}
           </div>
 
+          {/* KPI SUMMARY CARDS */}
+          {(() => {
+            const totalBilled = customers.reduce((sum, c) => sum + (c.total_purchased || 0), 0);
+            const totalPaid = customers.reduce((sum, c) => sum + (c.total_paid || 0), 0);
+            const totalDues = customers.reduce((sum, c) => sum + (c.due || 0), 0);
+            const totalAdvance = customers.reduce((sum, c) => sum + (c.advance || 0), 0);
+
+            return (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="glass border border-border p-3.5 rounded-xl flex items-center gap-3 shadow-xs bg-card">
+                  <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <Users size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[11px] text-muted-foreground font-semibold uppercase">Total Customers</span>
+                    <h3 className="text-base font-bold text-foreground mt-0.5">{customers.length}</h3>
+                  </div>
+                </div>
+                <div className="glass border border-border p-3.5 rounded-xl flex items-center gap-3 shadow-xs bg-card">
+                  <div className="h-9 w-9 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+                    <CheckCircle2 size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[11px] text-muted-foreground font-semibold uppercase">Total Paid</span>
+                    <h3 className="text-base font-bold text-emerald-600 mt-0.5">{totalPaid.toFixed(2)} AED</h3>
+                  </div>
+                </div>
+                <div className="glass border border-border p-3.5 rounded-xl flex items-center gap-3 shadow-xs bg-card">
+                  <div className="h-9 w-9 rounded-lg bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0">
+                    <AlertTriangle size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[11px] text-muted-foreground font-semibold uppercase">Outstanding Due</span>
+                    <h3 className="text-base font-bold text-rose-600 mt-0.5">{totalDues.toFixed(2)} AED</h3>
+                  </div>
+                </div>
+                <div className="glass border border-border p-3.5 rounded-xl flex items-center gap-3 shadow-xs bg-card">
+                  <div className="h-9 w-9 rounded-lg bg-sky-500/10 text-sky-600 flex items-center justify-center shrink-0">
+                    <Coins size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[11px] text-muted-foreground font-semibold uppercase">Advance (Payable)</span>
+                    <h3 className="text-base font-bold text-sky-600 mt-0.5">+{totalAdvance.toFixed(2)} AED</h3>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Search & Filter Toolbar */}
           <div className="flex flex-col sm:flex-row items-center gap-3 bg-muted/30 p-3 rounded-xl border border-border">
             <div className="relative w-full sm:flex-1">
@@ -855,15 +904,15 @@ export const CustomerList: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setExportMenuOpen(!exportMenuOpen)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border border-border text-foreground bg-muted/40 hover:bg-muted transition-all w-full sm:w-auto justify-center cursor-pointer shadow-xs"
+                className="flex items-center justify-center gap-1.5 bg-background border border-border hover:bg-muted text-foreground px-3.5 py-2 rounded-lg text-xs font-bold transition-all shadow-xs w-full sm:w-auto cursor-pointer"
               >
                 <Download size={14} className="text-primary" />
-                <span>Export</span>
-                <ChevronDown size={13} className={`transition-transform duration-200 ${exportMenuOpen ? 'rotate-180' : ''}`} />
+                <span>Export / Print</span>
+                <ChevronDown size={13} className={`transition-transform duration-200 text-muted-foreground ${exportMenuOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {exportMenuOpen && (
-                <div className="absolute right-0 mt-2 w-52 bg-popover border border-border rounded-xl shadow-xl z-50 p-1.5 animate-in fade-in zoom-in-95">
+                <div className="absolute right-0 top-full mt-1.5 w-48 bg-card border border-border rounded-xl shadow-xl z-30 p-1 animate-scale-in">
                   <button
                     type="button"
                     onClick={(e) => {
@@ -925,6 +974,7 @@ export const CustomerList: React.FC = () => {
                       <th className="text-right">Grand Total</th>
                       <th className="text-right">Total Paid</th>
                       <th className="text-right">Outstanding Due</th>
+                      <th className="text-right">Advance (Payable)</th>
                       <th>Active Documents</th>
                       <th className="text-center">Invoices</th>
                       <th className="text-center" style={{ width: '160px' }}>Actions</th>
@@ -933,7 +983,7 @@ export const CustomerList: React.FC = () => {
                   <tbody>
                     {filteredCustomers.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="py-12 text-center text-slate-500">
+                        <td colSpan={10} className="py-12 text-center text-slate-500">
                           <div className="max-w-xs mx-auto space-y-1">
                             <div className="font-bold text-black text-sm font-heading">No customers found</div>
                             <div className="text-xs text-slate-500">Click "Register Customer" to add a new person or company.</div>
@@ -1040,6 +1090,17 @@ export const CustomerList: React.FC = () => {
                                 <span className="text-emerald-700 text-xs font-bold font-heading">
                                   ✓ Clear
                                 </span>
+                              )}
+                            </td>
+
+                            {/* Advance (Payable) */}
+                            <td className="text-right">
+                              {(c.advance || 0) > 0 ? (
+                                <span className="font-bold text-xs text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200 inline-block font-heading">
+                                  +{(c.advance || 0).toFixed(2)} AED
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground text-xs font-medium">-</span>
                               )}
                             </td>
 
@@ -3230,11 +3291,12 @@ export const CustomerList: React.FC = () => {
             const totalBilledAll = filteredCustomers.reduce((sum: number, c: any) => sum + (c.total_purchased || 0), 0);
             const totalPaidAll = filteredCustomers.reduce((sum: number, c: any) => sum + (c.total_paid || 0), 0);
             const totalDueAll = filteredCustomers.reduce((sum: number, c: any) => sum + (c.due || 0), 0);
+            const totalAdvanceAll = filteredCustomers.reduce((sum: number, c: any) => sum + (c.advance || 0), 0);
             const totalOrdersAll = filteredCustomers.reduce((sum: number, c: any) => sum + (c.sales_count || 0), 0);
 
             return (
               <>
-                <div className="grid grid-cols-4 gap-2 mb-3">
+                <div className="grid grid-cols-5 gap-2 mb-3">
                   <div className="border border-gray-300 rounded p-2 bg-gray-50 text-center">
                     <div className="text-[9px] text-gray-500 font-bold uppercase">Total Customers</div>
                     <div className="text-sm font-black text-black">{filteredCustomers.length}</div>
@@ -3251,6 +3313,10 @@ export const CustomerList: React.FC = () => {
                     <div className="text-[9px] text-gray-500 font-bold uppercase">Total Outstanding Due</div>
                     <div className="text-sm font-black text-rose-700">{totalDueAll.toFixed(2)} AED</div>
                   </div>
+                  <div className="border border-gray-300 rounded p-2 bg-gray-50 text-center">
+                    <div className="text-[9px] text-gray-500 font-bold uppercase">Total Advance (Payable)</div>
+                    <div className="text-sm font-black text-sky-700">+{totalAdvanceAll.toFixed(2)} AED</div>
+                  </div>
                 </div>
 
                 {/* Customer Table */}
@@ -3264,6 +3330,7 @@ export const CustomerList: React.FC = () => {
                       <th className="border border-gray-300 px-2 py-1.5 text-right">Grand Total</th>
                       <th className="border border-gray-300 px-2 py-1.5 text-right">Total Paid</th>
                       <th className="border border-gray-300 px-2 py-1.5 text-right">Outstanding Due</th>
+                      <th className="border border-gray-300 px-2 py-1.5 text-right">Advance</th>
                       <th className="border border-gray-300 px-2 py-1.5 text-center w-14">Orders</th>
                     </tr>
                   </thead>
@@ -3277,6 +3344,7 @@ export const CustomerList: React.FC = () => {
                         <td className="border border-gray-300 px-2 py-1 text-right font-semibold">{(c.total_purchased || 0).toFixed(2)} AED</td>
                         <td className="border border-gray-300 px-2 py-1 text-right font-semibold text-emerald-700">{(c.total_paid || 0).toFixed(2)} AED</td>
                         <td className="border border-gray-300 px-2 py-1 text-right font-bold text-rose-700">{(c.due || 0).toFixed(2)} AED</td>
+                        <td className="border border-gray-300 px-2 py-1 text-right font-semibold text-sky-700">{(c.advance || 0) > 0 ? `+${(c.advance || 0).toFixed(2)}` : '-'}</td>
                         <td className="border border-gray-300 px-2 py-1 text-center">{c.sales_count || 0}</td>
                       </tr>
                     ))}
@@ -3287,6 +3355,7 @@ export const CustomerList: React.FC = () => {
                       <td className="border border-gray-300 px-2 py-1.5 text-right">{totalBilledAll.toFixed(2)} AED</td>
                       <td className="border border-gray-300 px-2 py-1.5 text-right">{totalPaidAll.toFixed(2)} AED</td>
                       <td className="border border-gray-300 px-2 py-1.5 text-right">{totalDueAll.toFixed(2)} AED</td>
+                      <td className="border border-gray-300 px-2 py-1.5 text-right">+{totalAdvanceAll.toFixed(2)} AED</td>
                       <td className="border border-gray-300 px-2 py-1.5 text-center">{totalOrdersAll}</td>
                     </tr>
                   </tfoot>
