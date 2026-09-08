@@ -48,6 +48,7 @@ export const PaymentForm: React.FC = () => {
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedPersonName, setSelectedPersonName] = useState('');
   const [newMemberForExisting, setNewMemberForExisting] = useState('');
+  const [createInvoiceContainer, setCreateInvoiceContainer] = useState(false);
 
   // New Customer Form States
   const [newCustomerType, setNewCustomerType] = useState<'individual' | 'company'>('individual');
@@ -257,26 +258,42 @@ export const PaymentForm: React.FC = () => {
 
         const effectiveBranchId = branchId || (activeBranchId && activeBranchId !== 'all' ? activeBranchId : availableBranches[0]?.id || 'b1111111-1111-1111-1111-111111111111');
 
-        // 2. Create a new Sales Invoice without any services (empty service list)
-        const createdSale = await db.sales.create({
-          customer_id: finalCustomerId || undefined,
-          branch_id: effectiveBranchId,
-          discount: 0,
-          notes: notes ? `[Advance Payment] ${notes}` : 'Advance Payment Collection',
-          person_name: finalPersonName || undefined,
-          items: []
-        });
+        if (createInvoiceContainer) {
+          // Flow B (Draft Invoice Container):
+          // Create an empty Sales Invoice with this payment attached for adding services later
+          const createdSale = await db.sales.create({
+            customer_id: finalCustomerId || undefined,
+            branch_id: effectiveBranchId,
+            discount: 0,
+            notes: notes ? `[Advance Payment] ${notes}` : 'Advance Payment Collection (Draft Container)',
+            person_name: finalPersonName || undefined,
+            items: []
+          });
 
-        // 3. Record the Payment against the newly created sales invoice
-        await db.payments.create({
-          sale_id: createdSale.id,
-          amount,
-          payment_method: paymentMethod,
-          account_id: accountId,
-          transaction_no: transactionNo || undefined,
-          person_name: finalPersonName || undefined,
-          notes: notes ? `[Advance] ${notes}` : 'Advance payment collected'
-        });
+          await db.payments.create({
+            sale_id: createdSale.id,
+            customer_id: finalCustomerId || undefined,
+            branch_id: effectiveBranchId,
+            amount,
+            payment_method: paymentMethod,
+            account_id: accountId,
+            transaction_no: transactionNo || undefined,
+            person_name: finalPersonName || undefined,
+            notes: notes ? `[Advance] ${notes}` : 'Advance payment collected (Draft Invoice Container)'
+          });
+        } else {
+          // Flow A (Default: Pure Customer Advance Wallet Deposit — NO invoice generated):
+          await db.payments.create({
+            customer_id: finalCustomerId || undefined,
+            branch_id: effectiveBranchId,
+            amount,
+            payment_method: paymentMethod,
+            account_id: accountId,
+            transaction_no: transactionNo || undefined,
+            person_name: finalPersonName || undefined,
+            notes: notes ? `[Advance Deposit] ${notes}` : 'Customer advance payment (Wallet Deposit)'
+          });
+        }
 
         navigate('/payments');
       }
@@ -681,6 +698,42 @@ export const PaymentForm: React.FC = () => {
                   )}
                 </div>
               )}
+
+              {/* ADVANCE DESTINATION MODE: Wallet Advance vs Draft Invoice Container */}
+              <div className="bg-muted/30 border border-border/80 p-3.5 rounded-xl transition-all">
+                <div className="flex items-start gap-3">
+                  <input
+                    id="createInvoiceContainer"
+                    type="checkbox"
+                    checked={createInvoiceContainer}
+                    onChange={(e) => setCreateInvoiceContainer(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary/20 cursor-pointer"
+                  />
+                  <label htmlFor="createInvoiceContainer" className="text-xs cursor-pointer select-none space-y-1 flex-1">
+                    <div className="font-semibold text-foreground flex items-center justify-between">
+                      <span>Create an empty Sales Invoice for this advance</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                        createInvoiceContainer 
+                          ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' 
+                          : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                      }`}>
+                        {createInvoiceContainer ? 'Draft Invoice Flow' : 'Wallet Advance (Default)'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-normal">
+                      {createInvoiceContainer ? (
+                        <span className="text-foreground">
+                          📄 Creates an empty sales invoice now. You can find it in Sales List and click <strong>&ldquo;Edit Invoice&rdquo;</strong> to add services later.
+                        </span>
+                      ) : (
+                        <span>
+                          🪙 Saves advance directly to customer credit (no invoice created). You can easily deduct it when creating or editing any invoice later.
+                        </span>
+                      )}
+                    </p>
+                  </label>
+                </div>
+              </div>
             </div>
           )}
 
@@ -857,7 +910,9 @@ export const PaymentForm: React.FC = () => {
           title={mode === 'advance' ? 'Confirm Advance Payment Collection' : 'Confirm Payment Collection'}
           subtitle={
             mode === 'advance'
-              ? 'A new sales invoice will be generated and marked as Paid for this advance collection.'
+              ? createInvoiceContainer
+                ? 'A new sales invoice with 0 services will be created and marked as Paid for this advance.'
+                : 'Payment will be deposited directly to your selected account and credited to customer advance wallet.'
               : 'Please verify the payment details before depositing to account.'
           }
           amount={amount}
@@ -888,8 +943,10 @@ export const PaymentForm: React.FC = () => {
               }
             ] : [
               {
-                label: 'Payment Type',
-                value: 'Advance Payment (Generates Sales Invoice)',
+                label: 'Payment Mode',
+                value: createInvoiceContainer
+                  ? 'Draft Sales Invoice Container'
+                  : 'Customer Advance Wallet (Direct Deposit)',
                 highlight: true
               },
               {

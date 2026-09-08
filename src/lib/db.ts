@@ -760,18 +760,18 @@ export const db = {
 
       let customersList: Customer[] = [];
       let salesList: { id: string; customer_id?: string; grand_total: number }[] = [];
-      let paymentsList: { sale_id: string; amount: number }[] = [];
+      let paymentsList: { sale_id?: string; customer_id?: string; amount: number; payment_method?: string }[] = [];
 
       if (isSupabaseConfigured && supabase) {
         const [{ data: c, error: cErr }, { data: s }, { data: p }] = await Promise.all([
           supabase.from('customers').select('*').eq('is_deleted', false).order('created_at', { ascending: false }),
           supabase.from('sales').select('id, customer_id, grand_total').eq('is_deleted', false),
-          supabase.from('payments').select('sale_id, amount').or('is_deleted.is.null,is_deleted.eq.false')
+          supabase.from('payments').select('id, sale_id, customer_id, amount, payment_method').or('is_deleted.is.null,is_deleted.eq.false')
         ]);
         if (cErr) throw cErr;
         customersList = c || [];
         salesList = (s || []).map(x => ({ id: x.id, customer_id: x.customer_id, grand_total: Number(x.grand_total || 0) }));
-        paymentsList = (p || []).map(x => ({ sale_id: x.sale_id, amount: Number(x.amount || 0) }));
+        paymentsList = (p || []).map(x => ({ sale_id: x.sale_id, customer_id: x.customer_id, amount: Number(x.amount || 0), payment_method: x.payment_method }));
       } else {
         customersList = _customers.filter(c => !c.is_deleted);
         salesList = _sales.filter(s => !s.is_deleted);
@@ -783,33 +783,47 @@ export const db = {
         return !lower.includes('walk-in') && !lower.includes('walk in') && !lower.includes('walkin');
       });
 
-      // Pre-aggregate payments by sale_id for O(1) lookup
+      // Pre-aggregate payments by sale_id and customer_id for O(1) lookup
       const paymentsMap = new Map<string, number>();
+      const externalPaymentsMap = new Map<string, number>();
+      const directCustomerPaymentsMap = new Map<string, number>();
+
       paymentsList.forEach(p => {
-        paymentsMap.set(p.sale_id, (paymentsMap.get(p.sale_id) || 0) + p.amount);
+        if (p.sale_id) {
+          paymentsMap.set(p.sale_id, (paymentsMap.get(p.sale_id) || 0) + p.amount);
+          if (p.payment_method !== 'Advance') {
+            externalPaymentsMap.set(p.sale_id, (externalPaymentsMap.get(p.sale_id) || 0) + p.amount);
+          }
+        } else if (p.customer_id && p.payment_method !== 'Advance') {
+          directCustomerPaymentsMap.set(p.customer_id, (directCustomerPaymentsMap.get(p.customer_id) || 0) + p.amount);
+        }
       });
 
       // Pre-aggregate sales by customer_id for O(1) lookup
-      const salesMap = new Map<string, { totalPurchased: number; totalPaid: number; count: number }>();
+      const salesMap = new Map<string, { totalPurchased: number; totalPaid: number; count: number; totalDue: number }>();
       salesList.forEach(s => {
         if (!s.customer_id) return;
-        const current = salesMap.get(s.customer_id) || { totalPurchased: 0, totalPaid: 0, count: 0 };
+        const current = salesMap.get(s.customer_id) || { totalPurchased: 0, totalPaid: 0, count: 0, totalDue: 0 };
         current.totalPurchased += s.grand_total;
-        current.totalPaid += (paymentsMap.get(s.id) || 0);
+        current.totalPaid += (externalPaymentsMap.get(s.id) || 0);
+        const salePaid = (paymentsMap.get(s.id) || 0);
+        current.totalDue += Math.max(0, s.grand_total - salePaid);
         current.count += 1;
         salesMap.set(s.customer_id, current);
       });
 
       const res = customersList.map(c => {
-        const stat = salesMap.get(c.id) || { totalPurchased: 0, totalPaid: 0, count: 0 };
-        const due = Math.max(0, stat.totalPurchased - stat.totalPaid);
-        const advance = Math.max(0, stat.totalPaid - stat.totalPurchased);
+        const stat = salesMap.get(c.id) || { totalPurchased: 0, totalPaid: 0, count: 0, totalDue: 0 };
+        const directPaid = directCustomerPaymentsMap.get(c.id) || 0;
+        const totalPaid = stat.totalPaid + directPaid;
+        const due = stat.totalDue;
+        const advance = Math.max(0, totalPaid - stat.totalPurchased);
 
         return {
           ...c,
           due,
           advance,
-          total_paid: stat.totalPaid,
+          total_paid: totalPaid,
           total_purchased: stat.totalPurchased,
           sales_count: stat.count
         };
@@ -840,17 +854,18 @@ export const db = {
           branchesList = b || [];
           statusesList = st || [];
 
-          if (salesList.length > 0) {
-            const sIds = salesList.map(x => x.id);
-            const { data: p } = await supabase.from('payments').select('*').in('sale_id', sIds).or('is_deleted.is.null,is_deleted.eq.false');
-            paymentsList = p || [];
-          }
+          const sIds = salesList.map(x => x.id);
+          const filterQuery = sIds.length > 0
+            ? `sale_id.in.(${sIds.join(',')}),customer_id.eq.${id}`
+            : `customer_id.eq.${id}`;
+          const { data: p } = await supabase.from('payments').select('*').or(filterQuery).or('is_deleted.is.null,is_deleted.eq.false');
+          paymentsList = p || [];
         }
       } else {
         customerRecord = _customers.find(x => x.id === id && !x.is_deleted);
         if (customerRecord) {
           salesList = _sales.filter(s => s.customer_id === id && !s.is_deleted);
-          paymentsList = _payments.filter(p => !p.is_deleted);
+          paymentsList = _payments.filter(p => !p.is_deleted && ((p.sale_id && salesList.some(s => s.id === p.sale_id)) || p.customer_id === id));
           branchesList = _branches;
           statusesList = _statuses;
         }
@@ -860,10 +875,18 @@ export const db = {
 
       const totalPurchased = salesList.reduce((sum: number, s: Sale) => sum + s.grand_total, 0);
       const saleIds = salesList.map(s => s.id);
+      const directCustPayments = paymentsList.filter((p: Payment) => !p.sale_id && p.customer_id === id && p.payment_method !== 'Advance');
+      const totalDirectPaid = directCustPayments.reduce((sum: number, p: Payment) => sum + p.amount, 0);
+
       const totalPaid = paymentsList
-        .filter((p: Payment) => saleIds.includes(p.sale_id))
-        .reduce((sum: number, p: Payment) => sum + p.amount, 0);
-      const due = Math.max(0, totalPurchased - totalPaid);
+        .filter((p: Payment) => p.sale_id && saleIds.includes(p.sale_id) && p.payment_method !== 'Advance')
+        .reduce((sum: number, p: Payment) => sum + p.amount, 0) + totalDirectPaid;
+
+      const due = salesList.reduce((sum, s) => {
+        const sPayments = paymentsList.filter(p => p.sale_id === s.id);
+        const sPaid = sPayments.reduce((pSum, p) => pSum + p.amount, 0);
+        return sum + Math.max(0, s.grand_total - sPaid);
+      }, 0);
       const advance = Math.max(0, totalPaid - totalPurchased);
 
       const historySales = salesList.map(s => {
@@ -2041,20 +2064,22 @@ export const db = {
             const usersMap = new Map((usersRes.data || []).map(u => [u.id, u]));
 
             let list = paymentsRes.data.map((p: any) => {
-              const sale = salesMap.get(p.sale_id);
-              const customer = sale?.customer_id ? customersMap.get(sale.customer_id) : undefined;
-              const branch = sale?.branch_id ? branchesMap.get(sale.branch_id) : undefined;
+              const sale = p.sale_id ? salesMap.get(p.sale_id) : undefined;
+              const targetCustomerId = sale?.customer_id || p.customer_id;
+              const customer = targetCustomerId ? customersMap.get(targetCustomerId) : undefined;
+              const targetBranchId = sale?.branch_id || p.branch_id;
+              const branch = targetBranchId ? branchesMap.get(targetBranchId) : undefined;
               const user = p.received_by ? usersMap.get(p.received_by) : undefined;
 
-              let saleCustomerName = 'Walk-in Customer';
+              let saleCustomerName = 'Customer';
               if (customer) {
-                if (sale?.person_name) {
-                  saleCustomerName = `${sale.person_name} (${customer.name})`;
+                if (p.person_name || sale?.person_name) {
+                  saleCustomerName = `${p.person_name || sale?.person_name} (${customer.name})`;
                 } else {
                   saleCustomerName = customer.name;
                 }
-              } else if (sale?.person_name) {
-                saleCustomerName = sale.person_name;
+              } else if (p.person_name || sale?.person_name) {
+                saleCustomerName = p.person_name || sale?.person_name;
               }
 
               return {
@@ -2063,9 +2088,9 @@ export const db = {
                 is_refund: p.is_refund || p.amount < 0 || p.notes?.includes('[Refund]'),
                 refund_reason: p.refund_reason || (p.notes?.includes('[Refund]') ? p.notes.replace(/\[Refund\]\s*/, '').replace(/\[Member:\s*[^\]]+\]/g, '').trim() : undefined),
                 person_name: p.person_name || (p.notes?.match(/\[Member:\s*(.*?)\]/)?.[1]) || sale?.person_name || undefined,
-                sale_invoice: sale?.invoice_no || '',
-                sale_branch_id: sale?.branch_id || '',
-                sale_branch_name: branch?.name || 'Central Branch',
+                sale_invoice: sale?.invoice_no || (p.customer_id ? 'Advance Deposit (Wallet)' : ''),
+                sale_branch_id: targetBranchId || '',
+                sale_branch_name: branch?.name || (targetBranchId ? 'Branch' : 'Head Office'),
                 sale_customer_name: saleCustomerName,
                 received_by_name: user?.name || 'Cashier'
               };
@@ -2083,22 +2108,24 @@ export const db = {
 
       let list = _payments.filter(p => !p.is_deleted);
       const mapped = list.map(p => {
-        const sale = _sales.find(s => s.id === p.sale_id);
-        const customer = sale?.customer_id ? _customers.find(c => c.id === sale.customer_id) : undefined;
-        const branch = sale?.branch_id ? _branches.find(b => b.id === sale.branch_id) : undefined;
+        const sale = p.sale_id ? _sales.find(s => s.id === p.sale_id) : undefined;
+        const targetCustomerId = sale?.customer_id || p.customer_id;
+        const customer = targetCustomerId ? _customers.find(c => c.id === targetCustomerId) : undefined;
+        const targetBranchId = sale?.branch_id || p.branch_id;
+        const branch = targetBranchId ? _branches.find(b => b.id === targetBranchId) : undefined;
         const user = p.received_by ? _users.find(u => u.id === p.received_by) : undefined;
 
-        let saleCustomerName = 'Walk-in Customer';
+        let saleCustomerName = 'Customer';
         if (customer) {
-          if (sale?.person_name) {
-            saleCustomerName = `${sale.person_name} (${customer.name})`;
+          if (p.person_name || sale?.person_name) {
+            saleCustomerName = `${p.person_name || sale?.person_name} (${customer.name})`;
           } else if (customer.company?.name) {
             saleCustomerName = `${customer.name} (${customer.company.name})`;
           } else {
             saleCustomerName = customer.name;
           }
-        } else if (sale?.person_name) {
-          saleCustomerName = sale.person_name;
+        } else if (p.person_name || sale?.person_name) {
+          saleCustomerName = p.person_name || sale?.person_name;
         }
 
         return {
@@ -2106,9 +2133,9 @@ export const db = {
           is_refund: p.is_refund || p.amount < 0 || p.notes?.includes('[Refund]'),
           refund_reason: p.refund_reason || (p.notes?.includes('[Refund]') ? p.notes.replace(/\[Refund\]\s*/, '').replace(/\[Member:\s*[^\]]+\]/g, '').trim() : undefined),
           person_name: p.person_name || (p.notes?.match(/\[Member:\s*(.*?)\]/)?.[1]) || sale?.person_name || undefined,
-          sale_invoice: sale?.invoice_no || '',
-          sale_branch_id: sale?.branch_id || '',
-          sale_branch_name: branch?.name || 'Central Branch',
+          sale_invoice: sale?.invoice_no || (p.customer_id ? 'Advance Deposit (Wallet)' : ''),
+          sale_branch_id: targetBranchId || '',
+          sale_branch_name: branch?.name || (targetBranchId ? 'Branch' : 'Head Office'),
           sale_customer_name: saleCustomerName,
           received_by_name: user?.name || 'Cashier'
         };
@@ -2140,7 +2167,9 @@ export const db = {
       })));
     },
     create: async (data: {
-      sale_id: string;
+      sale_id?: string;
+      customer_id?: string;
+      branch_id?: string;
       amount: number;
       payment_method?: Payment['payment_method'];
       account_id?: string;
@@ -2202,8 +2231,8 @@ export const db = {
         else if (targetAccount.type === 'bank') resolvedMethod = 'Bank Transfer';
       }
 
-      // Deposit into account if account is linked
-      if (targetAccount && amount > 0) {
+      // Deposit into account if account is linked (only for real external cash/bank inflows, not Advance Credit settlement)
+      if (resolvedMethod !== 'Advance' && targetAccount && amount > 0) {
         const accIdx = _accounts.findIndex(a => a.id === targetAccount?.id);
         if (accIdx !== -1) {
           _accounts[accIdx].balance += amount;
@@ -2216,7 +2245,9 @@ export const db = {
             balance_after: _accounts[accIdx].balance,
             sale_id: data.sale_id,
             payment_id: payId,
-            description: `Payment received for ${data.person_name ? `${data.person_name} ` : ''}Invoice`,
+            description: data.sale_id
+              ? `Payment received for ${data.person_name ? `${data.person_name} ` : ''}Invoice`
+              : `Advance deposit received from ${data.person_name ? `${data.person_name} ` : ''}Customer`,
             created_at: now,
             created_by: activeUser?.id
           };
@@ -2225,33 +2256,48 @@ export const db = {
       }
 
       // Find sale and customer company/name
-      let sale = _sales.find(s => s.id === data.sale_id);
+      let sale = data.sale_id ? _sales.find(s => s.id === data.sale_id) : undefined;
       let saleInvoiceNo = sale?.invoice_no;
       let salePersonName = sale?.person_name;
-      let cust = sale?.customer_id ? _customers.find(c => c.id === sale.customer_id) : undefined;
+      let cust = sale?.customer_id ? _customers.find(c => c.id === sale.customer_id) : (data.customer_id ? _customers.find(c => c.id === data.customer_id) : undefined);
 
-      if ((!sale || !saleInvoiceNo) && isSupabaseConfigured && supabase && data.sale_id) {
-        try {
-          const { data: supaSale } = await supabase.from('sales').select('id, invoice_no, person_name, customer_id').eq('id', data.sale_id).maybeSingle();
-          if (supaSale) {
-            saleInvoiceNo = supaSale.invoice_no;
-            salePersonName = supaSale.person_name || salePersonName;
-            if (supaSale.customer_id) {
-              const { data: supaCust } = await supabase.from('customers').select('id, name, customer_type').eq('id', supaSale.customer_id).maybeSingle();
-              if (supaCust) {
-                cust = supaCust as any;
+      if (isSupabaseConfigured && supabase) {
+        if (data.sale_id && (!sale || !saleInvoiceNo)) {
+          try {
+            const { data: supaSale } = await supabase.from('sales').select('id, invoice_no, person_name, customer_id').eq('id', data.sale_id).maybeSingle();
+            if (supaSale) {
+              saleInvoiceNo = supaSale.invoice_no;
+              salePersonName = supaSale.person_name || salePersonName;
+              if (supaSale.customer_id) {
+                const { data: supaCust } = await supabase.from('customers').select('id, name, customer_type').eq('id', supaSale.customer_id).maybeSingle();
+                if (supaCust) {
+                  cust = supaCust as any;
+                }
               }
             }
+          } catch (e) {
+            console.warn('Could not load sale for payment journal:', e);
           }
-        } catch (e) {
-          console.warn('Could not load sale for payment journal:', e);
+        } else if (!data.sale_id && data.customer_id && !cust) {
+          try {
+            const { data: supaCust } = await supabase.from('customers').select('id, name, customer_type').eq('id', data.customer_id).maybeSingle();
+            if (supaCust) {
+              cust = supaCust as any;
+            }
+          } catch (e) {
+            console.warn('Could not load customer for advance payment journal:', e);
+          }
         }
       }
 
       const clientName = data.person_name || salePersonName || (cust as any)?.company?.name || cust?.name || 'Client / Customer';
       const cleanInvoiceNo = saleInvoiceNo ? saleInvoiceNo.replace(/^#/, '') : undefined;
-      const referenceNo = cleanInvoiceNo ? `#${cleanInvoiceNo}` : undefined;
-      const journalDesc = `Payment collected from ${clientName}${cleanInvoiceNo ? ` for Invoice #${cleanInvoiceNo}` : ''}`;
+      const referenceNo = cleanInvoiceNo ? `#${cleanInvoiceNo}` : (data.transaction_no ? `#${data.transaction_no}` : undefined);
+      const journalDesc = resolvedMethod === 'Advance'
+        ? `Advance Credit settlement for ${clientName}${cleanInvoiceNo ? ` on Invoice #${cleanInvoiceNo}` : ''}`
+        : (cleanInvoiceNo 
+            ? `Payment collected from ${clientName} for Invoice #${cleanInvoiceNo}`
+            : `Advance deposit from ${clientName} (Customer Wallet Credit)`);
 
       // Embed member tag in notes for seamless database compatibility
       const memberTag = data.person_name ? `[Member: ${data.person_name}]` : '';
@@ -2262,9 +2308,9 @@ export const db = {
         id: generateUUID(),
         entry_date: now,
         entry_type: 'cash_in',
-        from_account: clientName,
-        to_account: targetAccount?.name || (resolvedMethod ? `${resolvedMethod} Account` : 'Account'),
-        to_account_id: resolvedAccountId || undefined,
+        from_account: resolvedMethod === 'Advance' ? 'Customer Advance Balance' : clientName,
+        to_account: resolvedMethod === 'Advance' ? 'Sales Revenue' : (targetAccount?.name || (resolvedMethod ? `${resolvedMethod} Account` : 'Account')),
+        to_account_id: resolvedMethod === 'Advance' ? undefined : (resolvedAccountId || undefined),
         amount: amount,
         sale_id: data.sale_id,
         payment_id: payId,
@@ -2273,7 +2319,7 @@ export const db = {
         performed_by: activeUser?.id,
         created_at: now,
         created_by: activeUser?.id,
-        sale: saleInvoiceNo ? { id: data.sale_id, invoice_no: cleanInvoiceNo! } : undefined
+        sale: saleInvoiceNo ? { id: data.sale_id!, invoice_no: cleanInvoiceNo! } : undefined
       };
       _journalEntries.unshift(journalEntry);
 
@@ -2288,17 +2334,20 @@ export const db = {
           }
         }
 
-        const cleanSaleId = sanitizeUUID(data.sale_id) || data.sale_id;
+        const cleanSaleId = sanitizeUUID(data.sale_id) || (data.sale_id ? data.sale_id : null);
+        const cleanCustomerId = sanitizeUUID(data.customer_id) || (data.customer_id ? data.customer_id : null);
 
         const basePayload: any = {
           id: payId,
           sale_id: cleanSaleId,
+          customer_id: cleanCustomerId,
+          branch_id: sanitizeUUID(data.branch_id) || data.branch_id || null,
           amount,
           payment_method: resolvedMethod,
-          account_id: resolvedAccountId,
+          account_id: resolvedMethod === 'Advance' ? null : resolvedAccountId,
           payment_date: now,
           transaction_no: data.transaction_no || null,
-          notes: combinedNotes || null,
+          notes: combinedNotes || (resolvedMethod === 'Advance' ? 'Settled via Customer Advance Credit' : null),
           is_deleted: false,
           received_by: validEmployeeId,
           created_by: validEmployeeId,
@@ -2313,6 +2362,7 @@ export const db = {
             const fallbackPayload: any = {
               id: payId,
               sale_id: cleanSaleId,
+              customer_id: cleanCustomerId,
               amount,
               payment_method: resolvedMethod,
               transaction_no: data.transaction_no || null,
@@ -2338,7 +2388,9 @@ export const db = {
                   sale_id: cleanSaleId,
                   payment_id: payId,
                   reference_no: referenceNo || null,
-                  description: `Payment received for ${data.person_name ? `${data.person_name} ` : ''}Invoice #${cleanInvoiceNo || ''}`,
+                  description: cleanInvoiceNo 
+                    ? `Payment received for ${data.person_name ? `${data.person_name} ` : ''}Invoice #${cleanInvoiceNo}`
+                    : `Advance deposit received from ${data.person_name ? `${data.person_name} ` : ''}Customer`,
                   created_by: validEmployeeId
                 }]);
               } catch (accErr) {
@@ -2366,21 +2418,23 @@ export const db = {
               console.warn('Journal entry insert warning:', jErr);
             }
 
-            // Recalculate Sale Payment Status
-            try {
-              const { data: saleData } = await supabase.from('sales').select('grand_total').eq('id', data.sale_id).maybeSingle();
-              const { data: allPayments } = await supabase.from('payments').select('amount').eq('sale_id', data.sale_id).or('is_deleted.is.null,is_deleted.eq.false');
+            // Recalculate Sale Payment Status if attached to a sale
+            if (data.sale_id) {
+              try {
+                const { data: saleData } = await supabase.from('sales').select('grand_total').eq('id', data.sale_id).maybeSingle();
+                const { data: allPayments } = await supabase.from('payments').select('amount').eq('sale_id', data.sale_id).or('is_deleted.is.null,is_deleted.eq.false');
 
-              const grand_total = Number(saleData?.grand_total || 0);
-              const totalPaid = (allPayments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+                const grand_total = Number(saleData?.grand_total || 0);
+                const totalPaid = (allPayments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
 
-              let payment_status: Sale['payment_status'] = 'Unpaid';
-              if (totalPaid >= grand_total && grand_total > 0) payment_status = 'Paid';
-              else if (totalPaid > 0) payment_status = 'Partially Paid';
+                let payment_status: Sale['payment_status'] = 'Unpaid';
+                if (totalPaid >= grand_total && grand_total > 0) payment_status = 'Paid';
+                else if (totalPaid > 0) payment_status = 'Partially Paid';
 
-              await supabase.from('sales').update({ payment_status, updated_by: validEmployeeId }).eq('id', data.sale_id);
-            } catch (statusErr) {
-              console.warn('Sale status update warning:', statusErr);
+                await supabase.from('sales').update({ payment_status, updated_by: validEmployeeId }).eq('id', data.sale_id);
+              } catch (statusErr) {
+                console.warn('Sale status update warning:', statusErr);
+              }
             }
 
             invalidateCache('payments');
@@ -2419,17 +2473,19 @@ export const db = {
       };
       _payments.push(newPay);
 
-      const saleIndex = _sales.findIndex(s => s.id === data.sale_id);
-      if (saleIndex !== -1) {
-        const sale = _sales[saleIndex];
-        const allSalePayments = _payments.filter((p: Payment) => p.sale_id === data.sale_id && !p.is_deleted);
-        const totalPaid = allSalePayments.reduce((sum: number, p: Payment) => sum + Number(p.amount || 0), 0);
-        
-        let payment_status: Sale['payment_status'] = 'Unpaid';
-        if (totalPaid >= sale.grand_total && sale.grand_total > 0) payment_status = 'Paid';
-        else if (totalPaid > 0) payment_status = 'Partially Paid';
+      if (data.sale_id) {
+        const saleIndex = _sales.findIndex(s => s.id === data.sale_id);
+        if (saleIndex !== -1) {
+          const sale = _sales[saleIndex];
+          const allSalePayments = _payments.filter((p: Payment) => p.sale_id === data.sale_id && !p.is_deleted);
+          const totalPaid = allSalePayments.reduce((sum: number, p: Payment) => sum + Number(p.amount || 0), 0);
+          
+          let payment_status: Sale['payment_status'] = 'Unpaid';
+          if (totalPaid >= sale.grand_total && sale.grand_total > 0) payment_status = 'Paid';
+          else if (totalPaid > 0) payment_status = 'Partially Paid';
 
-        _sales[saleIndex] = { ...sale, payment_status, updated_by: activeUser?.id, updated_at: now };
+          _sales[saleIndex] = { ...sale, payment_status, updated_by: activeUser?.id, updated_at: now };
+        }
       }
 
       saveAll();

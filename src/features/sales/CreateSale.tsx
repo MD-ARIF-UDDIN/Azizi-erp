@@ -78,7 +78,7 @@ export const CreateSale: React.FC = () => {
     memberName: string;
     grandTotal: number;
     amount: number;
-    paymentMethod: 'Cash' | 'Card' | 'Bank Transfer' | 'Mobile Banking';
+    paymentMethod: 'Cash' | 'Card' | 'Bank Transfer' | 'Mobile Banking' | 'Advance';
     accountId: string;
     notes: string;
   }[]>([]);
@@ -488,15 +488,18 @@ export const CreateSale: React.FC = () => {
 
       // Initialize advance payment items for the modal
       const defaultDrawer = accounts.find(a => a.type === 'cash_drawer') || accounts[0];
+      const custAdvanceBalance = Number(selectedCustomer?.advance) || 0;
+      const shouldSuggestAdvance = custAdvanceBalance > 0;
+
       const entries = createdSales.map((s, idx) => ({
         saleId: s.id,
         invoiceNo: s.invoice_no,
         memberName: s.person_name || memberGroups[idx]?.displayName || 'General',
         grandTotal: Number(s.grand_total || 0),
         amount: 0,
-        paymentMethod: 'Cash' as const,
+        paymentMethod: (shouldSuggestAdvance ? 'Advance' : 'Cash') as any,
         accountId: defaultDrawer?.id || '',
-        notes: ''
+        notes: shouldSuggestAdvance ? 'Settled from customer advance balance' : ''
       }));
 
       setAdvanceEntries(entries);
@@ -517,7 +520,7 @@ export const CreateSale: React.FC = () => {
     }
 
     for (const entry of activeEntries) {
-      if (!entry.accountId) {
+      if (entry.paymentMethod !== 'Advance' && !entry.accountId) {
         setErrorMsg(`Deposit To Account is mandatory. Please select an account for invoice #${entry.invoiceNo}`);
         return;
       }
@@ -537,9 +540,9 @@ export const CreateSale: React.FC = () => {
             sale_id: entry.saleId,
             amount: entry.amount,
             payment_method: entry.paymentMethod || 'Cash',
-            account_id: entry.accountId,
+            account_id: entry.paymentMethod === 'Advance' ? undefined : entry.accountId,
             person_name: entry.memberName || undefined,
-            notes: entry.notes ? entry.notes.trim() : undefined
+            notes: entry.notes ? entry.notes.trim() : (entry.paymentMethod === 'Advance' ? 'Settled from customer advance balance' : undefined)
           });
         }
       }
@@ -1376,6 +1379,21 @@ export const CreateSale: React.FC = () => {
 
               {/* Modal Body: List of invoices / members */}
               <div className="p-5 overflow-y-auto space-y-3.5 flex-1">
+                {Number(selectedCustomer?.advance) > 0 && (
+                  <div className="p-3 bg-sky-500/10 border border-sky-500/30 rounded-xl flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <Coins size={16} className="text-sky-500 shrink-0" />
+                      <div>
+                        <span className="font-bold text-foreground">Available Customer Advance Credit: </span>
+                        <span className="font-mono font-black text-sky-600 dark:text-sky-400">{Number(selectedCustomer?.advance).toFixed(2)} AED</span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-sky-500/20 text-sky-700 dark:text-sky-300">
+                      ✓ Advance Wallet
+                    </span>
+                  </div>
+                )}
+
                 {advanceEntries.map((entry, idx) => (
                   <div key={entry.saleId} className="p-4 rounded-xl border border-border bg-muted/10 space-y-3">
                     
@@ -1401,7 +1419,7 @@ export const CreateSale: React.FC = () => {
                       <div className="sm:col-span-3 space-y-1">
                         <div className="flex items-center justify-between">
                           <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                            Advance Paid (AED)
+                            Amount to Pay (AED)
                           </label>
                           <div className="flex items-center gap-1">
                             <button
@@ -1456,6 +1474,9 @@ export const CreateSale: React.FC = () => {
                           onChange={(e) => {
                             const updated = [...advanceEntries];
                             updated[idx].paymentMethod = e.target.value as any;
+                            if (e.target.value === 'Advance') {
+                              updated[idx].notes = 'Settled from customer advance balance';
+                            }
                             setAdvanceEntries(updated);
                           }}
                           className="w-full px-2.5 py-2 bg-background border border-border rounded-lg text-xs font-bold text-foreground cursor-pointer"
@@ -1464,31 +1485,41 @@ export const CreateSale: React.FC = () => {
                           <option value="Card">💳 Card</option>
                           <option value="Bank Transfer">🏦 Bank Transfer</option>
                           <option value="Mobile Banking">📱 Mobile Banking</option>
+                          {Number(selectedCustomer?.advance) > 0 && (
+                            <option value="Advance">🪙 Deduct from Advance ({Number(selectedCustomer?.advance).toFixed(2)} AED)</option>
+                          )}
                         </select>
                       </div>
 
                       {/* Deposit To Account */}
                       <div className="sm:col-span-3 space-y-1">
                         <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                          Deposit To Account *
+                          {entry.paymentMethod === 'Advance' ? 'Settlement Source' : 'Deposit To Account *'}
                         </label>
-                        <select
-                          value={entry.accountId}
-                          onChange={(e) => {
-                            const updated = [...advanceEntries];
-                            updated[idx].accountId = e.target.value;
-                            setAdvanceEntries(updated);
-                          }}
-                          required
-                          className="w-full px-2.5 py-2 bg-background border border-border rounded-lg text-xs font-bold text-foreground cursor-pointer"
-                        >
-                          <option value="">-- Select Account * --</option>
-                          {accounts.map(a => (
-                            <option key={a.id} value={a.id}>
-                              {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name}
-                            </option>
-                          ))}
-                        </select>
+                        {entry.paymentMethod === 'Advance' ? (
+                          <div className="px-2.5 py-2 bg-sky-500/10 border border-sky-500/30 rounded-lg text-xs font-semibold text-sky-700 dark:text-sky-300 flex items-center gap-1.5 h-[38px]">
+                            <Coins size={13} className="shrink-0" />
+                            <span className="truncate">Advance Credit (No Cash)</span>
+                          </div>
+                        ) : (
+                          <select
+                            value={entry.accountId}
+                            onChange={(e) => {
+                              const updated = [...advanceEntries];
+                              updated[idx].accountId = e.target.value;
+                              setAdvanceEntries(updated);
+                            }}
+                            required
+                            className="w-full px-2.5 py-2 bg-background border border-border rounded-lg text-xs font-bold text-foreground cursor-pointer"
+                          >
+                            <option value="">-- Select Account * --</option>
+                            {accounts.map(a => (
+                              <option key={a.id} value={a.id}>
+                                {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                       </div>
 
                       {/* Note / Remarks Column */}

@@ -136,7 +136,7 @@ export const CustomerList: React.FC = () => {
     memberName: string;
     grandTotal: number;
     amount: number;
-    method: 'Cash' | 'Card' | 'Mobile Banking' | 'Bank Transfer';
+    method: 'Cash' | 'Card' | 'Mobile Banking' | 'Bank Transfer' | 'Advance';
     accountId: string;
     notes: string;
   }[]>([]);
@@ -630,7 +630,7 @@ export const CustomerList: React.FC = () => {
 
   const handleQsSaveAdvance = async () => {
     for (const entry of qsAdvanceEntries) {
-      if (entry.amount > 0 && !entry.accountId) {
+      if (entry.amount > 0 && entry.method !== 'Advance' && !entry.accountId) {
         alert(`Deposit To Account is mandatory. Please select an account for invoice #${entry.invoiceNo}`);
         return;
       }
@@ -644,9 +644,9 @@ export const CustomerList: React.FC = () => {
             sale_id: entry.saleId,
             amount: entry.amount,
             payment_method: entry.method,
-            account_id: entry.accountId,
+            account_id: entry.method === 'Advance' ? undefined : entry.accountId,
             person_name: entry.memberName !== 'Company General' ? entry.memberName : undefined,
-            notes: entry.notes || undefined
+            notes: entry.notes || (entry.method === 'Advance' ? 'Settled from customer advance balance' : undefined)
           });
         }
       }
@@ -2281,6 +2281,21 @@ export const CustomerList: React.FC = () => {
 
             {/* Modal Body */}
             <div className="p-5 overflow-y-auto space-y-3.5 flex-1">
+              {Number(qsCustomer?.advance) > 0 && (
+                <div className="p-3 bg-sky-500/10 border border-sky-500/30 rounded-xl flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <Coins size={16} className="text-sky-500 shrink-0" />
+                    <div>
+                      <span className="font-bold text-foreground">Available Customer Advance Credit: </span>
+                      <span className="font-mono font-black text-sky-600 dark:text-sky-400">{Number(qsCustomer?.advance).toFixed(2)} AED</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-sky-500/20 text-sky-700 dark:text-sky-300">
+                    ✓ Advance Wallet
+                  </span>
+                </div>
+              )}
+
               {qsAdvanceEntries.map((entry, idx) => (
                 <div key={entry.saleId} className="p-4 rounded-xl border border-border bg-muted/10 space-y-3">
                   
@@ -2306,7 +2321,7 @@ export const CustomerList: React.FC = () => {
                     <div className="sm:col-span-3 space-y-1">
                       <div className="flex items-center justify-between">
                         <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                          Advance Paid (AED)
+                          Amount to Pay (AED)
                         </label>
                         <div className="flex items-center gap-1">
                           <button
@@ -2361,6 +2376,9 @@ export const CustomerList: React.FC = () => {
                         onChange={(e) => {
                           const updated = [...qsAdvanceEntries];
                           updated[idx].method = e.target.value as any;
+                          if (e.target.value === 'Advance') {
+                            updated[idx].notes = 'Settled from customer advance balance';
+                          }
                           setQsAdvanceEntries(updated);
                         }}
                         className="w-full px-2.5 py-2 bg-background border border-border rounded-lg text-xs font-semibold text-foreground cursor-pointer"
@@ -2369,6 +2387,9 @@ export const CustomerList: React.FC = () => {
                         <option value="Card">💳 Card</option>
                         <option value="Mobile Banking">📱 Mobile Banking</option>
                         <option value="Bank Transfer">🏦 Bank Transfer</option>
+                        {Number(qsCustomer?.advance) > 0 && (
+                          <option value="Advance">🪙 Deduct from Advance ({Number(qsCustomer?.advance).toFixed(2)} AED)</option>
+                        )}
                       </select>
                     </div>
 
@@ -2376,24 +2397,31 @@ export const CustomerList: React.FC = () => {
                     <div className="sm:col-span-3 space-y-1">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                         <Wallet size={11} className="text-primary" />
-                        <span>Deposit To *</span>
+                        <span>{entry.method === 'Advance' ? 'Source' : 'Deposit To *'}</span>
                       </label>
-                      <select
-                        value={entry.accountId}
-                        onChange={(e) => {
-                          const updated = [...qsAdvanceEntries];
-                          updated[idx].accountId = e.target.value;
-                          setQsAdvanceEntries(updated);
-                        }}
-                        className="w-full px-2.5 py-2 bg-background border border-border rounded-lg text-xs font-semibold text-foreground cursor-pointer"
-                      >
-                        <option value="">-- Select Account * --</option>
-                        {accounts.map(a => (
-                          <option key={a.id} value={a.id}>
-                            {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)
-                          </option>
-                        ))}
-                      </select>
+                      {entry.method === 'Advance' ? (
+                        <div className="px-2.5 py-2 bg-sky-500/10 border border-sky-500/30 rounded-lg text-xs font-semibold text-sky-700 dark:text-sky-300 flex items-center gap-1.5 h-[38px]">
+                          <Coins size={13} className="shrink-0" />
+                          <span className="truncate">Advance Credit (No Cash)</span>
+                        </div>
+                      ) : (
+                        <select
+                          value={entry.accountId}
+                          onChange={(e) => {
+                            const updated = [...qsAdvanceEntries];
+                            updated[idx].accountId = e.target.value;
+                            setQsAdvanceEntries(updated);
+                          }}
+                          className="w-full px-2.5 py-2 bg-background border border-border rounded-lg text-xs font-semibold text-foreground cursor-pointer"
+                        >
+                          <option value="">-- Select Account * --</option>
+                          {accounts.map(a => (
+                            <option key={a.id} value={a.id}>
+                              {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </div>
 
                     {/* Note / Remarks */}

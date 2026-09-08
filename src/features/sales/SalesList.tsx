@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../lib/db';
-import type { OrderStatus, Account } from '../../types/database';
+import type { OrderStatus, Account, Customer } from '../../types/database';
 import { PermissionGuard } from '../../components/PermissionGuard';
 import { useAuth } from '../../components/AuthProvider';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -28,7 +28,8 @@ import {
   Undo2,
   CheckCircle2,
   Landmark,
-  Tag
+  Tag,
+  Coins
 } from 'lucide-react';
 
 const handleWhatsAppShare = (sale: any) => {
@@ -118,13 +119,16 @@ export const SalesList: React.FC = () => {
   const [svcExpenseDesc, setSvcExpenseDesc] = useState('');
   const [svcExpenseSaving, setSvcExpenseSaving] = useState(false);
 
+  // Master Data
+  const [customers, setCustomers] = useState<Customer[]>([]);
+
   // Payment & Refund Modal States
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [payModalTab, setPayModalTab] = useState<'collect' | 'refund' | 'gov_fee'>('collect');
   const [payingSaleId, setPayingSaleId] = useState<string | null>(null);
   const [payingSaleDetails, setPayingSaleDetails] = useState<any | null>(null);
   const [payAmount, setPayAmount] = useState(0);
-  const [payMethod, setPayMethod] = useState<'Cash' | 'Card' | 'Bank Transfer' | 'Mobile Banking'>('Cash');
+  const [payMethod, setPayMethod] = useState<'Cash' | 'Card' | 'Bank Transfer' | 'Mobile Banking' | 'Advance'>('Cash');
   const [payAccountId, setPayAccountId] = useState('');
   const [payTxnNo, setPayTxnNo] = useState('');
   const [payNotes, setPayNotes] = useState('');
@@ -165,15 +169,17 @@ export const SalesList: React.FC = () => {
     setLoading(true);
     try {
       const branchFilterVal = activeBranchId === 'all' ? undefined : activeBranchId;
-      const [sData, osData, aData] = await Promise.all([
+      const [sData, osData, aData, cData] = await Promise.all([
         db.sales.getAll(branchFilterVal),
         db.orderStatuses.getAll(),
-        db.accounts.getAll()
+        db.accounts.getAll(),
+        db.customers.getAll()
       ]);
       
       setSales(sData);
       setStatuses(osData);
       setAccounts(aData);
+      setCustomers(cData);
 
       // Refresh Detail Panel if still actively open
       const currentId = selectedSaleIdRef.current;
@@ -429,11 +435,19 @@ export const SalesList: React.FC = () => {
       const due = Math.max(0, (existing.grand_total || 0) - totalPaid);
       const defaultDrawer = accounts.find(a => a.type === 'cash_drawer') || accounts[0];
       const defaultCard = accounts.find(a => a.type === 'card' || a.type === 'bank') || accounts[0];
+      const cust = customers.find(c => c.id === existing.customer_id);
+      const custAdvance = Number(cust?.advance) || 0;
+
       setPayAmount(parseFloat(due.toFixed(2)));
-      setPayMethod('Cash');
+      if (custAdvance > 0 && due > 0) {
+        setPayMethod('Advance');
+        setPayNotes('Settled via Customer Advance Credit');
+      } else {
+        setPayMethod('Cash');
+        setPayNotes('');
+      }
       setPayAccountId(defaultDrawer?.id || '');
       setPayTxnNo('');
-      setPayNotes('');
       setRefundReason('');
       setPayPersonName(existing.person_name || '');
 
@@ -534,16 +548,16 @@ export const SalesList: React.FC = () => {
   } | null>(null);
 
   const executeSubmitPayment = async () => {
-    if (!payingSaleId || payAmount <= 0 || !payAccountId) return;
+    if (!payingSaleId || payAmount <= 0 || (payMethod !== 'Advance' && !payAccountId)) return;
     setPaySaving(true);
     try {
       const createdPay = await db.payments.create({
         sale_id: payingSaleId,
         amount: payAmount,
         payment_method: payMethod,
-        account_id: payAccountId,
+        account_id: payMethod === 'Advance' ? undefined : payAccountId,
         transaction_no: payTxnNo || undefined,
-        notes: payNotes || undefined,
+        notes: payNotes || (payMethod === 'Advance' ? 'Settled via Customer Advance Credit' : undefined),
         person_name: payPersonName.trim() || undefined
       });
       const detail = await db.sales.getById(payingSaleId);
@@ -565,8 +579,8 @@ export const SalesList: React.FC = () => {
         amount: payAmount,
         paymentMethod: payMethod,
         personName: payPersonName.trim() || detail?.person_name || undefined,
-        reason: payNotes ? payNotes.trim() : `Payment collected against invoice #${detail?.invoice_no || ''}`,
-        account: accounts.find(a => a.id === payAccountId),
+        reason: payNotes ? payNotes.trim() : (payMethod === 'Advance' ? 'Settled via Customer Advance Credit' : `Payment collected against invoice #${detail?.invoice_no || ''}`),
+        account: payMethod === 'Advance' ? undefined : accounts.find(a => a.id === payAccountId),
         sale: detail,
         transactionNo: payTxnNo || undefined
       });
@@ -589,7 +603,7 @@ export const SalesList: React.FC = () => {
   const handleSubmitPayment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!payingSaleId || payAmount <= 0) return;
-    if (!payAccountId) {
+    if (payMethod !== 'Advance' && !payAccountId) {
       alert('Deposit To Account is mandatory. Please select an account.');
       return;
     }
@@ -613,16 +627,16 @@ export const SalesList: React.FC = () => {
       },
       {
         label: 'Payment Mode',
-        value: payMethod,
+        value: payMethod === 'Advance' ? '🪙 Deduct from Advance Credit' : payMethod,
         badge: true,
-        badgeColor: 'emerald'
+        badgeColor: payMethod === 'Advance' ? 'sky' : 'emerald'
       },
-      {
-        label: 'Deposit To Account',
+      ...(payMethod !== 'Advance' ? [{
+        label: 'Deposit Account',
         value: selectedAcc ? `${selectedAcc.type === 'cash_drawer' ? '💵' : selectedAcc.type === 'bank' ? '🏦' : '💳'} ${selectedAcc.name}` : 'Main Account',
         badge: true,
-        badgeColor: 'emerald'
-      }
+        badgeColor: 'emerald' as const
+      }] : [])
     ];
 
     if (payPersonName.trim()) {
@@ -2952,6 +2966,27 @@ export const SalesList: React.FC = () => {
                         )}
                       </div>
 
+                      {/* Available Advance Credit Alert Banner */}
+                      {(() => {
+                        const cust = customers.find(c => c.id === payingSaleDetails?.customer_id);
+                        const custAdv = Number(cust?.advance) || 0;
+                        if (custAdv <= 0) return null;
+                        return (
+                          <div className="p-3 bg-sky-500/10 border border-sky-500/30 rounded-xl flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2">
+                              <Coins size={16} className="text-sky-500 shrink-0" />
+                              <div>
+                                <span className="font-bold text-foreground">Customer Advance Credit: </span>
+                                <span className="font-mono font-black text-sky-600 dark:text-sky-400">{custAdv.toFixed(2)} AED</span>
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-sky-500/20 text-sky-700 dark:text-sky-300">
+                              ✓ Available to Deduct
+                            </span>
+                          </div>
+                        );
+                      })()}
+
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="space-y-1">
                           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Amount (AED) *</label>
@@ -2968,32 +3003,56 @@ export const SalesList: React.FC = () => {
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Payment Mode *</label>
-                          <select
-                            value={payMethod}
-                            onChange={(e) => setPayMethod(e.target.value as any)}
-                            className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
-                          >
-                            <option value="Cash">💵 Cash</option>
-                            <option value="Card">💳 Card</option>
-                            <option value="Bank Transfer">🏦 Bank Transfer</option>
-                            <option value="Mobile Banking">📱 Mobile Banking</option>
-                          </select>
+                          {(() => {
+                            const cust = customers.find(c => c.id === payingSaleDetails?.customer_id);
+                            const custAdv = Number(cust?.advance) || 0;
+
+                            return (
+                              <select
+                                value={payMethod}
+                                onChange={(e) => {
+                                  setPayMethod(e.target.value as any);
+                                  if (e.target.value === 'Advance') {
+                                    setPayNotes('Settled via Customer Advance Credit');
+                                  }
+                                }}
+                                className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                              >
+                                <option value="Cash">💵 Cash</option>
+                                <option value="Card">💳 Card</option>
+                                <option value="Bank Transfer">🏦 Bank Transfer</option>
+                                <option value="Mobile Banking">📱 Mobile Banking</option>
+                                {custAdv > 0 && (
+                                  <option value="Advance">🪙 Deduct from Advance ({custAdv.toFixed(2)} AED)</option>
+                                )}
+                              </select>
+                            );
+                          })()}
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Deposit To Account *</label>
-                          <select
-                            value={payAccountId}
-                            onChange={(e) => setPayAccountId(e.target.value)}
-                            required
-                            className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
-                          >
-                            <option value="">-- Select Account * --</option>
-                            {accounts.map(a => (
-                              <option key={a.id} value={a.id}>
-                                {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)
-                              </option>
-                            ))}
-                          </select>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                            {payMethod === 'Advance' ? 'Settlement Source' : 'Deposit To Account *'}
+                          </label>
+                          {payMethod === 'Advance' ? (
+                            <div className="px-2.5 py-1.5 bg-sky-500/10 border border-sky-500/30 rounded-lg text-xs font-semibold text-sky-700 dark:text-sky-300 flex items-center gap-1.5 h-[34px]">
+                              <Coins size={13} className="shrink-0" />
+                              <span className="truncate">Customer Advance Balance</span>
+                            </div>
+                          ) : (
+                            <select
+                              value={payAccountId}
+                              onChange={(e) => setPayAccountId(e.target.value)}
+                              required
+                              className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-bold text-foreground focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                            >
+                              <option value="">-- Select Account * --</option>
+                              {accounts.map(a => (
+                                <option key={a.id} value={a.id}>
+                                  {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)
+                                </option>
+                              ))}
+                            </select>
+                          )}
                         </div>
                       </div>
 
