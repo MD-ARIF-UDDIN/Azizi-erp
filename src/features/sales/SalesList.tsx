@@ -2914,12 +2914,17 @@ export const SalesList: React.FC = () => {
                                       )}
                                     </td>
                                     <td className="px-2.5 py-1">
-                                      <div className={`font-semibold ${isRef ? 'text-rose-700' : 'text-foreground'}`}>
-                                        {isRef ? '↩ Refund' : p.payment_method}
+                                      <div className={`font-semibold ${isRef ? 'text-rose-700' : p.payment_method === 'Advance' ? 'text-sky-700 dark:text-sky-400' : 'text-foreground'}`}>
+                                        {isRef ? '↩ Refund' : p.payment_method === 'Advance' ? '🪙 Advance Credit' : p.payment_method}
                                       </div>
                                       {targetAcc && (
                                         <div className="text-[9px] font-bold text-emerald-700 flex items-center gap-1 mt-0.5">
                                           <span>{targetAcc.type === 'cash_drawer' ? '💵' : targetAcc.type === 'bank' ? '🏦' : '💳'} {targetAcc.name}</span>
+                                        </div>
+                                      )}
+                                      {p.payment_method === 'Advance' && !targetAcc && (
+                                        <div className="text-[9px] font-bold text-sky-600 dark:text-sky-400 flex items-center gap-1 mt-0.5">
+                                          <span>🪙 Customer Wallet</span>
                                         </div>
                                       )}
                                     </td>

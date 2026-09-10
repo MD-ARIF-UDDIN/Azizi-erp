@@ -787,12 +787,15 @@ export const db = {
       const paymentsMap = new Map<string, number>();
       const externalPaymentsMap = new Map<string, number>();
       const directCustomerPaymentsMap = new Map<string, number>();
+      const advanceSpentMap = new Map<string, number>();
 
       paymentsList.forEach(p => {
         if (p.sale_id) {
           paymentsMap.set(p.sale_id, (paymentsMap.get(p.sale_id) || 0) + p.amount);
           if (p.payment_method !== 'Advance') {
             externalPaymentsMap.set(p.sale_id, (externalPaymentsMap.get(p.sale_id) || 0) + p.amount);
+          } else if (p.customer_id) {
+            advanceSpentMap.set(p.customer_id, (advanceSpentMap.get(p.customer_id) || 0) + p.amount);
           }
         } else if (p.customer_id && p.payment_method !== 'Advance') {
           directCustomerPaymentsMap.set(p.customer_id, (directCustomerPaymentsMap.get(p.customer_id) || 0) + p.amount);
@@ -800,29 +803,35 @@ export const db = {
       });
 
       // Pre-aggregate sales by customer_id for O(1) lookup
-      const salesMap = new Map<string, { totalPurchased: number; totalPaid: number; count: number; totalDue: number }>();
+      const salesMap = new Map<string, { totalPurchased: number; totalPaid: number; count: number; totalDue: number; invoiceSurplus: number }>();
       salesList.forEach(s => {
         if (!s.customer_id) return;
-        const current = salesMap.get(s.customer_id) || { totalPurchased: 0, totalPaid: 0, count: 0, totalDue: 0 };
+        const current = salesMap.get(s.customer_id) || { totalPurchased: 0, totalPaid: 0, count: 0, totalDue: 0, invoiceSurplus: 0 };
         current.totalPurchased += s.grand_total;
         current.totalPaid += (externalPaymentsMap.get(s.id) || 0);
         const salePaid = (paymentsMap.get(s.id) || 0);
         current.totalDue += Math.max(0, s.grand_total - salePaid);
+        current.invoiceSurplus += Math.max(0, salePaid - s.grand_total);
         current.count += 1;
         salesMap.set(s.customer_id, current);
       });
 
       const res = customersList.map(c => {
-        const stat = salesMap.get(c.id) || { totalPurchased: 0, totalPaid: 0, count: 0, totalDue: 0 };
+        const stat = salesMap.get(c.id) || { totalPurchased: 0, totalPaid: 0, count: 0, totalDue: 0, invoiceSurplus: 0 };
         const directPaid = directCustomerPaymentsMap.get(c.id) || 0;
+        const advanceSpent = advanceSpentMap.get(c.id) || 0;
         const totalPaid = stat.totalPaid + directPaid;
         const due = stat.totalDue;
-        const advance = Math.max(0, totalPaid - stat.totalPurchased);
+        const walletAdvance = Math.max(0, directPaid - advanceSpent);
+        const invoiceAdvance = stat.invoiceSurplus;
+        const totalAdvance = walletAdvance + invoiceAdvance;
 
         return {
           ...c,
           due,
-          advance,
+          advance: totalAdvance,
+          wallet_advance: walletAdvance,
+          invoice_advance: invoiceAdvance,
           total_paid: totalPaid,
           total_purchased: stat.totalPurchased,
           sales_count: stat.count
@@ -878,36 +887,57 @@ export const db = {
       const directCustPayments = paymentsList.filter((p: Payment) => !p.sale_id && p.customer_id === id && p.payment_method !== 'Advance');
       const totalDirectPaid = directCustPayments.reduce((sum: number, p: Payment) => sum + p.amount, 0);
 
-      const totalPaid = paymentsList
-        .filter((p: Payment) => p.sale_id && saleIds.includes(p.sale_id) && p.payment_method !== 'Advance')
-        .reduce((sum: number, p: Payment) => sum + p.amount, 0) + totalDirectPaid;
+      const explicitAdvancePayments = paymentsList.filter((p: Payment) => p.sale_id && saleIds.includes(p.sale_id) && p.payment_method === 'Advance');
+      const totalAdvanceSpent = explicitAdvancePayments.reduce((sum: number, p: Payment) => sum + p.amount, 0);
 
-      const due = salesList.reduce((sum, s) => {
-        const sPayments = paymentsList.filter(p => p.sale_id === s.id);
-        const sPaid = sPayments.reduce((pSum, p) => pSum + p.amount, 0);
-        return sum + Math.max(0, s.grand_total - sPaid);
-      }, 0);
-      const advance = Math.max(0, totalPaid - totalPurchased);
+      const walletAdvance = Math.max(0, totalDirectPaid - totalAdvanceSpent);
 
+      let invoiceSurplus = 0;
       const historySales = salesList.map(s => {
         const salePayments = paymentsList.filter(p => p.sale_id === s.id);
         const salePaidAmount = salePayments.reduce((sum: number, p: Payment) => sum + p.amount, 0);
         const remaining = Math.max(0, s.grand_total - salePaidAmount);
+        const saleSurplus = Math.max(0, salePaidAmount - s.grand_total);
+        invoiceSurplus += saleSurplus;
+
+        let payment_status: Sale['payment_status'] = 'Unpaid';
+        if (remaining <= 0.005 || s.grand_total === 0) {
+          payment_status = 'Paid';
+        } else if (salePaidAmount > 0.005) {
+          payment_status = 'Partially Paid';
+        }
+
         return {
           ...s,
           payments: salePayments,
           total_paid: salePaidAmount,
           remaining,
+          advance_amount: saleSurplus,
+          payment_status,
           customer: _customers.find(c => c.id === s.customer_id) || customerRecord,
           branch: branchesList.find(b => b.id === s.branch_id),
           status: statusesList.find(st => st.id === s.order_status_id)
         };
       });
 
+      const due = salesList.reduce((sum, s) => {
+        const sPayments = paymentsList.filter(p => p.sale_id === s.id);
+        const sPaid = sPayments.reduce((pSum, p) => pSum + p.amount, 0);
+        return sum + Math.max(0, s.grand_total - sPaid);
+      }, 0);
+
+      const totalPaid = paymentsList
+        .filter((p: Payment) => p.sale_id && saleIds.includes(p.sale_id) && p.payment_method !== 'Advance')
+        .reduce((sum: number, p: Payment) => sum + p.amount, 0) + totalDirectPaid;
+
+      const totalAdvance = walletAdvance + invoiceSurplus;
+
       return {
         ...customerRecord,
         due,
-        advance,
+        advance: totalAdvance,
+        wallet_advance: walletAdvance,
+        invoice_advance: invoiceSurplus,
         total_paid: totalPaid,
         total_purchased: totalPurchased,
         sales: historySales,
@@ -2337,7 +2367,7 @@ export const db = {
         }
 
         const cleanSaleId = sanitizeUUID(data.sale_id) || (data.sale_id ? data.sale_id : null);
-        const cleanCustomerId = sanitizeUUID(data.customer_id) || (data.customer_id ? data.customer_id : null);
+        const cleanCustomerId = sanitizeUUID(data.customer_id) || sanitizeUUID(cust?.id) || (data.customer_id ? data.customer_id : null);
 
         const basePayload: any = {
           id: payId,

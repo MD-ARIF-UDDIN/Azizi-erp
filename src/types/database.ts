@@ -67,6 +67,8 @@ export interface Customer {
   company?: Customer;
   due?: number;
   advance?: number;
+  wallet_advance?: number;
+  invoice_advance?: number;
   total_paid?: number;
   total_purchased?: number;
   sales_count?: number;
@@ -128,6 +130,9 @@ export interface Sale {
   person_phone?: string;
   person_email?: string;
   quotation_id?: string;
+  total_paid?: number;
+  remaining?: number;
+  advance_amount?: number;
 }
 
 export interface SaleItem {

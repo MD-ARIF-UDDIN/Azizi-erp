@@ -76,6 +76,67 @@ export const PaymentForm: React.FC = () => {
   const selectedCustomer = customers.find(c => c.id === customerId);
   const customerMembers = selectedCustomer?.members || [];
 
+  // Allocations to settle unpaid invoices during advance collection
+  const [settleAllocations, setSettleAllocations] = useState<{ [saleId: string]: number }>({});
+
+  const customerUnpaidSales = React.useMemo(() => {
+    if (mode !== 'advance' || customerType !== 'existing' || !customerId) return [];
+    return unpaidSales.filter(s => s.customer_id === customerId);
+  }, [mode, customerType, customerId, unpaidSales]);
+
+  const totalCustomerDue = React.useMemo(() => {
+    return customerUnpaidSales.reduce((sum, s) => {
+      const pPaid = (s.payments || []).reduce((pSum: number, p: any) => pSum + (Number(p.amount) || 0), 0);
+      return sum + Math.max(0, (Number(s.grand_total) || 0) - pPaid);
+    }, 0);
+  }, [customerUnpaidSales]);
+
+  const totalAllocatedToDues = React.useMemo(() => {
+    return Object.values(settleAllocations).reduce((sum, val) => sum + (Number(val) || 0), 0);
+  }, [settleAllocations]);
+
+  const advanceSurplus = Math.max(0, amount - totalAllocatedToDues);
+
+  const handleToggleSettleInvoice = (sId: string, maxDue: number) => {
+    setSettleAllocations(prev => {
+      const copy = { ...prev };
+      if (copy[sId] !== undefined) {
+        delete copy[sId];
+      } else {
+        const currentlyAllocated = Object.values(copy).reduce((sum, v) => sum + v, 0);
+        const remainingBudget = Math.max(0, amount - currentlyAllocated);
+        copy[sId] = remainingBudget > 0 ? Math.min(maxDue, remainingBudget) : maxDue;
+      }
+      return copy;
+    });
+  };
+
+  const handleUpdateSettleAmount = (sId: string, val: number, maxDue: number) => {
+    setSettleAllocations(prev => ({
+      ...prev,
+      [sId]: Math.min(maxDue, Math.max(0, val))
+    }));
+  };
+
+  const handleAutoAllocateAllDues = () => {
+    let remainingBudget = amount;
+    const newAllocs: { [saleId: string]: number } = {};
+    for (const s of customerUnpaidSales) {
+      const pPaid = (s.payments || []).reduce((pSum: number, p: any) => pSum + (Number(p.amount) || 0), 0);
+      const sDue = Math.max(0, (Number(s.grand_total) || 0) - pPaid);
+      if (sDue > 0) {
+        const take = remainingBudget > 0 ? Math.min(sDue, remainingBudget) : sDue;
+        newAllocs[s.id] = take;
+        if (remainingBudget > 0) remainingBudget -= take;
+      }
+    }
+    setSettleAllocations(newAllocs);
+  };
+
+  const handleClearSettleAllocations = () => {
+    setSettleAllocations({});
+  };
+
   useEffect(() => {
     const loadData = async () => {
       setFetching(true);
@@ -174,8 +235,7 @@ export const PaymentForm: React.FC = () => {
         return;
       }
       if (selectedSale && amount > selectedSale.remaining) {
-        setErrorMsg(`Amount cannot exceed the remaining due of ${selectedSale.remaining.toFixed(2)} AED.`);
-        return;
+        // Overpayment is allowed — surplus will credit to customer advance wallet
       }
     } else {
       // Advance mode validations
@@ -192,6 +252,11 @@ export const PaymentForm: React.FC = () => {
       }
     }
 
+    if (mode === 'advance' && totalAllocatedToDues > amount) {
+      setErrorMsg(`Total allocated to settle invoices (${totalAllocatedToDues.toFixed(2)} AED) cannot exceed the collected amount (${amount.toFixed(2)} AED).`);
+      return;
+    }
+
     setShowConfirmModal(true);
   };
 
@@ -205,6 +270,7 @@ export const PaymentForm: React.FC = () => {
         // Direct payment against existing invoice
         await db.payments.create({
           sale_id: saleId,
+          customer_id: selectedSale?.customer_id,
           amount,
           payment_method: paymentMethod,
           account_id: accountId,
@@ -258,7 +324,38 @@ export const PaymentForm: React.FC = () => {
 
         const effectiveBranchId = branchId || (activeBranchId && activeBranchId !== 'all' ? activeBranchId : availableBranches[0]?.id || 'b1111111-1111-1111-1111-111111111111');
 
-        if (createInvoiceContainer) {
+        if (customerType === 'existing' && totalAllocatedToDues > 0) {
+          // Flow C: Settle selected unpaid invoices + deposit surplus into wallet
+          for (const [sId, allocAmt] of Object.entries(settleAllocations)) {
+            if (allocAmt > 0) {
+              const targetSale = unpaidSales.find(s => s.id === sId);
+              await db.payments.create({
+                sale_id: sId,
+                customer_id: finalCustomerId,
+                branch_id: effectiveBranchId,
+                amount: allocAmt,
+                payment_method: paymentMethod,
+                account_id: accountId,
+                transaction_no: transactionNo || undefined,
+                person_name: finalPersonName || targetSale?.person_name || undefined,
+                notes: notes ? `[Invoice #${targetSale?.invoice_no || ''} Settled] ${notes}` : `Settled from payment collection`
+              });
+            }
+          }
+
+          if (advanceSurplus > 0) {
+            await db.payments.create({
+              customer_id: finalCustomerId,
+              branch_id: effectiveBranchId,
+              amount: advanceSurplus,
+              payment_method: paymentMethod,
+              account_id: accountId,
+              transaction_no: transactionNo || undefined,
+              person_name: finalPersonName || undefined,
+              notes: notes ? `[Advance Deposit] ${notes}` : 'Customer advance payment (Wallet Deposit)'
+            });
+          }
+        } else if (createInvoiceContainer) {
           // Flow B (Draft Invoice Container):
           // Create an empty Sales Invoice with this payment attached for adding services later
           const createdSale = await db.sales.create({
@@ -738,6 +835,128 @@ export const PaymentForm: React.FC = () => {
           )}
 
           {/* ========================================================= */}
+          {/* OPTIONAL: SETTLE OUTSTANDING INVOICES WITH THIS PAYMENT   */}
+          {/* ========================================================= */}
+          {mode === 'advance' && customerType === 'existing' && customerUnpaidSales.length > 0 && (
+            <div className="border border-sky-500/30 bg-sky-500/5 rounded-xl p-4 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-sky-500/20 pb-2.5">
+                <div>
+                  <div className="text-xs font-bold text-sky-700 dark:text-sky-300 flex items-center gap-1.5 uppercase tracking-wider">
+                    <Receipt size={14} /> Settle Unpaid Invoices with this Payment
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">
+                    This customer has <span className="font-bold text-rose-600 dark:text-rose-400">{customerUnpaidSales.length} unpaid invoice{customerUnpaidSales.length !== 1 ? 's' : ''}</span> totaling <span className="font-bold text-rose-600 dark:text-rose-400">{totalCustomerDue.toFixed(2)} AED</span>. Select which invoices to settle; any surplus from your payment will be credited to their advance wallet.
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleAutoAllocateAllDues}
+                    className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-[11px] font-bold transition-all cursor-pointer shadow-xs flex items-center gap-1"
+                  >
+                    <CheckCircle2 size={12} />
+                    <span>Auto-Settle Dues</span>
+                  </button>
+                  {totalAllocatedToDues > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleClearSettleAllocations}
+                      className="px-2 py-1 rounded-lg border border-border text-muted-foreground hover:text-foreground text-[11px] font-semibold transition-all cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Invoices list */}
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {customerUnpaidSales.map(s => {
+                  const pPaid = (s.payments || []).reduce((pSum: number, p: any) => pSum + (Number(p.amount) || 0), 0);
+                  const sDue = Math.max(0, (Number(s.grand_total) || 0) - pPaid);
+                  const isSelected = settleAllocations[s.id] !== undefined;
+                  const currentAlloc = settleAllocations[s.id] || 0;
+
+                  return (
+                    <div
+                      key={s.id}
+                      className={`p-2.5 rounded-lg border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+                        isSelected ? 'bg-sky-500/10 border-sky-500/40 shadow-xs' : 'bg-muted/20 border-border hover:bg-muted/30'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          id={`settle-${s.id}`}
+                          checked={isSelected}
+                          onChange={() => handleToggleSettleInvoice(s.id, sDue)}
+                          className="w-4 h-4 rounded text-sky-600 focus:ring-sky-500 cursor-pointer"
+                        />
+                        <label htmlFor={`settle-${s.id}`} className="cursor-pointer">
+                          <div className="font-mono font-bold text-foreground flex items-center gap-1.5">
+                            <span>#{s.invoice_no}</span>
+                            {s.person_name && (
+                              <span className="text-[10px] bg-blue-500/10 text-blue-600 px-1.5 py-0.2 rounded font-semibold font-sans">
+                                {s.person_name}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5">
+                            Date: {new Date(s.created_at).toLocaleDateString()} • Total: {Number(s.grand_total).toFixed(2)} AED
+                          </div>
+                        </label>
+                      </div>
+
+                      <div className="flex items-center gap-3 self-end sm:self-center">
+                        <div className="text-right">
+                          <div className="text-[10px] text-muted-foreground">Invoice Due:</div>
+                          <div className="font-bold text-rose-600 dark:text-rose-400">{sDue.toFixed(2)} AED</div>
+                        </div>
+
+                        {isSelected && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-muted-foreground font-semibold">Settle:</span>
+                            <input
+                              type="number"
+                              min={0.01}
+                              max={sDue}
+                              step={0.01}
+                              value={currentAlloc || ''}
+                              onChange={(e) => handleUpdateSettleAmount(s.id, parseFloat(e.target.value) || 0, sDue)}
+                              className="w-24 px-2 py-1 bg-background border border-sky-500/50 rounded text-xs font-bold text-sky-700 dark:text-sky-300 text-right"
+                            />
+                            <span className="text-[10px] text-muted-foreground font-mono">AED</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Allocation summary banner */}
+              {totalAllocatedToDues > 0 && (
+                <div className="bg-background/80 border border-sky-500/30 rounded-lg p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="space-y-0.5">
+                    <div className="font-semibold text-foreground flex items-center gap-1.5">
+                      <span>Allocated to Invoices:</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400">{totalAllocatedToDues.toFixed(2)} AED</span>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Remaining to Advance Wallet: <span className="font-bold text-sky-600 dark:text-sky-400">{advanceSurplus.toFixed(2)} AED</span>
+                    </div>
+                  </div>
+                  {totalAllocatedToDues > amount && (
+                    <span className="text-[11px] text-rose-500 font-bold">
+                      ⚠️ Allocated amount exceeds collected amount!
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ========================================================= */}
           {/* FINANCIAL COLLECTION DETAILS (COMMON TO BOTH MODES)       */}
           {/* ========================================================= */}
           <div className="space-y-4">
@@ -756,7 +975,7 @@ export const PaymentForm: React.FC = () => {
                   id="amount"
                   type="number"
                   min={0.01}
-                  max={mode === 'invoice' ? (selectedSale?.remaining || 999999) : 999999}
+                  max={999999}
                   step={0.01}
                   placeholder="E.g. 250.00"
                   value={amount || ''}
@@ -913,7 +1132,9 @@ export const PaymentForm: React.FC = () => {
               ? createInvoiceContainer
                 ? 'A new sales invoice with 0 services will be created and marked as Paid for this advance.'
                 : 'Payment will be deposited directly to your selected account and credited to customer advance wallet.'
-              : 'Please verify the payment details before depositing to account.'
+              : amount > (selectedSale?.remaining ?? 0)
+                ? `Invoice will be marked Paid and the surplus of ${(amount - (selectedSale?.remaining ?? 0)).toFixed(2)} AED will be credited to the customer's advance wallet.`
+                : 'Please verify the payment details before depositing to account.'
           }
           amount={amount}
           currency="AED"
@@ -937,10 +1158,16 @@ export const PaymentForm: React.FC = () => {
                 label: 'Current Remaining Due',
                 value: `${(selectedSale?.remaining ?? 0).toFixed(2)} AED`
               },
-              {
-                label: 'New Remaining Balance',
-                value: `${Math.max(0, (selectedSale?.remaining ?? 0) - amount).toFixed(2)} AED`
-              }
+              amount > (selectedSale?.remaining ?? 0)
+                ? {
+                    label: '⚠️ Overpayment — Advance Surplus',
+                    value: `+${(amount - (selectedSale?.remaining ?? 0)).toFixed(2)} AED → credited to customer wallet`,
+                    highlight: true
+                  }
+                : {
+                    label: 'New Remaining Balance',
+                    value: `${Math.max(0, (selectedSale?.remaining ?? 0) - amount).toFixed(2)} AED`
+                  }
             ] : [
               {
                 label: 'Payment Mode',
@@ -962,7 +1189,20 @@ export const PaymentForm: React.FC = () => {
               {
                 label: 'Target Branch',
                 value: availableBranches.find(b => b.id === branchId)?.name || 'Active Branch'
-              }
+              },
+              ...(totalAllocatedToDues > 0 ? [
+                {
+                  label: 'Applied to Settle Invoices',
+                  value: `${totalAllocatedToDues.toFixed(2)} AED (${Object.keys(settleAllocations).length} invoice${Object.keys(settleAllocations).length !== 1 ? 's' : ''})`,
+                  highlight: true
+                },
+                {
+                  label: 'Remaining Credited to Advance',
+                  value: `${advanceSurplus.toFixed(2)} AED`,
+                  badge: true,
+                  badgeColor: 'sky' as const
+                }
+              ] : [])
             ]),
             {
               label: 'Deposit To Account',

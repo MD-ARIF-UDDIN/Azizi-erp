@@ -132,7 +132,7 @@ export const ReceiptVoucherPrint: React.FC<{ data: PrintableVoucherData | null }
                 Payment Mode:
               </td>
               <td className="p-2 font-bold text-black border-r border-gray-300" colSpan={data.transactionNo ? 1 : 3}>
-                {data.paymentMethod || 'Cash'}
+                {data.paymentMethod === 'Advance' ? 'Advance Credit (Customer Wallet)' : (data.paymentMethod || 'Cash')}
               </td>
               {data.transactionNo && (
                 <>

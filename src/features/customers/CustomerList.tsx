@@ -148,7 +148,8 @@ export const CustomerList: React.FC = () => {
   const [qpSales, setQpSales] = useState<any[]>([]);
   const [qpSelectedSaleId, setQpSelectedSaleId] = useState('');
   const [qpAmount, setQpAmount] = useState(0);
-  const [qpMethod, setQpMethod] = useState<'Cash' | 'Card' | 'Mobile Banking' | 'Bank Transfer'>('Cash');
+  const [qpMethod, setQpMethod] = useState<'Cash' | 'Card' | 'Mobile Banking' | 'Bank Transfer' | 'Advance'>('Cash');
+  const [qpCustomerAdvance, setQpCustomerAdvance] = useState(0);
   const [qpAccountId, setQpAccountId] = useState('');
   const [qpTxNo, setQpTxNo] = useState('');
   const [qpNotes, setQpNotes] = useState('');
@@ -438,6 +439,92 @@ export const CustomerList: React.FC = () => {
     }, 400);
   };
 
+  const handleSettleSingleInvoiceFromAdvance = async (sale: any) => {
+    if (!selectedCustomer) return;
+    const custAdvance = Number(selectedCustomer.advance) || 0;
+    if (custAdvance <= 0) {
+      alert('This customer has no available advance credit.');
+      return;
+    }
+    const due = Number(sale.remaining) || 0;
+    const settleAmt = Math.min(due, custAdvance);
+    if (settleAmt <= 0) return;
+
+    if (!window.confirm(`Settle invoice #${sale.invoice_no} (${settleAmt.toFixed(2)} AED) using customer advance credit?`)) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await db.payments.create({
+        sale_id: sale.id,
+        customer_id: selectedCustomer.id,
+        amount: settleAmt,
+        payment_method: 'Advance',
+        notes: `Settled via Customer Advance Credit on Invoice #${sale.invoice_no}`
+      });
+
+      const updatedCust = await db.customers.getById(selectedCustomer.id);
+      setSelectedCustomer(updatedCust);
+      await fetchCustomers();
+    } catch (err: any) {
+      console.error(err);
+      alert('Failed to settle invoice: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSettleAllFromAdvance = async (cust: any) => {
+    let custAdvance = Number(cust.advance) || 0;
+    if (custAdvance <= 0) {
+      alert('This customer has no available advance credit.');
+      return;
+    }
+    const salesWithDue = (cust.sales || []).filter((s: any) => (Number(s.remaining) || 0) > 0.005);
+    if (salesWithDue.length === 0) {
+      alert('This customer has no unpaid invoices.');
+      return;
+    }
+
+    const totalDue = salesWithDue.reduce((sum: number, s: any) => sum + (Number(s.remaining) || 0), 0);
+    const totalToSettle = Math.min(custAdvance, totalDue);
+
+    if (!window.confirm(`Settle ${totalToSettle.toFixed(2)} AED of unpaid invoices using available customer advance credit of ${custAdvance.toFixed(2)} AED?`)) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      let budget = custAdvance;
+      const sorted = [...salesWithDue].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      for (const s of sorted) {
+        if (budget <= 0) break;
+        const due = Number(s.remaining) || 0;
+        const take = Math.min(due, budget);
+        if (take > 0) {
+          await db.payments.create({
+            sale_id: s.id,
+            customer_id: cust.id,
+            amount: take,
+            payment_method: 'Advance',
+            notes: `Settled via Customer Advance Credit on Invoice #${s.invoice_no}`
+          });
+          budget -= take;
+        }
+      }
+
+      const updatedCust = await db.customers.getById(cust.id);
+      setSelectedCustomer(updatedCust);
+      await fetchCustomers();
+    } catch (err: any) {
+      console.error(err);
+      alert('Failed to settle dues: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // --- Click Outside Handlers ---
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -720,14 +807,19 @@ export const CustomerList: React.FC = () => {
       }
       const defaultDrawer = currentAccounts.find(a => a.type === 'cash_drawer') || currentAccounts[0];
 
+      const custAdvance = Number(detailed.advance) || 0;
+      const firstDue = resolvedSales[0].remaining;
+      const shouldUseAdvance = custAdvance > 0 && firstDue > 0;
+
       setQpCustomer(cust);
+      setQpCustomerAdvance(custAdvance);
       setQpSales(resolvedSales);
       setQpSelectedSaleId(resolvedSales[0].id);
-      setQpAmount(resolvedSales[0].remaining);
-      setQpMethod('Cash');
+      setQpAmount(shouldUseAdvance ? Math.min(custAdvance, firstDue) : firstDue);
+      setQpMethod(shouldUseAdvance ? 'Advance' : 'Cash');
       setQpAccountId(defaultDrawer ? defaultDrawer.id : '');
       setQpTxNo('');
-      setQpNotes('');
+      setQpNotes(shouldUseAdvance ? 'Settled via Customer Advance Credit' : '');
       setQpPersonName(resolvedSales[0]?.person_name || '');
     } catch (err: any) {
       console.error(err);
@@ -758,14 +850,26 @@ export const CustomerList: React.FC = () => {
       setQpError('Amount must be greater than zero.');
       return;
     }
-    if (!qpAccountId) {
+    if (qpMethod !== 'Advance' && !qpAccountId) {
       setQpError('Deposit To Account is mandatory. Please select an account.');
       return;
     }
     const targetSale = qpSales.find(s => s.id === qpSelectedSaleId);
-    if (targetSale && qpAmount > targetSale.remaining) {
-      setQpError(`Amount cannot exceed the remaining due of ${targetSale.remaining.toFixed(2)} AED.`);
-      return;
+    if (qpMethod === 'Advance') {
+      if (qpCustomerAdvance <= 0) {
+        setQpError('This customer has no advance balance to use.');
+        return;
+      }
+      if (qpAmount > qpCustomerAdvance) {
+        setQpError(`Amount cannot exceed the customer's advance balance of ${qpCustomerAdvance.toFixed(2)} AED.`);
+        return;
+      }
+      if (targetSale && qpAmount > targetSale.remaining) {
+        setQpError(`Amount cannot exceed the remaining due of ${targetSale.remaining.toFixed(2)} AED.`);
+        return;
+      }
+    } else {
+      // Non-advance methods (Cash, Card, Bank) allow overpayment — any surplus beyond remaining due automatically credits to customer's advance balance
     }
 
     setQpSaving(true);
@@ -775,12 +879,13 @@ export const CustomerList: React.FC = () => {
         sale_id: qpSelectedSaleId,
         amount: qpAmount,
         payment_method: qpMethod,
-        account_id: qpAccountId,
+        account_id: qpMethod === 'Advance' ? undefined : qpAccountId,
         transaction_no: qpTxNo || undefined,
-        notes: qpNotes || undefined,
+        notes: qpNotes || (qpMethod === 'Advance' ? 'Settled via Customer Advance Credit' : undefined),
         person_name: qpPersonName.trim() || undefined
       });
       setQpCustomer(null);
+      setQpCustomerAdvance(0);
       await fetchCustomers();
     } catch (err: any) {
       setQpError(err.message || 'Payment recording failed.');
@@ -838,8 +943,11 @@ export const CustomerList: React.FC = () => {
                   <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
                     <Users size={18} />
                   </div>
-                  <div className="min-w-0">
-                    <span className="text-[11px] text-muted-foreground font-semibold uppercase">Total Customers</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[11px] text-muted-foreground font-semibold uppercase">Total Customers</span>
+                      <span className="text-[10px] text-muted-foreground/60 font-medium normal-case">(Count)</span>
+                    </div>
                     <h3 className="text-base font-bold text-foreground mt-0.5">{customers.length} ({totalBilled.toFixed(2)} AED)</h3>
                   </div>
                 </div>
@@ -847,8 +955,11 @@ export const CustomerList: React.FC = () => {
                   <div className="h-9 w-9 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
                     <CheckCircle2 size={18} />
                   </div>
-                  <div className="min-w-0">
-                    <span className="text-[11px] text-muted-foreground font-semibold uppercase">Total Paid</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[11px] text-muted-foreground font-semibold uppercase">Total Paid</span>
+                      <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70 font-medium normal-case">(Σ Collected)</span>
+                    </div>
                     <h3 className="text-base font-bold text-emerald-600 mt-0.5">{totalPaid.toFixed(2)} AED</h3>
                   </div>
                 </div>
@@ -856,8 +967,11 @@ export const CustomerList: React.FC = () => {
                   <div className="h-9 w-9 rounded-lg bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0">
                     <AlertTriangle size={18} />
                   </div>
-                  <div className="min-w-0">
-                    <span className="text-[11px] text-muted-foreground font-semibold uppercase">Outstanding Due</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[11px] text-muted-foreground font-semibold uppercase">Outstanding Due</span>
+                      <span className="text-[10px] text-rose-600/70 dark:text-rose-400/70 font-medium normal-case">(Total − Paid)</span>
+                    </div>
                     <h3 className="text-base font-bold text-rose-600 mt-0.5">{totalDues.toFixed(2)} AED</h3>
                   </div>
                 </div>
@@ -865,8 +979,11 @@ export const CustomerList: React.FC = () => {
                   <div className="h-9 w-9 rounded-lg bg-sky-500/10 text-sky-600 flex items-center justify-center shrink-0">
                     <Coins size={18} />
                   </div>
-                  <div className="min-w-0">
-                    <span className="text-[11px] text-muted-foreground font-semibold uppercase">Advance (Payable)</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[11px] text-muted-foreground font-semibold uppercase">Advance (Payable)</span>
+                      <span className="text-[10px] text-sky-600/70 dark:text-sky-400/70 font-medium normal-case">(Wallet + Surplus)</span>
+                    </div>
                     <h3 className="text-base font-bold text-sky-600 mt-0.5">+{totalAdvance.toFixed(2)} AED</h3>
                   </div>
                 </div>
@@ -1306,9 +1423,14 @@ export const CustomerList: React.FC = () => {
                 return (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 p-5 border-b border-border shrink-0 bg-background">
                     {/* Tile 1: Total Invoices & Billing */}
-                    <div className="p-3.5 rounded-xl border border-border bg-muted/20 flex flex-col justify-between">
-                      <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                        Total Billing
+                    <div className="p-3.5 rounded-xl border border-blue-500/25 bg-blue-500/5 flex flex-col justify-between">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                          Total Billing
+                        </span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap shrink-0 bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30">
+                          Σ Invoices
+                        </span>
                       </div>
                       <div className="mt-1 flex items-center justify-between">
                         <div>
@@ -1316,18 +1438,23 @@ export const CustomerList: React.FC = () => {
                             {totalBilling.toFixed(2)}{' '}
                             <span className="text-xs font-normal text-muted-foreground">AED</span>
                           </div>
-                          <span className="text-[10px] text-muted-foreground font-semibold">
+                          <span className="text-[10px] text-blue-600/80 dark:text-blue-400/80 font-semibold">
                             {(selectedCustomer.sales || []).length} invoice{(selectedCustomer.sales || []).length !== 1 ? 's' : ''}
                           </span>
                         </div>
-                        <ReceiptText size={18} className="text-blue-500 opacity-70 shrink-0" />
+                        <ReceiptText size={18} className="text-blue-500 shrink-0" />
                       </div>
                     </div>
 
                     {/* Tile 2: Total Paid (Collected) */}
-                    <div className="p-3.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 flex flex-col justify-between">
-                      <div className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                        Total Paid
+                    <div className="p-3.5 rounded-xl border border-emerald-500/25 bg-emerald-500/5 flex flex-col justify-between">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                          Total Paid
+                        </span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap shrink-0 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                          Σ Paid
+                        </span>
                       </div>
                       <div className="mt-1 flex items-center justify-between">
                         <div>
@@ -1344,9 +1471,18 @@ export const CustomerList: React.FC = () => {
                     </div>
 
                     {/* Tile 3: Outstanding Balance Due */}
-                    <div className={`p-3.5 rounded-xl border flex flex-col justify-between ${outstandingDue > 0 ? 'border-rose-500/20 bg-rose-500/5' : 'border-border bg-muted/20'}`}>
-                      <div className={`text-[11px] font-semibold uppercase tracking-wider ${outstandingDue > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground'}`}>
-                        Outstanding Due
+                    <div className={`p-3.5 rounded-xl border flex flex-col justify-between ${outstandingDue > 0 ? 'border-rose-500/25 bg-rose-500/5' : 'border-border bg-muted/20'}`}>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className={`text-[11px] font-bold uppercase tracking-wider ${outstandingDue > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground'}`}>
+                          Outstanding Due
+                        </span>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap shrink-0 ${
+                          outstandingDue > 0
+                            ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30'
+                            : 'bg-muted text-muted-foreground border border-border'
+                        }`}>
+                          Total − Paid
+                        </span>
                       </div>
                       <div className="mt-1 flex items-center justify-between">
                         {outstandingDue > 0 ? (
@@ -1365,25 +1501,46 @@ export const CustomerList: React.FC = () => {
                           </div>
                         )}
                         {outstandingDue > 0 && hasPermission('Payments.Create') && (
-                          <button
-                            onClick={() => {
-                              const targetCust = selectedCustomer;
-                              setSelectedCustomer(null);
-                              openQuickPayment(targetCust);
-                            }}
-                            className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold rounded-md shadow-xs transition-all cursor-pointer flex items-center gap-1 shrink-0"
-                          >
-                            <CreditCard size={11} />
-                            <span>Pay</span>
-                          </button>
+                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                            {advanceAmount > 0 && (
+                              <button
+                                onClick={() => handleSettleAllFromAdvance(selectedCustomer)}
+                                className="px-2 py-0.5 bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-bold rounded-md shadow-xs transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                                title="Settle unpaid invoices using customer advance credit"
+                              >
+                                <Coins size={11} />
+                                <span>Settle with Advance</span>
+                              </button>
+                            )}
+                            <button
+                              onClick={() => {
+                                const targetCust = selectedCustomer;
+                                setSelectedCustomer(null);
+                                openQuickPayment(targetCust);
+                              }}
+                              className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold rounded-md shadow-xs transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                            >
+                              <CreditCard size={11} />
+                              <span>Pay</span>
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
 
                     {/* Tile 4: Advance / Customer Credit */}
-                    <div className={`p-3.5 rounded-xl border flex flex-col justify-between ${advanceAmount > 0 ? 'border-sky-500/30 bg-sky-500/10' : 'border-border bg-muted/20'}`}>
-                      <div className={`text-[11px] font-semibold uppercase tracking-wider ${advanceAmount > 0 ? 'text-sky-600 dark:text-sky-400 font-bold' : 'text-muted-foreground'}`}>
-                        Advance Credit
+                    <div className={`p-3.5 rounded-xl border flex flex-col justify-between ${advanceAmount > 0 ? 'border-sky-500/25 bg-sky-500/5' : 'border-border bg-muted/20'}`}>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className={`text-[11px] font-bold uppercase tracking-wider ${advanceAmount > 0 ? 'text-sky-600 dark:text-sky-400 font-bold' : 'text-muted-foreground'}`}>
+                          Advance Credit
+                        </span>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap shrink-0 ${
+                          advanceAmount > 0
+                            ? 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30'
+                            : 'bg-muted text-muted-foreground border border-border'
+                        }`}>
+                          Wallet + Surplus
+                        </span>
                       </div>
                       <div className="mt-1 flex items-center justify-between">
                         {advanceAmount > 0 ? (
@@ -1391,9 +1548,24 @@ export const CustomerList: React.FC = () => {
                             <div className="text-lg font-black text-sky-600 dark:text-sky-400">
                               {advanceAmount.toFixed(2)} <span className="text-xs font-normal">AED</span>
                             </div>
-                            <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400">
-                              🪙 Available Credit
-                            </span>
+                            <div className="flex flex-col gap-0.5 mt-0.5">
+                              <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400 flex items-center gap-1">
+                                <span>🪙 Total Available Credit</span>
+                              </span>
+                              {Number(selectedCustomer.wallet_advance || 0) > 0.005 && Number(selectedCustomer.invoice_advance || 0) > 0.005 ? (
+                                <span className="text-[9px] text-muted-foreground font-medium">
+                                  Wallet: {Number(selectedCustomer.wallet_advance).toFixed(2)} • Invoices: {Number(selectedCustomer.invoice_advance).toFixed(2)}
+                                </span>
+                              ) : Number(selectedCustomer.wallet_advance || 0) > 0.005 ? (
+                                <span className="text-[9px] text-muted-foreground font-medium">
+                                  From Account Deposit
+                                </span>
+                              ) : Number(selectedCustomer.invoice_advance || 0) > 0.005 ? (
+                                <span className="text-[9px] text-muted-foreground font-medium">
+                                  From Invoice Overpayment
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
                         ) : (
                           <div>
@@ -1408,16 +1580,21 @@ export const CustomerList: React.FC = () => {
                     </div>
 
                     {/* Tile 5: Tracked Visas & Docs */}
-                    <div className="p-3.5 rounded-xl border border-border bg-muted/20 flex flex-col justify-between">
-                      <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                        Tracked Documents
+                    <div className="p-3.5 rounded-xl border border-violet-500/25 bg-violet-500/5 flex flex-col justify-between">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[11px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wider">
+                          Tracked Documents
+                        </span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap shrink-0 bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/30">
+                          Active Docs
+                        </span>
                       </div>
                       <div className="mt-1 flex items-center justify-between">
                         <div>
                           <div className="text-lg font-black text-foreground">
                             {selectedCustDocs.length}
                           </div>
-                          <span className="text-[10px] text-muted-foreground font-semibold">
+                          <span className="text-[10px] text-violet-600/80 dark:text-violet-400/80 font-semibold">
                             {selectedCustDocs.filter(d => getDaysRemaining(d.expiry_date) <= 30).length > 0 ? (
                               <span className="text-amber-500 font-bold">
                                 ⚠️ {selectedCustDocs.filter(d => getDaysRemaining(d.expiry_date) <= 30).length} expiring soon
@@ -1427,7 +1604,7 @@ export const CustomerList: React.FC = () => {
                             )}
                           </span>
                         </div>
-                        <Calendar size={18} className="text-primary opacity-60 shrink-0" />
+                        <Calendar size={18} className="text-violet-500 shrink-0" />
                       </div>
                     </div>
                   </div>
@@ -1517,9 +1694,11 @@ export const CustomerList: React.FC = () => {
                             <tr>
                               <th>Invoice #</th>
                               <th>Date</th>
-                              <th>Payment</th>
+                              <th>Payment Status</th>
+                              <th className="text-right">Paid</th>
+                              <th className="text-right">Remaining Due</th>
                               <th className="text-right">Total</th>
-                              <th className="text-center w-28">Actions</th>
+                              <th className="text-center w-32">Actions</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border/50">
@@ -1542,21 +1721,65 @@ export const CustomerList: React.FC = () => {
                                   {new Date(s.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
                                 </td>
                                 <td>
-                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
-                                    s.payment_status === 'Paid'
-                                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25'
-                                      : s.payment_status === 'Partially Paid'
-                                      ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25'
-                                      : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25'
-                                  }`}>
-                                    {s.payment_status}
-                                  </span>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
+                                      s.payment_status === 'Paid'
+                                        ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25'
+                                        : s.payment_status === 'Partially Paid'
+                                        ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25'
+                                        : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25'
+                                    }`}>
+                                      {s.payment_status}
+                                    </span>
+                                    {(Number(s.advance_amount) || 0) > 0.005 && (
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30" title="Surplus advance payment on this invoice">
+                                        <Coins size={10} /> +{(Number(s.advance_amount) || 0).toFixed(2)} Advance
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="text-right font-semibold text-xs text-emerald-600 dark:text-emerald-400">
+                                  {(Number(s.total_paid) || 0).toFixed(2)} <span className="text-[9px] font-normal text-muted-foreground">AED</span>
+                                </td>
+                                <td className="text-right font-bold text-xs">
+                                  {(Number(s.remaining) || 0) > 0.005 ? (
+                                    <span className="text-rose-600 dark:text-rose-400">
+                                      {(Number(s.remaining) || 0).toFixed(2)} <span className="text-[9px] font-normal">AED</span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-emerald-600 dark:text-emerald-400 text-[11px] font-medium">0.00 AED</span>
+                                  )}
                                 </td>
                                 <td className="text-right font-black text-xs text-foreground">
                                   {s.grand_total.toFixed(2)} <span className="text-[9px] font-normal text-muted-foreground">AED</span>
                                 </td>
                                 <td className="text-center">
                                   <div className="flex items-center justify-center gap-1">
+                                    {(Number(s.remaining) || 0) > 0.005 && hasPermission('Payments.Create') && (
+                                      <>
+                                        {(Number(selectedCustomer.advance) || 0) > 0 && (
+                                          <button
+                                            title={`Settle this invoice using customer advance credit (${(Number(selectedCustomer.advance) || 0).toFixed(2)} AED available)`}
+                                            onClick={() => handleSettleSingleInvoiceFromAdvance(s)}
+                                            className="p-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white transition-all cursor-pointer shadow-2xs flex items-center gap-1 text-[10px] font-bold"
+                                          >
+                                            <Coins size={12} />
+                                            <span>Settle</span>
+                                          </button>
+                                        )}
+                                        <button
+                                          title="Quick Pay this Invoice"
+                                          onClick={() => {
+                                            const targetCust = selectedCustomer;
+                                            setSelectedCustomer(null);
+                                            openQuickPayment(targetCust);
+                                          }}
+                                          className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-all cursor-pointer shadow-2xs"
+                                        >
+                                          <CreditCard size={13} />
+                                        </button>
+                                      </>
+                                    )}
                                     <button
                                       title="Print Invoice"
                                       onClick={() => handlePrintSale(s.id)}
@@ -2515,14 +2738,35 @@ export const CustomerList: React.FC = () => {
                 </select>
               </div>
 
+              {qpCustomerAdvance > 0 && (
+                <div className="flex items-center gap-2 bg-sky-500/10 border border-sky-500/20 rounded-lg px-3 py-2">
+                  <span className="text-sky-400 text-lg">🪙</span>
+                  <div>
+                    <p className="text-sky-400 text-xs font-bold">Advance Balance Available</p>
+                    <p className="text-sky-300 text-xs">{qpCustomerAdvance.toFixed(2)} AED — can be used to settle this invoice</p>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-muted-foreground font-semibold">Payment Method</label>
                   <select
                     value={qpMethod}
-                    onChange={e => setQpMethod(e.target.value as any)}
+                    onChange={e => {
+                      const val = e.target.value as any;
+                      setQpMethod(val);
+                      if (val === 'Advance') {
+                        setQpNotes('Settled via Customer Advance Credit');
+                      } else if (qpNotes === 'Settled via Customer Advance Credit') {
+                        setQpNotes('');
+                      }
+                    }}
                     className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground text-xs focus:ring-2 focus:ring-primary/50 outline-none"
                   >
+                    {qpCustomerAdvance > 0 && (
+                      <option value="Advance">🪙 Advance Credit</option>
+                    )}
                     <option value="Cash">💵 Cash</option>
                     <option value="Card">💳 Card</option>
                     <option value="Mobile Banking">📱 Mobile Banking</option>
@@ -2535,7 +2779,10 @@ export const CustomerList: React.FC = () => {
                   <input
                     type="number"
                     min={0.01}
-                    max={qpSales.find(s => s.id === qpSelectedSaleId)?.remaining || 999999}
+                    max={qpMethod === 'Advance'
+                      ? Math.min(qpCustomerAdvance, qpSales.find(s => s.id === qpSelectedSaleId)?.remaining || 999999)
+                      : (qpSales.find(s => s.id === qpSelectedSaleId)?.remaining || 999999)
+                    }
                     step={0.01}
                     value={qpAmount || ''}
                     onChange={e => setQpAmount(parseFloat(e.target.value) || 0)}
@@ -2544,23 +2791,25 @@ export const CustomerList: React.FC = () => {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-muted-foreground font-semibold flex items-center gap-1">
-                  <Wallet size={13} className="text-primary" /> Deposit To Account *
-                </label>
-                <select
-                  value={qpAccountId}
-                  onChange={e => setQpAccountId(e.target.value)}
-                  className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground text-xs focus:ring-2 focus:ring-primary/50 outline-none"
-                >
-                  <option value="">-- Select Deposit Account * --</option>
-                  {accounts.map(a => (
-                    <option key={a.id} value={a.id}>
-                      {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {qpMethod !== 'Advance' && (
+                <div className="space-y-1.5">
+                  <label className="text-muted-foreground font-semibold flex items-center gap-1">
+                    <Wallet size={13} className="text-primary" /> Deposit To Account *
+                  </label>
+                  <select
+                    value={qpAccountId}
+                    onChange={e => setQpAccountId(e.target.value)}
+                    className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-foreground text-xs focus:ring-2 focus:ring-primary/50 outline-none"
+                  >
+                    <option value="">-- Select Deposit Account * --</option>
+                    {accounts.map(a => (
+                      <option key={a.id} value={a.id}>
+                        {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <label className="text-muted-foreground font-semibold flex items-center gap-1">Transaction / Ref Number</label>
