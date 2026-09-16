@@ -15,7 +15,11 @@ import {
   X,
   User,
   Clock,
-  FileText
+  FileText,
+  MessageCircle,
+  Send,
+  Phone,
+  RotateCcw
 } from 'lucide-react';
 
 export const ExpiryTracker: React.FC = () => {
@@ -50,6 +54,14 @@ export const ExpiryTracker: React.FC = () => {
     status: 'Active',
     notified: false
   });
+
+  // WhatsApp Modal State
+  const [whatsappModalOpen, setWhatsappModalOpen] = useState(false);
+  const [selectedDocForWhatsApp, setSelectedDocForWhatsApp] = useState<ClientDocument | null>(null);
+  const [whatsappRecipientName, setWhatsappRecipientName] = useState('');
+  const [whatsappRecipientPhone, setWhatsappRecipientPhone] = useState('');
+  const [whatsappMessage, setWhatsappMessage] = useState('');
+  const [autoMarkNotified, setAutoMarkNotified] = useState(true);
 
   const loadData = async () => {
     setLoading(true);
@@ -181,6 +193,91 @@ export const ExpiryTracker: React.FC = () => {
       badgeColor: 'bg-emerald-500',
       icon: <CheckCircle size={12} className="text-emerald-500" />
     };
+  };
+
+  // WhatsApp Notification Helpers
+  const generateWhatsAppExpiryMessage = (doc: ClientDocument, cust?: Customer) => {
+    const custName = cust?.name || doc.customer?.name || 'Customer';
+    const daysLeft = getDaysRemaining(doc.expiry_date);
+    const statusText =
+      daysLeft < 0
+        ? `⚠️ EXPIRED (${Math.abs(daysLeft)} day${Math.abs(daysLeft) === 1 ? '' : 's'} ago)`
+        : daysLeft === 0
+        ? `⚠️ EXPIRES TODAY`
+        : `⏳ ${daysLeft} day${daysLeft === 1 ? '' : 's'} remaining`;
+
+    const urgencyNote =
+      daysLeft < 0
+        ? 'Your document has already expired. Please arrange for immediate renewal to avoid immigration or regulatory penalties.'
+        : daysLeft <= 30
+        ? 'Your document is expiring soon. Please initiate the renewal process early to prevent delays or late fines.'
+        : 'This is a friendly reminder to prepare for your document renewal ahead of time.';
+
+    return `*AZIZI TYPING & STAMP MAKING*
+Musaffah M37, Abu Dhabi
+Tel: 0542797933
+
+Dear *${custName}*,
+
+This is an important reminder regarding your document expiry:
+
+📄 *Document Type:* ${doc.document_type}
+${doc.document_number ? `🔢 *Document No:* ${doc.document_number}\n` : ''}📅 *Expiry Date:* ${doc.expiry_date}
+📊 *Status:* ${statusText}
+
+${urgencyNote}
+
+We are pleased to assist you with fast and reliable renewal processing. Please contact us or visit our office.
+
+Thank you for choosing AZIZI!`;
+  };
+
+  const handleOpenWhatsApp = (doc: ClientDocument) => {
+    const cust = doc.customer || customers.find(c => c.id === doc.customer_id);
+    const name = cust?.name || doc.customer?.name || '';
+    const phone = cust?.phone || doc.customer?.phone || '';
+    setSelectedDocForWhatsApp(doc);
+    setWhatsappRecipientName(name);
+    setWhatsappRecipientPhone(phone);
+    setWhatsappMessage(generateWhatsAppExpiryMessage(doc, cust));
+    setAutoMarkNotified(true);
+    setWhatsappModalOpen(true);
+  };
+
+  const handleResetWhatsAppMessage = () => {
+    if (!selectedDocForWhatsApp) return;
+    const cust = selectedDocForWhatsApp.customer || customers.find(c => c.id === selectedDocForWhatsApp.customer_id);
+    setWhatsappMessage(generateWhatsAppExpiryMessage(selectedDocForWhatsApp, cust));
+  };
+
+  const handleSendWhatsApp = async () => {
+    if (!selectedDocForWhatsApp) return;
+
+    let cleanPhone = whatsappRecipientPhone.replace(/\D/g, '');
+    // If phone starts with '05' (UAE mobile) and has 10 digits (e.g. 0501234567), convert to 971501234567
+    if (cleanPhone.startsWith('05') && cleanPhone.length === 10) {
+      cleanPhone = '971' + cleanPhone.slice(1);
+    }
+
+    const url = cleanPhone
+      ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(whatsappMessage)}`
+      : `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`;
+
+    window.open(url, '_blank');
+
+    if (autoMarkNotified && !selectedDocForWhatsApp.notified) {
+      try {
+        await db.clientDocuments.update(selectedDocForWhatsApp.id, { notified: true });
+        setSuccessMsg('WhatsApp reminder opened and client marked as notified.');
+        loadData();
+        setTimeout(() => setSuccessMsg(''), 3000);
+      } catch (err) {
+        console.error('Failed to update notified status:', err);
+      }
+    }
+
+    setWhatsappModalOpen(false);
+    setSelectedDocForWhatsApp(null);
   };
 
   // Filter Pipeline
@@ -418,17 +515,28 @@ export const ExpiryTracker: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="pt-3 mt-3 border-t border-border/60 flex items-center justify-between">
-                    <button
-                      onClick={() => handleToggleNotified(doc)}
-                      className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
-                        doc.notified
-                          ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                          : 'bg-muted text-muted-foreground border-border hover:text-foreground'
-                      }`}
-                    >
-                      {doc.notified ? '✓ Client Notified' : 'Mark Notified'}
-                    </button>
+                  <div className="pt-3 mt-3 border-t border-border/60 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        onClick={() => handleToggleNotified(doc)}
+                        className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                          doc.notified
+                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                            : 'bg-muted text-muted-foreground border-border hover:text-foreground'
+                        }`}
+                      >
+                        {doc.notified ? '✓ Client Notified' : 'Mark Notified'}
+                      </button>
+
+                      <button
+                        onClick={() => handleOpenWhatsApp(doc)}
+                        className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-2xs cursor-pointer"
+                        title="Send WhatsApp Expiry Reminder"
+                      >
+                        <MessageCircle size={13} />
+                        <span>WhatsApp</span>
+                      </button>
+                    </div>
 
                     <div className="flex items-center gap-1">
                       <button
@@ -581,6 +689,134 @@ export const ExpiryTracker: React.FC = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* WhatsApp Reminder Modal */}
+        {whatsappModalOpen && selectedDocForWhatsApp && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+            <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-xl p-5 space-y-4 relative animate-in zoom-in-95 duration-150">
+              <button
+                onClick={() => {
+                  setWhatsappModalOpen(false);
+                  setSelectedDocForWhatsApp(null);
+                }}
+                className="absolute right-4 top-4 p-1 rounded-lg text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+              >
+                <X size={15} />
+              </button>
+
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <MessageCircle size={20} />
+                </div>
+                <div>
+                  <h2 className="font-bold text-foreground text-base m-0">Send WhatsApp Reminder</h2>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Review and customize the expiry notification message before sending
+                  </p>
+                </div>
+              </div>
+
+              {/* Document info preview banner */}
+              <div className="bg-muted/30 border border-border/60 rounded-xl p-3 text-xs flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <User size={13} className="text-primary" />
+                    {whatsappRecipientName || 'Customer'}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground font-mono mt-0.5 block">
+                    {selectedDocForWhatsApp.document_type} {selectedDocForWhatsApp.document_number ? `• No: ${selectedDocForWhatsApp.document_number}` : ''}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-muted-foreground block">Expiry Date</span>
+                  <span className="text-xs font-mono font-bold text-foreground">{selectedDocForWhatsApp.expiry_date}</span>
+                </div>
+              </div>
+
+              <div className="space-y-3.5 text-xs">
+                {/* Recipient Phone */}
+                <div className="space-y-1">
+                  <label className="text-muted-foreground font-semibold flex items-center gap-1">
+                    <Phone size={12} className="text-primary" />
+                    Recipient WhatsApp Phone Number *
+                  </label>
+                  <input
+                    type="tel"
+                    value={whatsappRecipientPhone}
+                    onChange={(e) => setWhatsappRecipientPhone(e.target.value)}
+                    placeholder="e.g. 0501234567 or +971501234567"
+                    className="w-full px-3 py-2 bg-muted/40 border border-border/70 rounded-xl text-foreground focus:outline-none focus:border-primary font-mono text-xs font-medium"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    UAE numbers (e.g. 05XXXXXXXX) will automatically format to international standard for WhatsApp.
+                  </p>
+                </div>
+
+                {/* Message Editor */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-muted-foreground font-semibold flex items-center gap-1">
+                      <FileText size={12} className="text-primary" />
+                      Message Content (Editable)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleResetWhatsAppMessage}
+                      className="text-[10px] text-primary hover:underline flex items-center gap-1 cursor-pointer font-semibold"
+                      title="Reset to default template"
+                    >
+                      <RotateCcw size={10} />
+                      Reset to Default
+                    </button>
+                  </div>
+                  <textarea
+                    value={whatsappMessage}
+                    onChange={(e) => setWhatsappMessage(e.target.value)}
+                    rows={8}
+                    className="w-full p-3 bg-muted/40 border border-border/70 rounded-xl text-foreground font-sans text-xs leading-relaxed focus:outline-none focus:border-primary resize-y font-medium"
+                    placeholder="Write expiry reminder message here..."
+                  />
+                </div>
+
+                {/* Auto mark notified checkbox */}
+                <div className="flex items-center gap-2 py-1">
+                  <input
+                    id="auto_mark_notified"
+                    type="checkbox"
+                    checked={autoMarkNotified}
+                    onChange={(e) => setAutoMarkNotified(e.target.checked)}
+                    className="h-4 w-4 text-primary focus:ring-primary border-border bg-muted/40 rounded cursor-pointer"
+                  />
+                  <label htmlFor="auto_mark_notified" className="text-muted-foreground font-semibold cursor-pointer">
+                    Mark document status as notified upon sending
+                  </label>
+                </div>
+
+                {/* Modal Buttons */}
+                <div className="flex gap-2 pt-3 border-t border-border">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWhatsappModalOpen(false);
+                      setSelectedDocForWhatsApp(null);
+                    }}
+                    className="flex-1 bg-muted hover:bg-muted/80 text-foreground py-2 rounded-xl font-bold transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSendWhatsApp}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl font-bold transition-colors cursor-pointer shadow-2xs flex items-center justify-center gap-2"
+                  >
+                    <Send size={14} />
+                    <span>Send via WhatsApp</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
