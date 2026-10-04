@@ -6,19 +6,10 @@ import { useAuth } from '../../components/AuthProvider';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   ChevronLeft, 
-  CreditCard, 
-  DollarSign, 
-  FileText, 
   Receipt, 
   Save, 
-  Wallet,
   Coins,
-  User,
-  Building2,
-  Users,
-  Plus,
   Search,
-  CheckCircle2,
   AlertCircle
 } from 'lucide-react';
 import { TransactionConfirmModal } from '../../components/TransactionConfirmModal';
@@ -450,34 +441,34 @@ export const PaymentForm: React.FC = () => {
         )}
 
         {/* FORM CONTAINER */}
-        <form onSubmit={handleSubmit} className="glass border border-border rounded-2xl p-6 space-y-6 shadow-xl">
+        <form onSubmit={handleSubmit} className="glass border border-border rounded-2xl p-6 space-y-6 shadow-sm">
           
           {/* FLOW SELECTION SEGMENT TABS */}
-          <div className="p-1 bg-muted/70 border border-border rounded-xl grid grid-cols-2 gap-1.5">
+          <div className="p-1 bg-muted/60 border border-border/80 rounded-xl grid grid-cols-2 gap-1 max-w-md mx-auto sm:mx-0">
             <button
               type="button"
               disabled={loading || !!saleIdParam}
               onClick={() => handleModeChange('invoice')}
-              className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 mode === 'invoice'
-                  ? 'bg-primary text-white shadow-md'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-background/40'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
               }`}
             >
-              <Receipt size={15} />
-              <span>Against Existing Invoice</span>
+              <Receipt size={14} />
+              <span>Against Invoice</span>
             </button>
             <button
               type="button"
               disabled={loading || !!saleIdParam}
               onClick={() => handleModeChange('advance')}
-              className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 mode === 'advance'
-                  ? 'bg-primary text-white shadow-md'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-background/40'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
               }`}
             >
-              <Coins size={15} />
+              <Coins size={14} />
               <span>Advance Payment</span>
             </button>
           </div>
@@ -487,58 +478,55 @@ export const PaymentForm: React.FC = () => {
           {/* ========================================================= */}
           {mode === 'invoice' && (
             <div className="space-y-4">
-              {/* Invoice Selector */}
               <div className="space-y-1.5 text-xs">
-                <label htmlFor="sale" className="text-muted-foreground font-semibold flex items-center gap-1">
-                  <Receipt size={13} /> Select Unpaid Sales Invoice *
+                <label htmlFor="sale" className="text-foreground font-medium">
+                  Select Invoice *
                 </label>
                 <select
                   id="sale"
                   value={saleId}
                   onChange={(e) => handleSaleChange(e.target.value)}
-                  className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-sm text-foreground font-semibold cursor-pointer"
+                  className="w-full px-3.5 py-2.5 bg-background border border-border rounded-xl text-sm text-foreground font-medium cursor-pointer focus:ring-2 focus:ring-primary/20 outline-none"
                   required
                   disabled={loading || !!saleIdParam}
                 >
-                  <option value="">-- Choose Invoice Reference --</option>
+                  <option value="">-- Choose Invoice --</option>
                   {unpaidSales.map(s => {
                     const customerLabel = s.customer 
                       ? s.person_name 
-                        ? `${s.person_name} (Company: ${s.customer.name})`
-                        : s.customer.company?.name
-                        ? `${s.customer.name} (Company: ${s.customer.company.name})`
+                        ? `${s.person_name} (${s.customer.name})`
                         : s.customer.name
                       : (s.person_name || 'Walk-in Customer');
                     return (
                       <option key={s.id} value={s.id}>
-                        {s.invoice_no} - {customerLabel} (Total: {Number(s.grand_total || 0).toFixed(2)} AED)
+                        {s.invoice_no} — {customerLabel} (Due: {Number((s.grand_total || 0) - (s.payments || []).reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0)).toFixed(2)} AED)
                       </option>
                     );
                   })}
                 </select>
                 {saleIdParam && (
-                  <p className="text-[10px] text-muted-foreground mt-1">Invoice locked to redirect parameter.</p>
+                  <p className="text-[11px] text-muted-foreground">Invoice preselected from previous screen.</p>
                 )}
               </div>
 
-              {/* Selected Invoice Details Panel */}
+              {/* Selected Invoice Details */}
               {selectedSale && (
-                <div className="bg-muted/25 p-4 rounded-xl border border-border/80 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                <div className="bg-muted/30 p-4 rounded-xl border border-border/70 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                   <div>
-                    <span className="text-muted-foreground">Invoice Date</span>
-                    <div className="font-semibold mt-0.5">{new Date(selectedSale.created_at).toLocaleDateString()}</div>
+                    <span className="text-muted-foreground text-[11px]">Invoice Date</span>
+                    <div className="font-semibold text-foreground mt-0.5">{new Date(selectedSale.created_at).toLocaleDateString()}</div>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Grand Total</span>
-                    <div className="font-semibold mt-0.5">{(selectedSale.grand_total ?? 0).toFixed(2)} AED</div>
+                    <span className="text-muted-foreground text-[11px]">Grand Total</span>
+                    <div className="font-semibold text-foreground mt-0.5">{(selectedSale.grand_total ?? 0).toFixed(2)} AED</div>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Amount Paid</span>
-                    <div className="font-semibold text-emerald-400 mt-0.5">{(selectedSale.totalPaid ?? 0).toFixed(2)} AED</div>
+                    <span className="text-muted-foreground text-[11px]">Paid</span>
+                    <div className="font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">{(selectedSale.totalPaid ?? 0).toFixed(2)} AED</div>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Remaining Dues</span>
-                    <div className="font-bold text-rose-400 mt-0.5">{(selectedSale.remaining ?? 0).toFixed(2)} AED</div>
+                    <span className="text-muted-foreground text-[11px]">Balance Due</span>
+                    <div className="font-bold text-rose-600 dark:text-rose-400 mt-0.5">{(selectedSale.remaining ?? 0).toFixed(2)} AED</div>
                   </div>
                 </div>
               )}
@@ -549,287 +537,212 @@ export const PaymentForm: React.FC = () => {
           {/* MODE 2: ADVANCE PAYMENT (CUSTOMER & MEMBER SELECTION)      */}
           {/* ========================================================= */}
           {mode === 'advance' && (
-            <div className="space-y-5 border-b border-border/60 pb-5">
+            <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
-                  <User size={14} /> Customer &amp; Member Details
+                <span className="text-xs font-bold text-foreground uppercase tracking-wider">
+                  Customer
                 </span>
 
-                {/* Existing vs New Customer Toggle */}
-                <div className="flex rounded-lg bg-muted p-0.5 border border-border gap-1">
+                {/* Existing vs New Customer Switch */}
+                <div className="flex rounded-lg bg-muted/70 p-0.5 border border-border gap-0.5">
                   <button
                     type="button"
                     onClick={() => { setCustomerType('existing'); setSelectedPersonName(''); setNewMemberForExisting(''); }}
-                    className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                    className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
                       customerType === 'existing'
-                        ? 'bg-primary text-white shadow-xs'
+                        ? 'bg-background text-foreground shadow-xs'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    <User size={12} /> Existing Customer
+                    Existing Customer
                   </button>
                   <button
                     type="button"
                     onClick={() => { setCustomerType('new'); setCustomerId(''); }}
-                    className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                    className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
                       customerType === 'new'
-                        ? 'bg-primary text-white shadow-xs'
+                        ? 'bg-background text-foreground shadow-xs'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    <Plus size={12} /> New Customer
+                    + New Customer
                   </button>
                 </div>
               </div>
 
-              {/* 2A. EXISTING CUSTOMER FLOW */}
+              {/* 2A. EXISTING CUSTOMER */}
               {customerType === 'existing' ? (
-                <div className="space-y-3 bg-muted/20 border border-border p-4 rounded-xl">
+                <div className="space-y-3">
                   <div className="space-y-1.5 text-xs">
-                    <label htmlFor="customerSelect" className="text-muted-foreground font-semibold flex items-center justify-between">
-                      <span>Select Customer / Company *</span>
-                      <span className="text-[10px] text-muted-foreground font-normal">({filteredCustomers.length} available)</span>
-                    </label>
-
-                    {/* Quick Search */}
-                    <div className="relative mb-1">
-                      <Search size={13} className="absolute left-2.5 top-2.5 text-muted-foreground" />
-                      <input
-                        type="text"
-                        placeholder="Search customer name, phone, or member..."
-                        value={customerSearch}
-                        onChange={(e) => setCustomerSearch(e.target.value)}
-                        className="w-full pl-8 pr-3 py-1.5 bg-background border border-border rounded-lg text-xs font-medium text-foreground"
-                      />
+                    {/* Search & Select Unified */}
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                      <div className="sm:col-span-4 relative">
+                        <Search size={14} className="absolute left-3 top-3 text-muted-foreground" />
+                        <input
+                          type="text"
+                          placeholder="Filter customers..."
+                          value={customerSearch}
+                          onChange={(e) => setCustomerSearch(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2 bg-background border border-border rounded-xl text-xs text-foreground focus:ring-2 focus:ring-primary/20 outline-none"
+                        />
+                      </div>
+                      <div className="sm:col-span-8">
+                        <select
+                          id="customerSelect"
+                          value={customerId}
+                          onChange={(e) => {
+                            setCustomerId(e.target.value);
+                            setSelectedPersonName('');
+                            setNewMemberForExisting('');
+                          }}
+                          className="w-full px-3 py-2 bg-background border border-border rounded-xl text-xs font-medium text-foreground cursor-pointer focus:ring-2 focus:ring-primary/20 outline-none"
+                          required={mode === 'advance' && customerType === 'existing'}
+                        >
+                          <option value="">-- Select Customer --</option>
+                          {filteredCustomers.map(c => (
+                            <option key={c.id} value={c.id}>
+                              {c.name} {c.phone ? `(${c.phone})` : ''} {c.customer_type === 'company' ? '— Company' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-
-                    <select
-                      id="customerSelect"
-                      value={customerId}
-                      onChange={(e) => {
-                        setCustomerId(e.target.value);
-                        setSelectedPersonName('');
-                        setNewMemberForExisting('');
-                      }}
-                      className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-sm text-foreground font-semibold cursor-pointer"
-                      required={mode === 'advance' && customerType === 'existing'}
-                    >
-                      <option value="">-- Choose Customer / Company * --</option>
-                      {filteredCustomers.map(c => (
-                        <option key={c.id} value={c.id}>
-                          {c.customer_type === 'company' ? '🏢' : '👤'} {c.name} {c.phone ? `(${c.phone})` : ''} {c.members && c.members.length > 0 ? `[${c.members.length} members]` : ''}
-                        </option>
-                      ))}
-                    </select>
                   </div>
 
-                  {/* Selected Customer & Members Section */}
-                  {selectedCustomer && (
-                    <div className="p-3 rounded-xl border border-border bg-card/60 space-y-3 mt-2">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-foreground flex items-center gap-1.5">
-                          <Users size={13} className="text-primary" />
-                          <span>Member / Person for this Advance</span>
-                        </span>
-                        {selectedPersonName && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/20">
-                            Assigned to: {selectedPersonName}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Select existing member or direct */}
-                      <div className="space-y-1 text-xs">
-                        <label className="text-muted-foreground font-medium">Select Existing Member (or leave direct to company):</label>
-                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  {/* Selected Customer Members (if company or has members) */}
+                  {selectedCustomer && customerMembers.length > 0 && (
+                    <div className="p-3 rounded-xl border border-border/80 bg-muted/20 space-y-2">
+                      <div className="text-xs font-medium text-muted-foreground">Select Member / Representative (Optional):</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedPersonName(''); setNewMemberForExisting(''); }}
+                          className={`text-xs px-2.5 py-1 rounded-lg font-medium border cursor-pointer transition-all ${
+                            !selectedPersonName && !newMemberForExisting
+                              ? 'bg-primary text-white border-primary shadow-xs'
+                              : 'bg-background text-muted-foreground border-border hover:border-primary/40'
+                          }`}
+                        >
+                          Direct Company
+                        </button>
+                        {customerMembers.map((m: any, idx: number) => (
                           <button
+                            key={m.id || idx}
                             type="button"
-                            onClick={() => { setSelectedPersonName(''); setNewMemberForExisting(''); }}
-                            className={`text-xs px-2.5 py-1 rounded-lg font-semibold border cursor-pointer transition-all ${
-                              !selectedPersonName && !newMemberForExisting
+                            onClick={() => { setSelectedPersonName(m.name); setNewMemberForExisting(''); }}
+                            className={`text-xs px-2.5 py-1 rounded-lg font-medium border cursor-pointer transition-all ${
+                              selectedPersonName === m.name && !newMemberForExisting
                                 ? 'bg-primary text-white border-primary shadow-xs'
-                                : 'bg-muted/40 text-muted-foreground border-border hover:border-primary/40'
+                                : 'bg-background text-muted-foreground border-border hover:border-primary/40'
                             }`}
                           >
-                            🏢 Direct Customer ({selectedCustomer.name})
+                            {m.name}
                           </button>
-                          {customerMembers.map((m: any, idx: number) => (
-                            <button
-                              key={m.id || idx}
-                              type="button"
-                              onClick={() => { setSelectedPersonName(m.name); setNewMemberForExisting(''); }}
-                              className={`text-xs px-2.5 py-1 rounded-lg font-semibold border cursor-pointer transition-all flex items-center gap-1 ${
-                                selectedPersonName === m.name && !newMemberForExisting
-                                  ? 'bg-primary text-white border-primary shadow-xs'
-                                  : 'bg-muted/40 text-muted-foreground border-border hover:border-primary/40'
-                              }`}
-                            >
-                              <User size={11} /> {m.name}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Add new member input for existing customer */}
-                      <div className="space-y-1 text-xs pt-1 border-t border-border/50">
-                        <label className="text-muted-foreground font-medium">Or Enter a New Member Name:</label>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            placeholder="Type new person / member name..."
-                            value={newMemberForExisting}
-                            onChange={(e) => {
-                              setNewMemberForExisting(e.target.value);
-                              setSelectedPersonName(e.target.value);
-                            }}
-                            className="flex-1 px-3 py-1.5 bg-background border border-border rounded-lg text-xs font-medium text-foreground outline-none"
-                          />
-                          {newMemberForExisting && (
-                            <span className="text-[10px] text-primary font-bold whitespace-nowrap flex items-center gap-1">
-                              <CheckCircle2 size={12} /> Auto-adds to company
-                            </span>
-                          )}
-                        </div>
+                        ))}
                       </div>
                     </div>
                   )}
                 </div>
               ) : (
-                /* 2B. NEW CUSTOMER FLOW */
-                <div className="space-y-3 border border-border p-4 rounded-xl bg-muted/20">
-                  {/* Company vs Individual Toggle */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-muted-foreground font-bold uppercase tracking-wider">Account Type *</label>
-                    <div className="flex rounded-lg bg-background p-0.5 border border-border gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setNewCustomerType('individual')}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer ${
-                          newCustomerType === 'individual'
-                            ? 'bg-primary text-white shadow-xs'
-                            : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                      >
-                        <User size={13} /> Individual
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setNewCustomerType('company')}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded text-xs font-bold transition-all cursor-pointer ${
-                          newCustomerType === 'company'
-                            ? 'bg-primary text-white shadow-xs'
-                            : 'text-muted-foreground hover:text-foreground'
-                        }`}
-                      >
-                        <Building2 size={13} /> Company
-                      </button>
+                /* 2B. NEW CUSTOMER FORM */
+                <div className="space-y-3 p-4 border border-border/80 rounded-xl bg-muted/20">
+                  <div className="flex rounded-lg bg-background p-0.5 border border-border max-w-xs">
+                    <button
+                      type="button"
+                      onClick={() => setNewCustomerType('individual')}
+                      className={`flex-1 py-1 rounded text-xs font-semibold transition-all cursor-pointer ${
+                        newCustomerType === 'individual'
+                          ? 'bg-primary text-white shadow-xs'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Individual
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewCustomerType('company')}
+                      className={`flex-1 py-1 rounded text-xs font-semibold transition-all cursor-pointer ${
+                        newCustomerType === 'company'
+                          ? 'bg-primary text-white shadow-xs'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Company
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1 text-xs sm:col-span-2">
+                      <label className="text-foreground font-medium">
+                        {newCustomerType === 'company' ? 'Company Name *' : 'Full Name *'}
+                      </label>
+                      <input
+                        type="text"
+                        required={mode === 'advance' && customerType === 'new'}
+                        value={newCustomerName}
+                        onChange={(e) => setNewCustomerName(e.target.value)}
+                        placeholder={newCustomerType === 'company' ? 'Company name...' : 'Customer name...'}
+                        className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-xs"
+                      />
                     </div>
-                  </div>
-
-                  {/* Customer / Company Name */}
-                  <div className="space-y-1 text-xs">
-                    <label className="text-foreground font-semibold">
-                      {newCustomerType === 'company' ? 'Company / Trade Name *' : 'Customer Full Name *'}
-                    </label>
-                    <input
-                      type="text"
-                      required={mode === 'advance' && customerType === 'new'}
-                      value={newCustomerName}
-                      onChange={(e) => setNewCustomerName(e.target.value)}
-                      placeholder={newCustomerType === 'company' ? 'E.g. Al Safa Transport LLC' : 'E.g. Mohammed Ali'}
-                      className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-xs font-medium"
-                    />
-                  </div>
-
-                  {/* Phone & Email */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     <div className="space-y-1 text-xs">
-                      <label className="text-muted-foreground font-semibold">Phone Number</label>
+                      <label className="text-muted-foreground font-medium">Phone Number</label>
                       <input
                         type="text"
                         value={newCustomerPhone}
                         onChange={(e) => setNewCustomerPhone(e.target.value)}
-                        placeholder="+971 50 000 0000"
-                        className="w-full px-3 py-1.5 bg-background border border-border rounded-lg text-foreground text-xs font-medium"
+                        placeholder="Mobile / phone..."
+                        className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-xs"
                       />
                     </div>
                     <div className="space-y-1 text-xs">
-                      <label className="text-muted-foreground font-semibold">Email Address</label>
+                      <label className="text-muted-foreground font-medium">Email Address</label>
                       <input
                         type="email"
                         value={newCustomerEmail}
                         onChange={(e) => setNewCustomerEmail(e.target.value)}
-                        placeholder="info@domain.com"
-                        className="w-full px-3 py-1.5 bg-background border border-border rounded-lg text-foreground text-xs font-medium"
+                        placeholder="Email (optional)..."
+                        className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-xs"
                       />
                     </div>
-                  </div>
-
-                  {/* Address */}
-                  <div className="space-y-1 text-xs">
-                    <label className="text-muted-foreground font-semibold">Address / Office Location</label>
-                    <input
-                      type="text"
-                      value={newCustomerAddress}
-                      onChange={(e) => setNewCustomerAddress(e.target.value)}
-                      placeholder="E.g. Musaffah M37, Abu Dhabi, UAE"
-                      className="w-full px-3 py-1.5 bg-background border border-border rounded-lg text-foreground text-xs font-medium"
-                    />
-                  </div>
-
-                  {/* Member Name (Optional for New Company) */}
-                  {newCustomerType === 'company' && (
-                    <div className="space-y-1 text-xs pt-1 border-t border-border/50">
-                      <label className="text-foreground font-semibold flex items-center justify-between">
-                        <span>Member / Employee Name</span>
-                        <span className="text-[10px] text-muted-foreground font-normal">(Optional — will save if empty)</span>
-                      </label>
+                    <div className="space-y-1 text-xs sm:col-span-2">
+                      <label className="text-muted-foreground font-medium">Address / Location</label>
                       <input
                         type="text"
-                        value={newCompanyMemberName}
-                        onChange={(e) => setNewCompanyMemberName(e.target.value)}
-                        placeholder="E.g. Ahmed (Manager) — or leave blank if no member"
-                        className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-xs font-medium"
+                        value={newCustomerAddress}
+                        onChange={(e) => setNewCustomerAddress(e.target.value)}
+                        placeholder="Location (optional)..."
+                        className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-xs"
                       />
                     </div>
-                  )}
+                    {newCustomerType === 'company' && (
+                      <div className="space-y-1 text-xs sm:col-span-2">
+                        <label className="text-muted-foreground font-medium">Member / Contact Person</label>
+                        <input
+                          type="text"
+                          value={newCompanyMemberName}
+                          onChange={(e) => setNewCompanyMemberName(e.target.value)}
+                          placeholder="Contact person name (optional)..."
+                          className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-xs"
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
-              {/* ADVANCE DESTINATION MODE: Wallet Advance vs Draft Invoice Container */}
-              <div className="bg-muted/30 border border-border/80 p-3.5 rounded-xl transition-all">
-                <div className="flex items-start gap-3">
-                  <input
-                    id="createInvoiceContainer"
-                    type="checkbox"
-                    checked={createInvoiceContainer}
-                    onChange={(e) => setCreateInvoiceContainer(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary/20 cursor-pointer"
-                  />
-                  <label htmlFor="createInvoiceContainer" className="text-xs cursor-pointer select-none space-y-1 flex-1">
-                    <div className="font-semibold text-foreground flex items-center justify-between">
-                      <span>Create an empty Sales Invoice for this advance</span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                        createInvoiceContainer 
-                          ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' 
-                          : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                      }`}>
-                        {createInvoiceContainer ? 'Draft Invoice Flow' : 'Wallet Advance (Default)'}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground leading-normal">
-                      {createInvoiceContainer ? (
-                        <span className="text-foreground">
-                          📄 Creates an empty sales invoice now. You can find it in Sales List and click <strong>&ldquo;Edit Invoice&rdquo;</strong> to add services later.
-                        </span>
-                      ) : (
-                        <span>
-                          🪙 Saves advance directly to customer credit (no invoice created). You can easily deduct it when creating or editing any invoice later.
-                        </span>
-                      )}
-                    </p>
-                  </label>
-                </div>
+              {/* Draft Invoice Checkbox */}
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  id="createInvoiceContainer"
+                  type="checkbox"
+                  checked={createInvoiceContainer}
+                  onChange={(e) => setCreateInvoiceContainer(e.target.checked)}
+                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary/20 cursor-pointer"
+                />
+                <label htmlFor="createInvoiceContainer" className="text-xs font-medium text-foreground cursor-pointer select-none">
+                  Create an empty draft invoice for this advance
+                </label>
               </div>
             </div>
           )}
@@ -838,30 +751,24 @@ export const PaymentForm: React.FC = () => {
           {/* OPTIONAL: SETTLE OUTSTANDING INVOICES WITH THIS PAYMENT   */}
           {/* ========================================================= */}
           {mode === 'advance' && customerType === 'existing' && customerUnpaidSales.length > 0 && (
-            <div className="border border-sky-500/30 bg-sky-500/5 rounded-xl p-4 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-sky-500/20 pb-2.5">
-                <div>
-                  <div className="text-xs font-bold text-sky-700 dark:text-sky-300 flex items-center gap-1.5 uppercase tracking-wider">
-                    <Receipt size={14} /> Settle Unpaid Invoices with this Payment
-                  </div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5">
-                    This customer has <span className="font-bold text-rose-600 dark:text-rose-400">{customerUnpaidSales.length} unpaid invoice{customerUnpaidSales.length !== 1 ? 's' : ''}</span> totaling <span className="font-bold text-rose-600 dark:text-rose-400">{totalCustomerDue.toFixed(2)} AED</span>. Select which invoices to settle; any surplus from your payment will be credited to their advance wallet.
-                  </div>
+            <div className="border border-sky-500/20 bg-sky-500/5 rounded-xl p-3.5 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs font-semibold text-sky-700 dark:text-sky-300 flex items-center gap-1.5">
+                  <span>Customer has {customerUnpaidSales.length} unpaid invoice{customerUnpaidSales.length !== 1 ? 's' : ''} ({totalCustomerDue.toFixed(2)} AED)</span>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={handleAutoAllocateAllDues}
-                    className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-[11px] font-bold transition-all cursor-pointer shadow-xs flex items-center gap-1"
+                    className="px-2 py-1 rounded bg-sky-600 hover:bg-sky-700 text-white text-[11px] font-medium transition-all cursor-pointer"
                   >
-                    <CheckCircle2 size={12} />
-                    <span>Auto-Settle Dues</span>
+                    Auto-Settle
                   </button>
                   {totalAllocatedToDues > 0 && (
                     <button
                       type="button"
                       onClick={handleClearSettleAllocations}
-                      className="px-2 py-1 rounded-lg border border-border text-muted-foreground hover:text-foreground text-[11px] font-semibold transition-all cursor-pointer"
+                      className="px-2 py-1 rounded border border-border text-muted-foreground hover:text-foreground text-[11px] transition-all cursor-pointer"
                     >
                       Clear
                     </button>
@@ -870,7 +777,7 @@ export const PaymentForm: React.FC = () => {
               </div>
 
               {/* Invoices list */}
-              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                 {customerUnpaidSales.map(s => {
                   const pPaid = (s.payments || []).reduce((pSum: number, p: any) => pSum + (Number(p.amount) || 0), 0);
                   const sDue = Math.max(0, (Number(s.grand_total) || 0) - pPaid);
@@ -880,53 +787,35 @@ export const PaymentForm: React.FC = () => {
                   return (
                     <div
                       key={s.id}
-                      className={`p-2.5 rounded-lg border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
-                        isSelected ? 'bg-sky-500/10 border-sky-500/40 shadow-xs' : 'bg-muted/20 border-border hover:bg-muted/30'
+                      className={`p-2 rounded-lg border transition-all flex items-center justify-between gap-2 text-xs ${
+                        isSelected ? 'bg-sky-500/10 border-sky-500/30' : 'bg-background border-border/70'
                       }`}
                     >
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-2">
                         <input
                           type="checkbox"
                           id={`settle-${s.id}`}
                           checked={isSelected}
                           onChange={() => handleToggleSettleInvoice(s.id, sDue)}
-                          className="w-4 h-4 rounded text-sky-600 focus:ring-sky-500 cursor-pointer"
+                          className="w-3.5 h-3.5 rounded text-sky-600 focus:ring-sky-500 cursor-pointer"
                         />
-                        <label htmlFor={`settle-${s.id}`} className="cursor-pointer">
-                          <div className="font-mono font-bold text-foreground flex items-center gap-1.5">
-                            <span>#{s.invoice_no}</span>
-                            {s.person_name && (
-                              <span className="text-[10px] bg-blue-500/10 text-blue-600 px-1.5 py-0.2 rounded font-semibold font-sans">
-                                {s.person_name}
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[10px] text-muted-foreground mt-0.5">
-                            Date: {new Date(s.created_at).toLocaleDateString()} • Total: {Number(s.grand_total).toFixed(2)} AED
-                          </div>
+                        <label htmlFor={`settle-${s.id}`} className="cursor-pointer font-medium text-foreground">
+                          #{s.invoice_no} <span className="text-muted-foreground font-normal">({new Date(s.created_at).toLocaleDateString()})</span>
                         </label>
                       </div>
 
-                      <div className="flex items-center gap-3 self-end sm:self-center">
-                        <div className="text-right">
-                          <div className="text-[10px] text-muted-foreground">Invoice Due:</div>
-                          <div className="font-bold text-rose-600 dark:text-rose-400">{sDue.toFixed(2)} AED</div>
-                        </div>
-
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold">Due: {sDue.toFixed(2)} AED</span>
                         {isSelected && (
-                          <div className="flex items-center gap-1">
-                            <span className="text-[10px] text-muted-foreground font-semibold">Settle:</span>
-                            <input
-                              type="number"
-                              min={0.01}
-                              max={sDue}
-                              step={0.01}
-                              value={currentAlloc || ''}
-                              onChange={(e) => handleUpdateSettleAmount(s.id, parseFloat(e.target.value) || 0, sDue)}
-                              className="w-24 px-2 py-1 bg-background border border-sky-500/50 rounded text-xs font-bold text-sky-700 dark:text-sky-300 text-right"
-                            />
-                            <span className="text-[10px] text-muted-foreground font-mono">AED</span>
-                          </div>
+                          <input
+                            type="number"
+                            min={0.01}
+                            max={sDue}
+                            step={0.01}
+                            value={currentAlloc || ''}
+                            onChange={(e) => handleUpdateSettleAmount(s.id, parseFloat(e.target.value) || 0, sDue)}
+                            className="w-20 px-2 py-0.5 bg-background border border-sky-500/40 rounded text-xs font-semibold text-right"
+                          />
                         )}
                       </div>
                     </div>
@@ -934,42 +823,28 @@ export const PaymentForm: React.FC = () => {
                 })}
               </div>
 
-              {/* Allocation summary banner */}
               {totalAllocatedToDues > 0 && (
-                <div className="bg-background/80 border border-sky-500/30 rounded-lg p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <div className="space-y-0.5">
-                    <div className="font-semibold text-foreground flex items-center gap-1.5">
-                      <span>Allocated to Invoices:</span>
-                      <span className="font-bold text-emerald-600 dark:text-emerald-400">{totalAllocatedToDues.toFixed(2)} AED</span>
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      Remaining to Advance Wallet: <span className="font-bold text-sky-600 dark:text-sky-400">{advanceSurplus.toFixed(2)} AED</span>
-                    </div>
-                  </div>
-                  {totalAllocatedToDues > amount && (
-                    <span className="text-[11px] text-rose-500 font-bold">
-                      ⚠️ Allocated amount exceeds collected amount!
-                    </span>
-                  )}
+                <div className="flex items-center justify-between text-xs pt-1 text-muted-foreground">
+                  <span>Settling Invoices: <strong className="text-foreground">{totalAllocatedToDues.toFixed(2)} AED</strong></span>
+                  <span>To Advance Wallet: <strong className="text-foreground">{advanceSurplus.toFixed(2)} AED</strong></span>
                 </div>
               )}
             </div>
           )}
 
           {/* ========================================================= */}
-          {/* FINANCIAL COLLECTION DETAILS (COMMON TO BOTH MODES)       */}
+          {/* PAYMENT DETAILS                                           */}
           {/* ========================================================= */}
-          <div className="space-y-4">
-            <div className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
-              <DollarSign size={14} /> Collection &amp; Financial Details
+          <div className="space-y-4 pt-2 border-t border-border/60">
+            <div className="text-xs font-bold text-foreground uppercase tracking-wider">
+              Payment Details
             </div>
 
-            {/* Grid Layout: Amount, Payment Method, Deposit Account, Branch */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Amount */}
               <div className="space-y-1.5 text-xs">
-                <label htmlFor="amount" className="text-muted-foreground font-semibold flex items-center gap-1">
-                  <DollarSign size={13} /> Collected Amount (AED) *
+                <label htmlFor="amount" className="text-foreground font-medium">
+                  Amount (AED) *
                 </label>
                 <input
                   id="amount"
@@ -977,110 +852,124 @@ export const PaymentForm: React.FC = () => {
                   min={0.01}
                   max={999999}
                   step={0.01}
-                  placeholder="E.g. 250.00"
+                  placeholder="0.00"
                   value={amount || ''}
                   onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm font-bold text-foreground"
+                  className="w-full px-3 py-2 bg-background border border-border rounded-xl text-sm font-bold text-foreground focus:ring-2 focus:ring-primary/20 outline-none"
                   required
                   disabled={loading || (mode === 'invoice' && !selectedSale)}
                 />
               </div>
 
-              {/* Payment Method / Mode */}
+              {/* Payment Method */}
               <div className="space-y-1.5 text-xs">
-                <label htmlFor="method" className="text-muted-foreground font-semibold flex items-center gap-1">
-                  <CreditCard size={13} /> Payment Method / Mode *
+                <label htmlFor="method" className="text-foreground font-medium">
+                  Payment Method *
                 </label>
                 <select
                   id="method"
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-sm font-semibold text-foreground cursor-pointer"
+                  className="w-full px-3 py-2 bg-background border border-border rounded-xl text-xs font-medium text-foreground cursor-pointer focus:ring-2 focus:ring-primary/20 outline-none"
                   required
                   disabled={loading}
                 >
-                  <option value="Cash">💵 Cash</option>
-                  <option value="Card">💳 Card</option>
-                  <option value="Bank Transfer">🏦 Bank Transfer</option>
-                  <option value="Mobile Banking">📱 Mobile Banking</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Card">Card</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Mobile Banking">Mobile Banking</option>
                 </select>
               </div>
 
-              {/* Deposit To Account */}
+              {/* Deposit Account */}
               <div className="space-y-1.5 text-xs">
-                <label htmlFor="account" className="text-muted-foreground font-semibold flex items-center gap-1">
-                  <Wallet size={13} /> Deposit To Account *
+                <label htmlFor="account" className="text-foreground font-medium">
+                  Deposit Account *
                 </label>
                 <select
                   id="account"
                   value={accountId}
                   onChange={(e) => setAccountId(e.target.value)}
                   required
-                  className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-sm font-semibold text-foreground cursor-pointer"
+                  className="w-full px-3 py-2 bg-background border border-border rounded-xl text-xs font-medium text-foreground cursor-pointer focus:ring-2 focus:ring-primary/20 outline-none"
                   disabled={loading}
                 >
-                  <option value="">-- Select Deposit Account * --</option>
+                  <option value="">-- Select Account --</option>
                   {accounts.map(a => (
                     <option key={a.id} value={a.id}>
-                      {a.type === 'cash_drawer' ? '💵' : a.type === 'bank' ? '🏦' : '💳'} {a.name} ({a.balance.toFixed(2)} AED)
+                      {a.name} ({a.balance.toFixed(2)} AED)
                     </option>
                   ))}
                 </select>
               </div>
 
               {/* Branch Selector (In Advance Mode) */}
-              {mode === 'advance' && (
+              {mode === 'advance' ? (
                 <div className="space-y-1.5 text-xs">
-                  <label htmlFor="branch" className="text-muted-foreground font-semibold flex items-center gap-1">
-                    <Building2 size={13} /> Target Branch *
+                  <label htmlFor="branch" className="text-foreground font-medium">
+                    Branch *
                   </label>
                   <select
                     id="branch"
                     value={branchId}
                     onChange={(e) => setBranchId(e.target.value)}
                     required
-                    className="w-full px-3 py-2 bg-popover border border-border rounded-lg text-sm font-semibold text-foreground cursor-pointer"
+                    className="w-full px-3 py-2 bg-background border border-border rounded-xl text-xs font-medium text-foreground cursor-pointer focus:ring-2 focus:ring-primary/20 outline-none"
                     disabled={loading}
                   >
                     {availableBranches.map(b => (
                       <option key={b.id} value={b.id}>
-                        🏢 {b.name}
+                        {b.name}
                       </option>
                     ))}
                   </select>
                 </div>
+              ) : (
+                <div className="space-y-1.5 text-xs">
+                  <label htmlFor="txNo" className="text-muted-foreground font-medium">
+                    Reference / Tx ID
+                  </label>
+                  <input
+                    id="txNo"
+                    type="text"
+                    placeholder="Optional..."
+                    value={transactionNo}
+                    onChange={(e) => setTransactionNo(e.target.value)}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-xl text-xs text-foreground focus:ring-2 focus:ring-primary/20 outline-none"
+                    disabled={loading}
+                  />
+                </div>
               )}
             </div>
 
-            {/* Grid Layout: Transaction Reference and Notes */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Transaction No */}
-              <div className="space-y-1.5 text-xs">
-                <label htmlFor="txNo" className="text-muted-foreground font-semibold flex items-center gap-1">
-                  <FileText size={13} /> Transaction ID / Ref No
-                </label>
-                <input
-                  id="txNo"
-                  type="text"
-                  placeholder="E.g. Bank Transfer Ref, Card Auth Code, or TxID"
-                  value={transactionNo}
-                  onChange={(e) => setTransactionNo(e.target.value)}
-                  className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm text-foreground font-medium"
-                  disabled={loading}
-                />
-              </div>
-
-              {/* Notes */}
-              <div className="space-y-1.5 text-xs">
-                <label htmlFor="notes" className="text-muted-foreground font-semibold flex items-center gap-1">
-                  <FileText size={13} /> Internal Notes / Remarks
+            {/* Grid 2: Notes & Optional Reference (for Advance Mode) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {mode === 'advance' && (
+                <div className="space-y-1.5 text-xs">
+                  <label htmlFor="txNo" className="text-muted-foreground font-medium">
+                    Reference / Tx ID
+                  </label>
+                  <input
+                    id="txNo"
+                    type="text"
+                    placeholder="Optional ref, card code, transfer id..."
+                    value={transactionNo}
+                    onChange={(e) => setTransactionNo(e.target.value)}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-xl text-xs text-foreground focus:ring-2 focus:ring-primary/20 outline-none"
+                    disabled={loading}
+                  />
+                </div>
+              )}
+              <div className={`space-y-1.5 text-xs ${mode !== 'advance' ? 'sm:col-span-2' : ''}`}>
+                <label htmlFor="notes" className="text-muted-foreground font-medium">
+                  Notes / Remarks
                 </label>
                 <input
                   id="notes"
-                  placeholder={mode === 'advance' ? 'E.g. Advance for employee visa processing...' : 'E.g. Paid in full, bkash fee added...'}
+                  placeholder="Optional notes..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm text-foreground font-medium"
+                  className="w-full px-3 py-2 bg-background border border-border rounded-xl text-xs text-foreground focus:ring-2 focus:ring-primary/20 outline-none"
                   disabled={loading}
                 />
               </div>
@@ -1088,11 +977,11 @@ export const PaymentForm: React.FC = () => {
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-3 pt-3 border-t border-border">
+          <div className="flex justify-end gap-2.5 pt-4 border-t border-border">
             <button
               type="button"
               onClick={() => navigate('/payments')}
-              className="px-4 py-2 border border-border rounded-lg text-xs font-semibold text-muted-foreground hover:bg-secondary/40 transition-colors"
+              className="px-4 py-2 border border-border rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted/50 transition-colors cursor-pointer"
               disabled={loading}
             >
               Cancel
@@ -1106,7 +995,7 @@ export const PaymentForm: React.FC = () => {
                 (mode === 'advance' && customerType === 'existing' && !customerId) ||
                 (mode === 'advance' && customerType === 'new' && !newCustomerName.trim())
               }
-              className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-5 py-2.5 rounded-lg text-xs font-semibold shadow-md transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-white px-5 py-2 rounded-xl text-xs font-semibold shadow-sm transition-all cursor-pointer disabled:opacity-50"
             >
               <Save size={14} />
               {loading 

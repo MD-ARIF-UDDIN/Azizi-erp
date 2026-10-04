@@ -153,6 +153,8 @@ const SEED_USERS = (roles: Role[], branches: Branch[]): User[] => {
 
   return [
     { id: '00000000-0000-0000-0000-00000000000a', name: 'Owner admin', email: 'admin@gmail.com', phone: '+8801700000000', role_id: role0, branch_id: branch0, status: 'Active', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), permissions: ['Customer.View', 'Customer.Create', 'Customer.Update', 'Customer.Delete', 'Sales.View', 'Sales.Create', 'Sales.Update', 'Sales.Delete', 'Payments.View', 'Payments.Create', 'Payments.Delete', 'Expenses.View', 'Expenses.Create', 'Expenses.Update', 'Expenses.Delete', 'Branches.View', 'Branches.Create', 'Branches.Update', 'Branches.Delete', 'Users.View', 'Users.Create', 'Users.Update', 'Users.Delete', 'Roles.View', 'Roles.Update', 'Reports.View', 'Settings.Update'] },
+    { id: '00000000-0000-0000-0000-00000000000b', name: 'Arif', email: 'arif@gmail.com', password: 'support123', phone: '+971500000001', role_id: role0, branch_id: branch0, status: 'Active', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), permissions: ['Customer.View', 'Customer.Create', 'Customer.Update', 'Customer.Delete', 'Sales.View', 'Sales.Create', 'Sales.Update', 'Sales.Delete', 'Payments.View', 'Payments.Create', 'Payments.Delete', 'Expenses.View', 'Expenses.Create', 'Expenses.Update', 'Expenses.Delete', 'Branches.View', 'Branches.Create', 'Branches.Update', 'Branches.Delete', 'Users.View', 'Users.Create', 'Users.Update', 'Users.Delete', 'Roles.View', 'Roles.Update', 'Reports.View', 'Settings.Update'] },
+    { id: '00000000-0000-0000-0000-00000000000c', name: 'Support Admin', email: 'support@gmail.com', password: 'support123', phone: '+971500000002', role_id: role0, branch_id: branch0, status: 'Active', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), permissions: ['Customer.View', 'Customer.Create', 'Customer.Update', 'Customer.Delete', 'Sales.View', 'Sales.Create', 'Sales.Update', 'Sales.Delete', 'Payments.View', 'Payments.Create', 'Payments.Delete', 'Expenses.View', 'Expenses.Create', 'Expenses.Update', 'Expenses.Delete', 'Branches.View', 'Branches.Create', 'Branches.Update', 'Branches.Delete', 'Users.View', 'Users.Create', 'Users.Update', 'Users.Delete', 'Roles.View', 'Roles.Update', 'Reports.View', 'Settings.Update'] },
     { id: '11111111-1111-1111-1111-11111111111a', name: 'Al-Amin Arif', email: 'admin@azizi.com', phone: '+8801700000001', role_id: role1, branch_id: branch0, status: 'Active', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), permissions: ['Customer.View', 'Customer.Create', 'Customer.Update', 'Customer.Delete', 'Sales.View', 'Sales.Create', 'Sales.Update', 'Sales.Delete', 'Payments.View', 'Payments.Create', 'Payments.Delete', 'Expenses.View', 'Expenses.Create', 'Expenses.Update', 'Expenses.Delete', 'Branches.View', 'Branches.Create', 'Branches.Update', 'Branches.Delete', 'Users.View', 'Users.Create', 'Users.Update', 'Users.Delete', 'Roles.View', 'Roles.Update', 'Reports.View', 'Settings.Update'] },
     { id: '22222222-2222-2222-2222-22222222222a', name: 'Rahat Khan', email: 'manager@azizi.com', phone: '+8801700000002', role_id: role2, branch_id: branch1, status: 'Active', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), permissions: ['Customer.View', 'Customer.Create', 'Customer.Update', 'Sales.View', 'Sales.Create', 'Sales.Update', 'Payments.View', 'Payments.Create', 'Expenses.View', 'Expenses.Create', 'Expenses.Update', 'Branches.View', 'Users.View', 'Users.Create', 'Users.Update', 'Reports.View'] },
     { id: '33333333-3333-3333-3333-33333333333a', name: 'Mitu Akter', email: 'cashier@azizi.com', phone: '+8801700000003', role_id: role3, branch_id: branch0, status: 'Active', is_deleted: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), permissions: ['Customer.View', 'Customer.Create', 'Customer.Update', 'Sales.View', 'Sales.Create', 'Payments.View', 'Payments.Create', 'Reports.View'] },
@@ -204,12 +206,62 @@ const SEED_EXPENSE_CATEGORIES = (): ExpenseCategory[] => [
 
 // ---------------------------------------------------------
 // DATABASE INIT OR RESTORE (LOCAL STORAGE ENGINE)
-// ---------------------------------------------------------
+// -----------------------------------------
 let _branches = getOrSeed(KEYS.BRANCHES, SEED_BRANCHES);
 let _roles = getOrSeed(KEYS.ROLES, SEED_ROLES);
 let _permissions = getOrSeed(KEYS.PERMISSIONS, SEED_PERMISSIONS);
 let _rolePermissions = getOrSeed(KEYS.ROLE_PERMISSIONS, () => SEED_ROLE_PERMISSIONS(_roles, _permissions));
 let _users = getOrSeed(KEYS.USERS, () => SEED_USERS(_roles, _branches));
+
+// Ensure seed users (support@gmail.com, arif@gmail.com) are always present and up-to-date
+(() => {
+  const seedAccounts = [
+    { email: 'support@gmail.com', name: 'Support Admin', id: '00000000-0000-0000-0000-00000000000c' },
+    { email: 'arif@gmail.com', name: 'Arif', id: '00000000-0000-0000-0000-00000000000b' }
+  ];
+  const ownerRoleId = _roles[0]?.id || '00000000-0000-0000-0000-000000000000';
+  const defaultBranchId = _branches[0]?.id || 'b1111111-1111-1111-1111-111111111111';
+  const allPermissions = [
+    'Customer.View', 'Customer.Create', 'Customer.Update', 'Customer.Delete',
+    'Sales.View', 'Sales.Create', 'Sales.Update', 'Sales.Delete',
+    'Payments.View', 'Payments.Create', 'Payments.Delete',
+    'Expenses.View', 'Expenses.Create', 'Expenses.Update', 'Expenses.Delete',
+    'Branches.View', 'Branches.Create', 'Branches.Update', 'Branches.Delete',
+    'Users.View', 'Users.Create', 'Users.Update', 'Users.Delete',
+    'Roles.View', 'Roles.Update', 'Reports.View', 'Settings.Update'
+  ];
+
+  for (const acc of seedAccounts) {
+    const existingIndex = _users.findIndex(u => u.email?.toLowerCase() === acc.email.toLowerCase());
+    if (existingIndex >= 0) {
+      _users[existingIndex] = {
+        ..._users[existingIndex],
+        password: 'support123',
+        status: 'Active',
+        is_deleted: false,
+        permissions: allPermissions,
+        role_id: _users[existingIndex].role_id || ownerRoleId,
+        branch_id: _users[existingIndex].branch_id || defaultBranchId
+      };
+    } else {
+      _users.push({
+        id: acc.id,
+        name: acc.name,
+        email: acc.email,
+        password: 'support123',
+        phone: '+971500000002',
+        role_id: ownerRoleId,
+        branch_id: defaultBranchId,
+        status: 'Active',
+        is_deleted: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        permissions: allPermissions
+      });
+    }
+  }
+  saveToLocalStorage(KEYS.USERS, _users);
+})();
 let _customers: Customer[] = getOrSeed(KEYS.CUSTOMERS, () => []);
 let _categories = getOrSeed(KEYS.SERVICE_CATEGORIES, SEED_CATEGORIES);
 let _services = getOrSeed(KEYS.SERVICES, SEED_SERVICES);

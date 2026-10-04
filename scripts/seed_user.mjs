@@ -15,13 +15,15 @@ const ALL_PERMISSIONS = [
   'Roles.View', 'Roles.Update', 'Reports.View', 'Settings.Update'
 ];
 
-async function seedOwnerAccount() {
-  console.log('--- Seeding Owner Account ---');
-  console.log('Target Email: developer@gmail.com');
-  console.log('Target Password: password configured');
+async function seedUser() {
+  const email = 'arif@gmail.com';
+  const password = 'support123';
+  const name = 'Arif';
+
+  console.log(`--- Seeding Account for ${email} ---`);
 
   try {
-    // 1. Fetch or create Owner role
+    // 1. Fetch roles
     let { data: roles, error: rolesErr } = await supabase.from('roles').select('*');
     if (rolesErr) {
       console.error('Error fetching roles:', rolesErr.message);
@@ -30,10 +32,8 @@ async function seedOwnerAccount() {
 
     let ownerRole = roles?.find(r => r.name?.toLowerCase() === 'owner');
     if (!ownerRole) {
-      console.log('Owner role not found, looking for Super Admin...');
       ownerRole = roles?.find(r => r.name?.toLowerCase() === 'super admin');
     }
-    
     if (!ownerRole && roles && roles.length > 0) {
       ownerRole = roles[0];
     }
@@ -48,11 +48,11 @@ async function seedOwnerAccount() {
     const defaultBranch = branches && branches.length > 0 ? branches[0] : null;
     console.log('Assigned Branch:', defaultBranch?.name, `(${defaultBranch?.id})`);
 
-    // 3. Check if user developer@gmail.com already exists in public.users
+    // 3. Check existing user in public.users
     const { data: existingUsers, error: userFetchErr } = await supabase
       .from('users')
       .select('*')
-      .ilike('email', 'developer@gmail.com');
+      .ilike('email', email);
 
     if (userFetchErr) {
       console.error('Error querying users:', userFetchErr.message);
@@ -60,10 +60,10 @@ async function seedOwnerAccount() {
     }
 
     const userData = {
-      name: 'Developer (Owner)',
-      email: 'developer@gmail.com',
-      password: '123456',
-      phone: '+971500000000',
+      name: name,
+      email: email,
+      password: password,
+      phone: '+971500000001',
       role_id: ownerRole ? ownerRole.id : null,
       branch_id: defaultBranch ? defaultBranch.id : null,
       permissions: ALL_PERMISSIONS,
@@ -74,7 +74,7 @@ async function seedOwnerAccount() {
 
     if (existingUsers && existingUsers.length > 0) {
       const existing = existingUsers[0];
-      console.log(`User developer@gmail.com exists (ID: ${existing.id}). Updating...`);
+      console.log(`User ${email} exists (ID: ${existing.id}). Updating...`);
       const { data: updated, error: updateErr } = await supabase
         .from('users')
         .update(userData)
@@ -84,10 +84,10 @@ async function seedOwnerAccount() {
       if (updateErr) {
         console.error('Failed to update user:', updateErr.message);
       } else {
-        console.log('✅ Successfully updated owner account:', updated);
+        console.log('✅ Successfully updated account in public.users:', updated);
       }
     } else {
-      console.log('User does not exist. Creating new owner user...');
+      console.log(`User ${email} does not exist. Creating new user...`);
       const { data: created, error: insertErr } = await supabase
         .from('users')
         .insert([userData])
@@ -96,15 +96,15 @@ async function seedOwnerAccount() {
       if (insertErr) {
         console.error('Failed to insert user:', insertErr.message);
       } else {
-        console.log('✅ Successfully created owner account:', created);
+        console.log('✅ Successfully created account in public.users:', created);
       }
     }
 
-    // Try signing up in Supabase Auth as well if email auth is enabled
+    // Try signing up in Supabase Auth
     try {
       const { data: authData, error: authErr } = await supabase.auth.signUp({
-        email: 'developer@gmail.com',
-        password: '123456'
+        email: email,
+        password: password
       });
       if (authErr) {
         console.log('Note on Supabase Auth SignUp:', authErr.message);
@@ -117,12 +117,13 @@ async function seedOwnerAccount() {
 
     console.log('-------------------------------------------');
     console.log('Login credentials:');
-    console.log('Email: developer@gmail.com');
-    console.log('Password: 123456');
+    console.log(`Email: ${email}`);
+    console.log(`Password: ${password}`);
+    console.log(`Role: ${ownerRole?.name || 'Owner'}`);
     console.log('-------------------------------------------');
   } catch (err) {
     console.error('Unexpected error:', err);
   }
 }
 
-seedOwnerAccount();
+seedUser();

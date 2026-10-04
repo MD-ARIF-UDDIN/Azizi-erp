@@ -1,45 +1,41 @@
 -- =========================================================================
--- COMPLETE OPERATIONAL DATA WIPE SCRIPT
+-- SAFE COMPLETE DATA RESET SCRIPT
+-- =========================================================================
 -- STRICTLY PRESERVES:
 --   1. Services & Service Categories
---   2. Document Types
---   3. Users, Roles, Permissions, Role Permissions
---   4. Branches
---   5. Settings & Company Profile
---   6. Accounts (Cards, Wallets, Cash Drawers, Banks) - Resets balance to 0.00
+--   2. Users, Roles, Permissions, Role Permissions, Branches
+--   3. System Lookups (Order Statuses, Document Types, Quotation Templates, Terms)
 --
 -- CLEARS:
---   - Sales / Invoices & Sale Items
---   - Sale Item Expenses / Service Expenses
---   - Payments (Collections, Advances, Refunds)
---   - Business Expenses
---   - Journal Entries / Double-Entry Ledger
---   - Quotations & Quotation Items
---   - Customers & Customer Documents
+--   All other existing operational and transaction tables dynamically!
 -- =========================================================================
 
-BEGIN;
+DO $$ 
+DECLARE
+    r RECORD;
+    preserve_tables TEXT[] := ARRAY[
+        'users',
+        'roles',
+        'permissions',
+        'role_permissions',
+        'branches',
+        'services',
+        'service_categories',
+        'document_types',
+        'order_statuses',
+        'terms_conditions',
+        'quotation_templates'
+    ];
+BEGIN
+    FOR r IN (
+        SELECT tablename 
+        FROM pg_tables 
+        WHERE schemaname = 'public' 
+          AND tablename != ALL(preserve_tables)
+    ) LOOP
+        EXECUTE 'TRUNCATE TABLE public.' || quote_ident(r.tablename) || ' CASCADE;';
+        RAISE NOTICE 'Truncated table: %', r.tablename;
+    END LOOP;
+END $$;
 
--- 1. Truncate Quotations & Items
-TRUNCATE TABLE public.quotation_items CASCADE;
-TRUNCATE TABLE public.quotations CASCADE;
 
--- 2. Truncate Payments & Ledger
-TRUNCATE TABLE public.payments CASCADE;
-TRUNCATE TABLE public.journal_entries CASCADE;
-
--- 4. Truncate Business Expenses
-TRUNCATE TABLE public.expenses CASCADE;
-
--- 5. Truncate Sales & Invoices
-TRUNCATE TABLE public.sale_items CASCADE;
-TRUNCATE TABLE public.sales CASCADE;
-
--- 6. Truncate Customers & Documents
-TRUNCATE TABLE public.customer_documents CASCADE;
-TRUNCATE TABLE public.customers CASCADE;
-
--- 7. Truncate all Accounts (Cards, Wallets, Cash Drawers, Banks)
-TRUNCATE TABLE public.accounts CASCADE;
-
-COMMIT;

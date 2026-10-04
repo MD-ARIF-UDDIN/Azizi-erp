@@ -1,12 +1,15 @@
 -- =========================================================================
--- COMPLETE WIPE SCRIPT: Truncate ALL tables
--- STRICTLY PRESERVES ONLY:
---   1. Users (plus Roles, Permissions, Role Permissions, Branches)
---   2. Services (plus Service Categories)
---   3. Document Types
+-- SAFE COMPLETE DATA RESET SCRIPT
+-- =========================================================================
+-- STRICTLY PRESERVES:
+--   1. Services & Service Categories
+--   2. Users, Roles, Permissions, Role Permissions, Branches
+--   3. System Lookups (Order Statuses, Document Types, Quotation Templates, Terms)
+--
+-- CLEARS:
+--   All other existing operational and transaction tables dynamically!
 -- =========================================================================
 
--- Dynamic truncation of all tables except the preserved list
 DO $$ 
 DECLARE
     r RECORD;
@@ -18,7 +21,10 @@ DECLARE
         'branches',
         'services',
         'service_categories',
-        'document_types'
+        'document_types',
+        'order_statuses',
+        'terms_conditions',
+        'quotation_templates'
     ];
 BEGIN
     FOR r IN (
@@ -31,3 +37,5 @@ BEGIN
         RAISE NOTICE 'Truncated table: %', r.tablename;
     END LOOP;
 END $$;
+
+
